@@ -1,0 +1,11 @@
+private/
+node_modules/
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+dist/
+.DS_Store
