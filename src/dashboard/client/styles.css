@@ -652,6 +652,13 @@ a.slug:hover {
     display: flex;
     gap: 0.75rem;
     overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    margin-bottom: -1px;
+}
+
+.tabs::-webkit-scrollbar {
+    display: none;
 }
 
 .tab {
@@ -662,7 +669,6 @@ a.slug:hover {
     color: var(--muted);
     cursor: pointer;
     border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
     white-space: nowrap;
 }
 
