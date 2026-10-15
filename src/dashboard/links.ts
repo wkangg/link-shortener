@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
-import { randomSlug } from '../shared/slug.ts';
+import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
 import type { Link, LinkListResponse, LinkWithStats, RedirectType } from '../shared/types.ts';
 import type { CreateLinkInput, UpdateLinkInput } from './schemas.ts';
 
@@ -18,7 +18,11 @@ interface LinkRow {
 
 export class SlugTakenError extends Error {
     constructor(slug: string) {
-        super(`The slug "${slug}" is already taken`);
+        super(
+            slug === ROOT_SLUG
+                ? 'There is already a root link. Edit or delete that one instead.'
+                : `The slug "${slug}" is already taken`
+        );
         this.name = 'SlugTakenError';
     }
 }
@@ -122,7 +126,7 @@ export class LinkRepo {
             `INSERT INTO links (slug, url, title, redirect_type, expires_at, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`
         );
-        const custom = input.slug && input.slug !== '' ? input.slug : null;
+        const custom = input.slug ?? null;
 
         for (let attempt = 0; attempt < 8; attempt++) {
             const slug = custom ?? randomSlug();
@@ -147,7 +151,7 @@ export class LinkRepo {
                 return link;
             } catch (error) {
                 if (!isUniqueViolation(error)) throw error;
-                if (custom) throw new SlugTakenError(custom);
+                if (custom !== null) throw new SlugTakenError(custom);
             }
         }
         throw new Error('Could not find a free random slug');
@@ -179,12 +183,14 @@ export class LinkRepo {
                 if (patch.tags !== undefined) this.#setTags(id, patch.tags);
             })();
         } catch (error) {
-            if (isUniqueViolation(error) && patch.slug) throw new SlugTakenError(patch.slug);
+            if (isUniqueViolation(error) && patch.slug !== undefined) {
+                throw new SlugTakenError(patch.slug);
+            }
             throw error;
         }
 
         this.#cache.invalidate(existing.slug);
-        if (patch.slug) this.#cache.invalidate(patch.slug);
+        if (patch.slug !== undefined) this.#cache.invalidate(patch.slug);
         return this.get(id);
     }
 

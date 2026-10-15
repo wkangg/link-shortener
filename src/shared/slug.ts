@@ -3,6 +3,13 @@
 /** Valid slugs: 1-64 characters of A-Z, a-z, 0-9, `_` and `-`. Case-sensitive. */
 export const SLUG_RE = /^[\w-]{1,64}$/;
 
+/**
+ * The root link (the bare short domain, `/`) is an ordinary link stored with an
+ * empty slug. The API and the dashboard spell it `/`.
+ */
+export const ROOT_SLUG = '';
+export const ROOT_SLUG_INPUT = '/';
+
 export const RANDOM_SLUG_LENGTH = 6;
 
 const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';

@@ -35,7 +35,6 @@ const us = (ms: number) => `${(ms * 1000).toFixed(1)} µs`;
         "INSERT INTO links (slug, url, created_at, updated_at) VALUES ('bench', 'https://example.com/landing', 0, 0)"
     );
     const handle = createRedirectHandler({
-        dashOrigin: 'https://dash.example',
         cache: new LinkCache(),
         lookup: createLinkLookup(db),
         clicks: new ClickBuffer(db, { shortHost: 's.example', salt: 'bench', intervalMs: 1000 })

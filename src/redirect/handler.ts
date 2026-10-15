@@ -1,13 +1,11 @@
 // HOT PATH. Keep this module synchronous and free of heavy imports.
 // Allowed imports are enforced by test/boundaries.test.ts.
-import { SLUG_RE } from '../shared/slug.ts';
+import { ROOT_SLUG, SLUG_RE } from '../shared/slug.ts';
 import type { ClickSink } from '../shared/types.ts';
 import type { LinkCache } from './cache.ts';
 import type { LinkLookup } from './lookup.ts';
 
 export interface RedirectHandlerOptions {
-    /** Where the bare short domain (no slug) sends you, e.g. https://dash.example */
-    dashOrigin: string;
     cache: LinkCache;
     lookup: LinkLookup;
     clicks: ClickSink;
@@ -65,7 +63,6 @@ export function mergeQuery(destination: string, query: string): string {
 }
 
 export function createRedirectHandler(opts: RedirectHandlerOptions) {
-    const home = `${opts.dashOrigin}/`;
     const { cache, lookup, clicks } = opts;
     const now = opts.now ?? Date.now;
 
@@ -76,10 +73,9 @@ export function createRedirectHandler(opts: RedirectHandlerOptions) {
         }
 
         const [path, rawQuery] = splitUrl(req.url);
-        if (path === '/') return redirect(home, 302);
-
+        // `/` is the root link (empty slug): 404 until one is created in the dashboard.
         const slug = path.slice(1);
-        if (!SLUG_RE.test(slug)) return notFound();
+        if (slug !== ROOT_SLUG && !SLUG_RE.test(slug)) return notFound();
 
         const t = now();
         let link = cache.get(slug, t);

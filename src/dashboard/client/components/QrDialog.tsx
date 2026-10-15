@@ -69,7 +69,7 @@ export function QrDialog({ shortUrl, slug, onClose }: QrDialogProps) {
 
     const target = qrTarget(shortUrl);
     const svg = svgFor(target, { ecc, fg, bg, margin });
-    const name = `qr-${slug}`;
+    const name = `qr-${slug || 'root'}`;
 
     const savePng = async () => download(await pngBlob(svg, size), `${name}.png`);
     const copyPng = async () => {

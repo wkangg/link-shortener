@@ -22,7 +22,6 @@ function setup(links: Record<string, CachedLink>, now = 1_000_000) {
     const lookups: string[] = [];
     const cache = new LinkCache();
     const handle = createRedirectHandler({
-        dashOrigin: 'https://dash.example',
         cache,
         lookup: slug => {
             lookups.push(slug);
@@ -64,10 +63,19 @@ describe('url helpers', () => {
 });
 
 describe('redirect handler', () => {
-    test('root redirects to the dashboard', () => {
-        const res = setup({ abc: LINK }).get('/');
+    test('root is 404 until a root link exists', () => {
+        const { get, recorded } = setup({ abc: LINK });
+        expect(get('/').status).toBe(404);
+        expect(recorded).toHaveLength(0);
+    });
+
+    test('root link redirects and records a click like any other link', () => {
+        const { get, recorded } = setup({ '': { ...LINK, id: 9 } });
+        const res = get('/?qr&ref=x');
         expect(res.status).toBe(302);
-        expect(res.headers.get('location')).toBe('https://dash.example/');
+        expect(res.headers.get('location')).toBe('https://example.com/page?a=1&ref=x');
+        expect(recorded).toHaveLength(1);
+        expect(recorded[0]).toMatchObject({ linkId: 9, qr: true, query: 'ref=x' });
     });
 
     test('known slug redirects, no-store, and records one click', () => {

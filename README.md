@@ -19,7 +19,7 @@ bun run dev
 | URL                           | What                                                                           |
 | ----------------------------- | ------------------------------------------------------------------------------ |
 | http://localhost:3001         | Dashboard. Auth is off locally when no Cloudflare Access settings are present. |
-| http://localhost:3000/<slug>  | Short links. `/` redirects to the dashboard.                                   |
+| http://localhost:3000/<slug>  | Short links. `/` is 404 until you create a root link (slug `/`).               |
 | http://localhost:3001/healthz | Health check                                                                   |
 
 ## Scripts

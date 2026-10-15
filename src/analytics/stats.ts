@@ -178,7 +178,7 @@ export class Stats {
         if (dim === 'link') {
             rows = this.#db
                 .query<{ value: number; label: string; clicks: number; visitors: number }, Param[]>(
-                    `SELECT c.link_id AS value, l.slug AS label, ${agg}
+                    `SELECT c.link_id AS value, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS label, ${agg}
                      FROM clicks c JOIN links l ON l.id = c.link_id
                      WHERE ${where.sql} GROUP BY c.link_id ORDER BY clicks DESC, label LIMIT ?`
                 )
@@ -257,7 +257,7 @@ export class Stats {
         ];
         const rows = this.#db
             .query<Record<string, string | number | null>, Param[]>(
-                `SELECT c.ts, l.slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
+                `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
                         c.device, c.browser, c.os, c.is_bot, c.utm_source, c.utm_medium,
                         c.utm_campaign, c.utm_term, c.utm_content, c.query
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id

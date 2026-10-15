@@ -33,9 +33,8 @@ describe('dashboard server', () => {
 });
 
 describe('redirect server', () => {
-    test('serves the redirect handler without following it', async () => {
+    test('serves the redirect handler; root is 404 with no root link', async () => {
         const res = await t.click('/');
-        expect(res.status).toBe(302);
-        expect(res.headers.get('location')).toBe('https://dash.example/');
+        expect(res.status).toBe(404);
     });
 });

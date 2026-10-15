@@ -61,7 +61,12 @@ export function CreateBar({ shortOrigin, initialUrl = '', onCreated }: CreateBar
             <label className="create-slug slug-input">
                 <span className="slug-host">{hostOf(shortOrigin)}/</span>
                 <span className="visually-hidden">Custom slug (optional)</span>
-                <input placeholder="random" value={slug} onChange={e => setSlug(e.target.value)} />
+                <input
+                    placeholder="random"
+                    title="Leave empty for a random slug, or type / to make this the root link"
+                    value={slug}
+                    onChange={e => setSlug(e.target.value)}
+                />
             </label>
             <button type="submit" className="button primary" disabled={busy}>
                 Shorten

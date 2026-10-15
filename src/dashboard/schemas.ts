@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 
-import { SLUG_RE } from '../shared/slug.ts';
+import { ROOT_SLUG, ROOT_SLUG_INPUT, SLUG_RE } from '../shared/slug.ts';
 
 const tag = z
     .string()
@@ -18,7 +18,10 @@ export function linkSchemas(shortHost: string) {
 
     const fields = {
         url,
-        slug: z.string().trim().regex(SLUG_RE, 'Slugs are 1-64 letters, digits, `-` or `_`'),
+        slug: z
+            .string()
+            .trim()
+            .regex(SLUG_RE, 'Slugs are 1-64 letters, digits, `-` or `_`, or `/` for the root link'),
         title: z.string().trim().max(200).nullable(),
         redirectType: z.union([z.literal(301), z.literal(302), z.literal(307), z.literal(308)]),
         expiresAt: z.number().int().positive().nullable(),
@@ -29,10 +32,17 @@ export function linkSchemas(shortHost: string) {
             .transform(tags => [...new Set(tags)])
     };
 
+    // `/` means the root link (stored as an empty slug).
+    const root = z.literal(ROOT_SLUG_INPUT).transform(() => ROOT_SLUG);
+
     return {
         create: z.strictObject({
             url: fields.url,
-            slug: fields.slug.or(z.literal('')).optional(),
+            // Empty or missing: a random slug.
+            slug: root
+                .or(fields.slug)
+                .or(z.literal('').transform(() => null))
+                .optional(),
             title: fields.title.optional(),
             redirectType: fields.redirectType.optional(),
             expiresAt: fields.expiresAt.optional(),
@@ -40,7 +50,7 @@ export function linkSchemas(shortHost: string) {
         }),
         update: z.strictObject({
             url: fields.url.optional(),
-            slug: fields.slug.optional(),
+            slug: root.or(fields.slug).optional(),
             title: fields.title.optional(),
             redirectType: fields.redirectType.optional(),
             expiresAt: fields.expiresAt.optional(),

@@ -19,8 +19,47 @@ const location = async (path: string) => {
     const res = await t.click(path);
     return res.headers.get('location');
 };
+const clickStatus = async (path: string) => {
+    const res = await t.click(path);
+    return res.status;
+};
 const SAFARI =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+
+describe('root link', () => {
+    test('slug `/` creates the root link, which redirects and counts clicks', async () => {
+        expect(await clickStatus('/')).toBe(404);
+
+        const created = await send('POST', '/api/links', {
+            url: 'https://example.org/',
+            slug: '/'
+        });
+        expect(created.status).toBe(201);
+        const link = (await created.json()) as Link;
+        expect(link.slug).toBe('');
+
+        expect(await location('/')).toBe('https://example.org/');
+
+        const again = await send('POST', '/api/links', { url: 'https://example.net/', slug: '/' });
+        expect(again.status).toBe(409);
+
+        // Random slugs still work when the slug is left empty.
+        const random = await send('POST', '/api/links', { url: 'https://example.net/', slug: '' });
+        expect(((await random.json()) as Link).slug).toMatch(/^[\w-]{6}$/);
+
+        // Moving the root link to a normal slug frees `/`.
+        const moved = await send('PATCH', `/api/links/${link.id}`, { slug: 'home' });
+        expect(moved.status).toBe(200);
+        expect(await clickStatus('/')).toBe(404);
+        expect(await location('/home')).toBe('https://example.org/');
+
+        await send('PATCH', `/api/links/${link.id}`, { slug: '/' });
+        expect(await location('/')).toBe('https://example.org/');
+        expect(t.app.clicks.flush()).toBe(3);
+        expect(await t.status(`/api/links/${link.id}`, { method: 'DELETE' })).toBe(204);
+        expect(await clickStatus('/')).toBe(404);
+    });
+});
 
 describe('links API + redirects + analytics, end to end', () => {
     test('create, redirect with pass-through, count, edit, delete', async () => {

@@ -46,7 +46,8 @@ function withUtm(url: string, utm: Record<string, string>): string {
 
 export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: LinkEditorProps) {
     const [url, setUrl] = useState(link.url);
-    const [slug, setSlug] = useState(link.slug);
+    // The root link has an empty slug; it's typed as `/`.
+    const [slug, setSlug] = useState(link.slug || '/');
     const [title, setTitle] = useState(link.title ?? '');
     const [tags, setTags] = useState(link.tags.join(', '));
     const [redirectType, setRedirectType] = useState<RedirectType>(link.redirectType);

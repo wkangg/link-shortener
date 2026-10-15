@@ -36,7 +36,6 @@ export function startApp(opts: AppOptions) {
 
     const short = startRedirectServer({
         port: config.shortPort,
-        dashOrigin: config.dashOrigin,
         cache,
         lookup: createLinkLookup(db),
         clicks
