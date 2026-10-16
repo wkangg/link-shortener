@@ -23,6 +23,8 @@ interface TopListProps {
 
 function rowLabel(dim: string, row: TopRow): string {
     if (dim === 'country' && row.value) return countryLabel(row.value);
+    // Fingerprints are long hashes; a short prefix is enough to tell them apart.
+    if (dim === 'fingerprint' && row.value) return row.value.slice(0, 10);
     return row.label;
 }
 

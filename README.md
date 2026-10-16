@@ -3,7 +3,9 @@
 A fast, self-hosted link shortener with built-in analytics, for one person or a small team. Runs on [Bun](https://bun.com) with SQLite: one process, one database file, no external services.
 
 - **Fast redirects.** A short link is a hash-map lookup and a `302`. The request does no other I/O: clicks are queued in memory and written in batches. A cached redirect takes a few microseconds of server time.
-- **Analytics:** clicks and unique visitors over time, plus top links, sources, referrers, countries, regions, cities, browsers, operating systems, devices, UTM tags, query parameters and QR scans. Click any row to filter the whole dashboard. Export to CSV.
+- **Analytics:** clicks and unique visitors over time, plus top links, sources, referrers, countries, regions, cities, browsers, operating systems, devices, device fingerprints, UTM tags, query parameters and QR scans. Click any row to filter the whole dashboard. Export to CSV.
+- **IP insight:** every click's IP links out to an ISP/ASN lookup, and traffic from hosting/datacenter providers is detected from reverse DNS and hidden by default, the same way crawlers are — toggle either back on.
+- **Device fingerprint:** a coarse hash of each visitor's browser (user agent plus any reported screen, GPU and platform) groups clicks from the same device across days and IP changes. It holds no IP and isn't a unique-person identifier.
 - **QR codes** for every link (PNG or SVG, custom colors and error correction). Scans are tracked separately from clicks.
 - **Two domains:** short links on one (e.g. `s.example`), the dashboard on another (`dash.example`). The short domain never sets cookies.
 - **Privacy-friendly:** raw IP addresses are never stored, only a daily-rotating salted hash for counting unique visitors. Location comes from your CDN's headers.

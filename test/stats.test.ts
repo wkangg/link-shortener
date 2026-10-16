@@ -205,3 +205,48 @@ describe('csv', () => {
         expect(lines.some(l => l.includes('"{""ref"":""ig""}"'))).toBe(true);
     });
 });
+
+describe('datacenter and fingerprint', () => {
+    const db2 = openDatabase(':memory:');
+    const stats2 = new Stats(db2);
+    const T = Date.UTC(2026, 0, 1);
+
+    beforeAll(() => {
+        db2.run(
+            "INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://a.com', 0, 0)"
+        );
+        const ins = db2.query(
+            `INSERT INTO clicks (link_id, ts, source, via_qr, is_bot, is_datacenter, fingerprint, visitor_hash, country)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        // Two clicks from one device, one from another, one from a datacenter IP.
+        ins.run(1, T + HOUR, 'Direct', 0, 0, 0, 'fp1', 'v1', 'CA');
+        ins.run(1, T + 2 * HOUR, 'Direct', 0, 0, 0, 'fp1', 'v2', 'CA');
+        ins.run(1, T + 3 * HOUR, 'Direct', 0, 0, 0, 'fp2', 'v3', 'US');
+        ins.run(1, T + 4 * HOUR, 'Direct', 0, 0, 1, null, 'v4', 'US');
+    });
+
+    const qq = (overrides: Partial<StatsQuery> = {}): StatsQuery => ({
+        from: T,
+        to: T + DAY,
+        tz: 0,
+        filters: [],
+        ...overrides
+    });
+
+    test('datacenter clicks are hidden unless dc is set', () => {
+        expect(stats2.summary(qq()).clicks).toBe(3);
+        expect(stats2.summary(qq({ dc: true })).clicks).toBe(4);
+    });
+
+    test('fingerprint is a group-by and filter dimension', () => {
+        expect(stats2.top(qq(), 'fingerprint').rows.find(r => r.value === 'fp1')?.clicks).toBe(2);
+        expect(stats2.summary(qq({ filters: ['fingerprint:fp1'] })).clicks).toBe(2);
+    });
+
+    test('history carries the datacenter flag and fingerprint', () => {
+        const rows = stats2.history(qq({ dc: true })).clicks;
+        expect(rows.filter(c => c.isDatacenter)).toHaveLength(1);
+        expect(rows.find(c => c.fingerprint === 'fp1')?.isDatacenter).toBe(false);
+    });
+});

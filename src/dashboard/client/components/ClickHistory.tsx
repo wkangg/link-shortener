@@ -77,6 +77,11 @@ function coordinates(c: ClickHistoryRow): string {
     return `${c.latitude.toFixed(2)}, ${c.longitude.toFixed(2)}`;
 }
 
+/** An IP-info page (ISP, organisation, ASN) for an address, opened in a new tab. */
+function ipLookupUrl(ip: string): string {
+    return `https://ipinfo.io/${encodeURIComponent(ip)}`;
+}
+
 /** IPv6 addresses may wrap after a colon; IPv4 has no break points and stays on one line. */
 function breakableIp(ip: string) {
     // Each group plus its colon, keyed by where it ends in the address.
@@ -94,6 +99,43 @@ function breakableIp(ip: string) {
 }
 
 const asRow = (value: string, label: string): TopRow => ({ value, label, clicks: 0, visitors: 0 });
+
+interface IpCellProps {
+    ip: string;
+    isDatacenter: boolean;
+    onSelect: (dim: string, row: TopRow) => void;
+}
+
+/** An IP address: a filter button, an external ISP lookup, and a datacenter badge. */
+function IpCell({ ip, isDatacenter, onSelect }: IpCellProps) {
+    return (
+        <span className="ip-cell">
+            <button
+                type="button"
+                className="cell-filter"
+                title="Filter to this IP address"
+                onClick={() => onSelect('ip', asRow(ip, ip))}
+            >
+                {breakableIp(ip)}
+            </button>
+            <a
+                className="ip-lookup"
+                href={ipLookupUrl(ip)}
+                target="_blank"
+                rel="noreferrer noopener"
+                title="Look up ISP and location (ipinfo.io)"
+                aria-label="Look up this IP address"
+            >
+                ↗
+            </a>
+            {isDatacenter && (
+                <span className="badge" title="Hosting / datacenter IP">
+                    datacenter
+                </span>
+            )}
+        </span>
+    );
+}
 
 export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHistoryProps) {
     // Back to the first page whenever the range, filters or bots toggle change.
@@ -182,16 +224,11 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                         {c.ip === null ? (
                                             <span className="muted">–</span>
                                         ) : (
-                                            <button
-                                                type="button"
-                                                className="cell-filter"
-                                                title="Filter to this IP address"
-                                                onClick={() =>
-                                                    onSelect('ip', asRow(c.ip ?? '', c.ip ?? ''))
-                                                }
-                                            >
-                                                {breakableIp(c.ip)}
-                                            </button>
+                                            <IpCell
+                                                ip={c.ip}
+                                                isDatacenter={c.isDatacenter}
+                                                onSelect={onSelect}
+                                            />
                                         )}
                                     </td>
                                     <td>
@@ -230,6 +267,26 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                         )}
                                         {c.incognito && <span className="badge">private</span>}
                                         {c.adBlocker && <span className="badge">ad blocker</span>}
+                                        {c.fingerprint && (
+                                            <span className="history-sub">
+                                                <button
+                                                    type="button"
+                                                    className="cell-filter mono"
+                                                    title="Filter to this device fingerprint"
+                                                    onClick={() =>
+                                                        onSelect(
+                                                            'fingerprint',
+                                                            asRow(
+                                                                c.fingerprint ?? '',
+                                                                c.fingerprint ?? ''
+                                                            )
+                                                        )
+                                                    }
+                                                >
+                                                    ⚷ {c.fingerprint.slice(0, 10)}
+                                                </button>
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="history-ua">
                                         {technology(c)}

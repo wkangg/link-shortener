@@ -948,6 +948,25 @@ a.slug:hover {
     color: var(--muted);
 }
 
+/* IP address with its external lookup link (and datacenter badge). */
+.ip-cell {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.35rem;
+}
+
+.ip-lookup {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.8rem;
+}
+
+.ip-lookup:hover {
+    color: var(--accent, inherit);
+    text-decoration: none;
+}
+
 /* ---------- dialogs ---------- */
 
 .dialog {
