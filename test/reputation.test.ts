@@ -34,6 +34,25 @@ const REPUTATIONS: Record<string, Reputation> = {
 /** Resolves once pending lookups (resolved promises) and their callbacks have run. */
 const settle = () => Bun.sleep(5);
 
+const click = (ip: string, ts = T0): RawClick => ({
+    linkId: 1,
+    ts,
+    url: 'https://a.com',
+    ip,
+    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36',
+    referrer: '',
+    country: 'CA',
+    region: '',
+    city: '',
+    qr: false,
+    query: '',
+    language: '',
+    timezone: '',
+    token: null,
+    latitude: '',
+    longitude: ''
+});
+
 function setup(opts: { dailyLimit?: number; now?: () => number } = {}) {
     const db = openDatabase(':memory:');
     db.run(
@@ -56,36 +75,16 @@ function setup(opts: { dailyLimit?: number; now?: () => number } = {}) {
         dailyLimit: opts.dailyLimit
     });
     const clicks = new ClickBuffer(db, { shortHost: 's.example', salt: 'salt', reputation });
-    const click = (ip: string, ts = T0): RawClick => ({
-        linkId: 1,
-        ts,
-        url: 'https://a.com',
-        ip,
-        ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36',
-        referrer: '',
-        country: 'CA',
-        region: '',
-        city: '',
-        qr: false,
-        query: '',
-        language: '',
-        timezone: '',
-        token: null,
-        latitude: '',
-        longitude: ''
-    });
     const rows = () =>
         db
-            .query<
-                { ip: string; abuse_score: number | null; isp: string | null; dc: number },
-                []
-            >('SELECT ip, abuse_score, isp, is_datacenter AS dc FROM clicks ORDER BY id')
+            .query<{ ip: string; abuse_score: number | null; isp: string | null; dc: number }, []>(
+                'SELECT ip, abuse_score, isp, is_datacenter AS dc FROM clicks ORDER BY id'
+            )
             .all();
     return {
         db,
         reputation,
         clicks,
-        click,
         rows,
         checked,
         failWith: (error: Error) => {
@@ -157,7 +156,9 @@ describe('createAbuseIpdb', () => {
             const limited = await check('203.0.113.1').catch((error: unknown) => error);
             expect(limited).toBeInstanceOf(RateLimitedError);
             expect((limited as RateLimitedError).retryAt).toBeGreaterThanOrEqual(before + 120_000);
-            await expect(check('203.0.113.2')).rejects.toThrow('401');
+            const unauthorized = await check('203.0.113.2').catch((error: unknown) => error);
+            expect(unauthorized).toBeInstanceOf(Error);
+            expect((unauthorized as Error).message).toContain('401');
         } finally {
             await server.stop(true);
         }
@@ -167,10 +168,7 @@ describe('createAbuseIpdb', () => {
 describe('IpReputation', () => {
     test('new clicks are checked once per IP and every click from the IP is updated', async () => {
         const t = setup();
-        t.clicks.push(t.click(ABUSER));
-        t.clicks.push(t.click(ABUSER));
-        t.clicks.push(t.click(HOSTING));
-        t.clicks.push(t.click(HOME));
+        for (const ip of [ABUSER, ABUSER, HOSTING, HOME]) t.clicks.push(click(ip));
         t.clicks.flush();
         await settle();
 
@@ -183,7 +181,7 @@ describe('IpReputation', () => {
         ]);
 
         // A later click from a known IP gets the cached result at insert, without a lookup.
-        t.clicks.push(t.click(ABUSER, T0 + HOUR));
+        t.clicks.push(click(ABUSER, T0 + HOUR));
         t.clicks.flush();
         await settle();
         expect(t.checked.filter(ip => ip === ABUSER)).toHaveLength(1);
@@ -193,7 +191,7 @@ describe('IpReputation', () => {
     test('private and invalid addresses are never sent', async () => {
         const t = setup();
         for (const ip of ['10.0.0.1', '192.168.1.5', '127.0.0.1', '::1', 'not-an-ip']) {
-            t.clicks.push(t.click(ip));
+            t.clicks.push(click(ip));
         }
         t.clicks.flush();
         await settle();
@@ -202,9 +200,7 @@ describe('IpReputation', () => {
 
     test('the daily limit holds, counting checks already stored today', async () => {
         const t = setup({ dailyLimit: 2 });
-        t.clicks.push(t.click(ABUSER));
-        t.clicks.push(t.click(HOSTING));
-        t.clicks.push(t.click(HOME));
+        for (const ip of [ABUSER, HOSTING, HOME]) t.clicks.push(click(ip));
         t.clicks.flush();
         await settle();
         expect(t.checked).toHaveLength(2);
@@ -226,7 +222,7 @@ describe('IpReputation', () => {
     test('a rate limit pauses lookups and keeps the IP queued', async () => {
         const t = setup();
         t.failWith(new RateLimitedError(T0 + HOUR));
-        t.clicks.push(t.click(ABUSER));
+        t.clicks.push(click(ABUSER));
         t.clicks.flush();
         await settle();
         expect(t.checked).toEqual([ABUSER]);

@@ -325,10 +325,10 @@ describe('IP reputation', () => {
 
             const summary = (flags: string) =>
                 r.get<SummaryResponse>(`/api/stats/summary?${range()}${flags}`);
-            expect((await summary('')).clicks).toBe(1);
-            expect((await summary('&abusive=1')).clicks).toBe(2);
-            expect((await summary('&dc=1')).clicks).toBe(2);
-            expect((await summary('&abusive=1&dc=1')).clicks).toBe(3);
+            expect(await summary('')).toMatchObject({ clicks: 1 });
+            expect(await summary('&abusive=1')).toMatchObject({ clicks: 2 });
+            expect(await summary('&dc=1')).toMatchObject({ clicks: 2 });
+            expect(await summary('&abusive=1&dc=1')).toMatchObject({ clicks: 3 });
 
             const history = await r.get<ClickHistoryResponse>(
                 `/api/stats/clicks?${range()}&abusive=1&dc=1`
