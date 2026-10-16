@@ -13,25 +13,34 @@ interface LinkActionsProps {
     onDeleted: (link: Link) => void;
 }
 
-/** Copy, QR and Edit for one link, with the dialogs they open. */
-export function LinkActions({ link, onChanged, onDeleted }: LinkActionsProps) {
-    const { shortOrigin } = useConfig();
+/** Copies text to the clipboard and confirms with a toast. */
+export function useCopy() {
     const toast = useToast();
-    const [open, setOpen] = useState<'qr' | 'edit' | null>(null);
-    const shortUrl = `${shortOrigin}/${link.slug}`;
-
-    const copy = async () => {
+    return async (text: string, message: string) => {
         try {
-            await navigator.clipboard.writeText(shortUrl);
-            toast.show(`Copied ${hostOf(shortUrl)}`);
+            await navigator.clipboard.writeText(text);
+            toast.show(message);
         } catch {
             toast.show('Clipboard is not available here');
         }
     };
+}
+
+/** Copy, QR and Edit for one link, with the dialogs they open. */
+export function LinkActions({ link, onChanged, onDeleted }: LinkActionsProps) {
+    const { shortOrigin } = useConfig();
+    const toast = useToast();
+    const copy = useCopy();
+    const [open, setOpen] = useState<'qr' | 'edit' | null>(null);
+    const shortUrl = `${shortOrigin}/${link.slug}`;
 
     return (
         <div className="link-actions">
-            <button type="button" className="button small" onClick={() => void copy()}>
+            <button
+                type="button"
+                className="button small"
+                onClick={() => void copy(shortUrl, `Copied ${hostOf(shortUrl)}`)}
+            >
                 Copy
             </button>
             <button type="button" className="button small" onClick={() => setOpen('qr')}>

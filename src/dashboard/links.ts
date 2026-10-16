@@ -90,8 +90,11 @@ export class LinkRepo {
         const offset = Math.max(opts.offset ?? 0, 0);
 
         const rows = this.#db
-            .query<LinkRow & { clicks: number }, (string | number)[]>(
-                `SELECT l.*, (SELECT COUNT(*) FROM clicks c WHERE c.link_id = l.id AND c.is_bot = 0) AS clicks
+            .query<LinkRow & { clicks: number; visitors: number }, (string | number)[]>(
+                `SELECT l.*,
+                    (SELECT COUNT(*) FROM clicks c WHERE c.link_id = l.id AND c.is_bot = 0) AS clicks,
+                    (SELECT COUNT(DISTINCT c.visitor_hash) FROM clicks c
+                     WHERE c.link_id = l.id AND c.is_bot = 0) AS visitors
                  FROM links l WHERE ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`
             )
             .all(...params, limit, offset);
@@ -108,6 +111,7 @@ export class LinkRepo {
         const links: LinkWithStats[] = rows.map(row => ({
             ...toLink(row, tags.get(row.id) ?? []),
             clicks: row.clicks,
+            visitors: row.visitors,
             spark: sparks.get(row.id) ?? Array.from({ length: SPARK_DAYS }, () => 0)
         }));
         return { links, total };

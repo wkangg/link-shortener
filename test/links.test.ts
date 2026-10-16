@@ -62,9 +62,9 @@ describe('LinkRepo', () => {
         const b = repo.create({ url: 'https://beta.com', slug: 'b', title: 'Beta 100%' });
         const c = repo.create({ url: 'https://gamma.com', slug: 'c' });
         repo.update(c.id, { archived: true });
-        const insert = db.query('INSERT INTO clicks (link_id, ts) VALUES (?, ?)');
-        insert.run(b.id, 500);
-        insert.run(b.id, 900);
+        const insert = db.query('INSERT INTO clicks (link_id, ts, visitor_hash) VALUES (?, ?, ?)');
+        insert.run(b.id, 500, 'v1');
+        insert.run(b.id, 900, 'v1');
 
         expect(repo.list().links.map(l => l.slug)).toEqual(['b', 'a']);
         expect(repo.list({ archived: true }).links.map(l => l.slug)).toEqual(['c']);
@@ -73,7 +73,7 @@ describe('LinkRepo', () => {
         expect(repo.list({ tag: 'work' }).links.map(l => l.slug)).toEqual(['a']);
 
         const bySort = repo.list({ sort: 'clicks' });
-        expect(bySort.links[0]).toMatchObject({ slug: 'b', clicks: 2 });
+        expect(bySort.links[0]).toMatchObject({ slug: 'b', clicks: 2, visitors: 1 });
         expect(bySort.links[0]?.spark.at(-1)).toBe(2);
         expect(bySort.total).toBe(2);
         expect(repo.allTags()).toEqual([{ tag: 'work', count: 1 }]);

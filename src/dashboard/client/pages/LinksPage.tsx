@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { LinkWithStats } from '../../../shared/types.ts';
 import { api, localTz } from '../api.ts';
 import { CreateBar } from '../components/CreateBar.tsx';
-import { LinkActions } from '../components/LinkActions.tsx';
+import { LinkActions, useCopy } from '../components/LinkActions.tsx';
 import { Sparkline } from '../components/Sparkline.tsx';
 import { useConfig } from '../config.tsx';
 import { formatCount, formatDate, hostOf } from '../format.ts';
@@ -138,18 +138,39 @@ function LinkRow({
     onTag: (tag: string) => void;
     onChanged: () => void;
 }) {
+    const { shortOrigin } = useConfig();
+    const copy = useCopy();
     const expired = link.expiresAt !== null && link.expiresAt < link.updatedAt;
     return (
         <li className="link-row">
+            {/* Covers the whole row; the buttons inside sit above it. */}
+            <a
+                className="row-link"
+                href={`/links/${link.id}`}
+                onClick={linkClick}
+                aria-label={`${host}/${link.slug} details`}
+            />
             <div className="link-main">
-                <a className="slug" href={`/links/${link.id}`} onClick={linkClick}>
+                <button
+                    type="button"
+                    className="slug"
+                    title="Copy short link"
+                    onClick={() =>
+                        void copy(`${shortOrigin}/${link.slug}`, `Copied ${host}/${link.slug}`)
+                    }
+                >
                     <span className="slug-host">{host}/</span>
                     {link.slug}
-                </a>
-                <p className="destination" title={link.url}>
+                </button>
+                <button
+                    type="button"
+                    className="destination"
+                    title={`Copy ${link.url}`}
+                    onClick={() => void copy(link.url, 'Copied destination')}
+                >
                     {link.title && <strong>{link.title} </strong>}
                     {link.url}
-                </p>
+                </button>
                 <p className="link-meta">
                     <span>{formatDate(link.createdAt)}</span>
                     {link.expiresAt !== null && (
@@ -166,14 +187,23 @@ function LinkRow({
                     ))}
                 </p>
             </div>
-            <div className="link-stats" title="Clicks in the last 7 days">
-                <Sparkline values={link.spark} />
-                <span className="link-clicks">
-                    {formatCount(link.clicks)}
-                    <span className="visually-hidden"> clicks</span>
+            <div className="link-stats">
+                <span title="Clicks in the last 7 days">
+                    <Sparkline values={link.spark} />
                 </span>
+                <Stat value={link.clicks} one="click" many="clicks" />
+                <Stat value={link.visitors} one="visitor" many="visitors" />
             </div>
             <LinkActions link={link} onChanged={onChanged} onDeleted={onChanged} />
         </li>
+    );
+}
+
+function Stat({ value, one, many }: { value: number; one: string; many: string }) {
+    return (
+        <span className="link-stat">
+            {formatCount(value)}
+            <span className="link-stat-label"> {value === 1 ? one : many}</span>
+        </span>
     );
 }

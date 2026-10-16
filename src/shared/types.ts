@@ -33,6 +33,8 @@ export interface Link {
 
 export interface LinkWithStats extends Link {
     clicks: number;
+    /** Unique visitors (distinct daily visitor hashes). */
+    visitors: number;
     /** Clicks per day for the last 7 days, oldest first. */
     spark: number[];
 }
