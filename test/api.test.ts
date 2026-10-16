@@ -201,7 +201,9 @@ describe('non-ASCII Cloudflare location headers', () => {
             const sock = net.connect(Number(port), hostname, () => {
                 sock.write(
                     Buffer.concat([
-                        Buffer.from('GET /mtl HTTP/1.1\r\nHost: s.example\r\n'),
+                        Buffer.from(
+                            `GET /mtl HTTP/1.1\r\nHost: s.example\r\nUser-Agent: ${SAFARI}\r\nAccept-Language: fr-CA\r\n`
+                        ),
                         Buffer.from('cf-ipcity: Montréal\r\ncf-region: Québec\r\n', 'utf8'),
                         Buffer.from('Connection: close\r\n\r\n')
                     ])

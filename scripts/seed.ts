@@ -1,5 +1,6 @@
 // Fills a database with sample links and ~6 weeks of realistic clicks.
 // Usage: bun run seed [--clicks 5000]   (uses DB_PATH and SHORT_ORIGIN from the environment)
+import { ClickClassifier } from '../src/analytics/classify.ts';
 import { ClickBuffer } from '../src/analytics/clicks.ts';
 import { loadConfig } from '../src/config.ts';
 import { LinkRepo } from '../src/dashboard/links.ts';
@@ -180,6 +181,23 @@ db.transaction(() => {
         markDc.run(host, person.ip);
     });
 })();
+
+// Some of the datacenter visitors are people on a VPN (a VPN provider's network, or
+// a real browser with a local clock), and some visitors are scripts that send no
+// Accept-Language header. The classifier sorts them out from those facts.
+const markVpnHost = db.query("UPDATE clicks SET isp = 'M247 Europe SRL' WHERE ip = ?");
+const markBrowser = db.query(
+    "UPDATE clicks SET js = 1, timezone = 'Europe/Berlin', screen = '1920x1080@1' WHERE ip = ?"
+);
+const markScript = db.query('UPDATE clicks SET language = NULL WHERE ip = ?');
+db.transaction(() => {
+    people.forEach((person, i) => {
+        if (i % 26 === 0) markVpnHost.run(person.ip);
+        else if (i % 13 === 0 && i % 3 === 0) markBrowser.run(person.ip);
+        else if (i % 17 === 0) markScript.run(person.ip);
+    });
+})();
+new ClickClassifier(db).all();
 
 console.log(`Seeded ${links.length} links and ${written} clicks into ${config.dbPath}`);
 db.close();

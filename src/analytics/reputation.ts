@@ -109,6 +109,8 @@ export interface IpReputationOptions {
     /** Lookups in flight at once. */
     concurrency?: number;
     now?: () => number;
+    /** Runs after an IP's clicks get a fresh result (e.g. to reclassify them). */
+    onUpdate?: (ip: string) => void;
 }
 
 interface Known extends Reputation {
@@ -124,6 +126,7 @@ export class IpReputation implements ClickAnnotator {
     readonly #ttl: number;
     readonly #concurrency: number;
     readonly #now: () => number;
+    readonly #onUpdate: (ip: string) => void;
     readonly #known = new Map<string, Known>();
     /** Waiting IPs, oldest first (a Set keeps insertion order). */
     readonly #queued = new Set<string>();
@@ -146,6 +149,7 @@ export class IpReputation implements ClickAnnotator {
         this.#ttl = opts.ttlMs ?? 7 * DAY;
         this.#concurrency = opts.concurrency ?? 2;
         this.#now = opts.now ?? Date.now;
+        this.#onUpdate = opts.onUpdate ?? (() => {});
 
         const rows = db
             .query<Known & { ip: string }, []>(
@@ -304,6 +308,7 @@ export class IpReputation implements ClickAnnotator {
             );
             this.#known.set(ip, { ...reputation, checkedAt });
             this.#applyToIp.run(...values(reputation), ip);
+            this.#onUpdate(ip);
         } catch (error) {
             this.#log(error);
         }

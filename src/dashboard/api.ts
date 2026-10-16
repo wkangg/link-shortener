@@ -42,6 +42,12 @@ const statsQuerySchema = z.object({
     link: z.coerce.number().int().positive().optional(),
     bots: flag,
     dc: flag,
+    scrapers: flag,
+    /** On unless `0` / `false`. */
+    vpn: z
+        .enum(['0', '1', 'true', 'false'])
+        .optional()
+        .transform(v => v !== '0' && v !== 'false'),
     abusive: flag,
     q: z.string().optional()
 });
@@ -78,7 +84,7 @@ function parseId(raw: string): number | null {
 export function parseStatsQuery(url: URL): StatsQuery {
     const parsed = statsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
     if (!parsed.success) throw new BadQueryError(z.prettifyError(parsed.error));
-    const { from, to, tz, link, bots, dc, abusive, q } = parsed.data;
+    const { from, to, tz, link, bots, dc, scrapers, vpn, abusive, q } = parsed.data;
     if (to <= from) throw new BadQueryError('`to` must be after `from`');
     if (to - from > MAX_RANGE) throw new BadQueryError('Date range is too long (max 5 years)');
     return {
@@ -87,6 +93,8 @@ export function parseStatsQuery(url: URL): StatsQuery {
         tz,
         bots,
         dc,
+        scrapers,
+        vpn,
         abusive,
         filters: url.searchParams.getAll('f'),
         ...(link !== undefined && { link }),

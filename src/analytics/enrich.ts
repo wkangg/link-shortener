@@ -39,6 +39,8 @@ export interface ClickRow {
     fingerprint: string | null;
     /** 1 when the IP is a hosting/datacenter provider; set later from the hostname. */
     is_datacenter: 0 | 1;
+    /** 0 when the device-signals page was served (1 once it reports back), else null. */
+    js: 0 | null;
 }
 
 /** Browser-side signals from the device-signals page, validated. Null means not reported. */
@@ -54,6 +56,8 @@ export interface DeviceSignals {
     memory: number | null;
     platform: string | null;
     touch_points: number | null;
+    /** navigator.webdriver: the browser is driven by automation. */
+    webdriver: 0 | 1 | null;
     timezone: string | null;
     language: string | null;
 }
@@ -141,7 +145,8 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         longitude: coordinate(click.longitude, 180),
         // Browser signals (if any) refine this later; see ClickBuffer.
         fingerprint: computeFingerprint({ ua: click.ua, language: lang, timezone: tz }),
-        is_datacenter: 0
+        is_datacenter: 0,
+        js: click.token ? 0 : null
     };
 }
 
@@ -182,6 +187,7 @@ export function parseSignals(body: string): DeviceSignals | null {
             s.touch <= 100
                 ? s.touch
                 : null,
+        webdriver: flag('webdriver'),
         timezone: timezone(str('timezone')),
         language: language(str('language'))
     };

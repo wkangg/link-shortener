@@ -6,12 +6,12 @@
  *   isp:comcast ip:203.0.    a field contains the value
  *   ip:=203.0.113.5          a field is exactly the value (case-insensitive)
  *   ram:>=8 battery:<20      numeric comparisons (=, >, >=, <, <=)
- *   is:bot is:datacenter     flags (also is:abusive, is:private, is:adblock, is:qr, ...)
+ *   is:bot is:datacenter     flags (also is:vpn, is:scraper, is:abusive, is:qr, ...)
  *   has:gpu                  the field is set
  *   -os:windows -is:bot      a leading `-` negates any term
  *
- * Terms are AND-ed. Mentioning `is:bot`, `is:datacenter` or `is:abusive` (negated or not)
- * takes over from the default that hides those clicks.
+ * Terms are AND-ed. Mentioning `is:bot`, `is:datacenter`, `is:scraper`, `is:vpn` or
+ * `is:abusive` (negated or not) takes over from the default that hides or shows them.
  */
 
 import { SEARCH_FLAGS } from '../shared/search.ts';
@@ -25,7 +25,7 @@ export interface Condition {
 }
 
 /** Defaults a search can take over (see `whereClause`). */
-export type SearchOverride = 'bots' | 'dc' | 'abusive';
+export type SearchOverride = 'bots' | 'dc' | 'abusive' | 'scrapers' | 'vpn';
 
 export interface CompiledSearch {
     condition: Condition | null;
@@ -48,6 +48,8 @@ const TEXT_FIELDS: Record<string, readonly string[]> = {
     model: ['c.device_model'],
     ua: ['c.user_agent'],
     bot: ['c.bot_name'],
+    vpn: ['c.vpn'],
+    scraper: ['c.scraper'],
     lang: ['c.language'],
     tz: ['c.timezone'],
     fp: ['c.fingerprint'],
@@ -86,6 +88,8 @@ const ALIASES: Record<string, string> = {
     slug: 'link',
     score: 'abuse',
     datacenter: 'dc',
+    scrapers: 'scraper',
+    relay: 'vpn',
     reported: 'abusive',
     incognito: 'private',
     adblocker: 'adblock'
@@ -176,6 +180,12 @@ function flagCondition(
         case 'dc':
             overrides.add('dc');
             return { sql: 'c.is_datacenter = 1', params: [] };
+        case 'scraper':
+            overrides.add('scrapers');
+            return { sql: 'c.scraper IS NOT NULL', params: [] };
+        case 'vpn':
+            overrides.add('vpn');
+            return { sql: 'c.vpn IS NOT NULL', params: [] };
         case 'abusive':
             overrides.add('abusive');
             return { sql: 'c.abuse_score >= ?', params: [abuseMinScore] };

@@ -22,6 +22,7 @@ s.timezone=tryit(function(){return Intl.DateTimeFormat().resolvedOptions().timeZ
 s.language=n.language;
 s.memory=n.deviceMemory;
 s.touch=n.maxTouchPoints;
+if(typeof n.webdriver==='boolean')s.webdriver=n.webdriver;
 var c=n.connection;
 if(c)s.connection=c.type&&c.type!=='unknown'?c.type:c.effectiveType;
 s.gpu=tryit(function(){

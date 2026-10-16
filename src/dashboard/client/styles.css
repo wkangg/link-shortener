@@ -1069,6 +1069,13 @@ a.badge {
     text-decoration: none;
 }
 
+button.badge {
+    background: none;
+    font-family: inherit;
+    line-height: inherit;
+    cursor: pointer;
+}
+
 .ip-lookup:hover {
     color: var(--accent, inherit);
     text-decoration: none;
