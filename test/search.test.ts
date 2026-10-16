@@ -53,6 +53,10 @@ describe('tokenize', () => {
             { negate: false, field: 'city', value: 'new york' },
             { negate: false, field: 'ram', value: '>=8' }
         ]);
+        expect(tokenize('isp:="Comcast Cable" ram:=8')).toEqual([
+            { negate: false, field: 'isp', value: '=Comcast Cable' },
+            { negate: false, field: 'ram', value: '=8' }
+        ]);
         expect(tokenize('https://t.co/x 2001:db8::1 abcd:ef01::2')).toEqual([
             { negate: false, field: null, value: 'https://t.co/x' },
             { negate: false, field: null, value: '2001:db8::1' },
@@ -78,6 +82,11 @@ describe('search', () => {
         expect(ips('-os:windows')).toEqual(['198.51.100.7']);
         expect(ips('link:launch')).toEqual(['198.51.100.7', '203.0.113.5']);
         expect(ips('has:gpu')).toEqual(['203.0.113.5']);
+        expect(ips('ip:=203.0.113')).toEqual([]);
+        expect(ips('ip:=203.0.113.5')).toEqual(['203.0.113.5']);
+        expect(ips('isp:="comcast cable"')).toEqual(['203.0.113.5']);
+        expect(ips('link:=LAUNCH')).toEqual(['198.51.100.7', '203.0.113.5']);
+        expect(ips('ip:=2001:db8::1', { dc: true })).toEqual(['2001:db8::1']);
         expect(ips('is:private')).toEqual(['198.51.100.7']);
         expect(ips('is:mobile')).toEqual(['198.51.100.7']);
     });

@@ -39,7 +39,7 @@ function parseTerm(term: string) {
     return {
         negate,
         field: body.slice(0, colon).toLowerCase(),
-        text: body.slice(colon + 1).replace(/^"/, '')
+        text: body.slice(colon + 1).replace(/^=?"?/, '')
     };
 }
 
@@ -103,7 +103,7 @@ export function SearchBox({ value, onChange, onCommit, params }: SearchBoxProps)
         suggestions = values.data.values
             .filter(v => v.value !== text)
             .map(v => ({
-                insert: `${negate}${field}:${quoted(v.value)} `,
+                insert: `${negate}${field}:=${quoted(v.value)} `,
                 label: v.value,
                 hint: `${formatCount(v.clicks)} ${v.clicks === 1 ? 'click' : 'clicks'}`
             }));

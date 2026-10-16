@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 
-import type { ClickHistoryRow, TopRow } from '../../../shared/types.ts';
+import type { ClickHistoryRow } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { useConfig } from '../config.tsx';
 import { countryLabel, formatCount, formatDateTime } from '../format.ts';
@@ -51,7 +51,14 @@ interface ClickHistoryProps {
     /** Hide the link column on a single link's page. */
     showLink: boolean;
     toggles: Toggle[];
-    onSelect: (dim: string, row: TopRow) => void;
+    /** The search box text, and the search applied to the whole page. */
+    text: string;
+    onText: (text: string) => void;
+    search: string;
+    /** Apply a search now. */
+    onSearch: (search: string) => void;
+    /** Add a term (e.g. `ip:=1.2.3.4`) to the search. */
+    onAddTerm: (term: string) => void;
 }
 
 function location(c: ClickHistoryRow): string {
@@ -118,6 +125,7 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['firefox', 'any field contains “firefox”'],
     ['"new york"', 'a phrase'],
     ['ip:203.0.113 isp:comcast', 'a field contains a value'],
+    ['ip:=203.0.113.5', 'a field is exactly a value (clicking a cell adds one)'],
     ['os: browser: device: model: ua: bot:', 'technology', false],
     ['country: region: city: host: lang: tz:', 'location', false],
     ['source: referrer: link: utm: query:', 'traffic', false],
@@ -129,9 +137,10 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['-os:windows -is:bot', 'a leading - excludes']
 ];
 
-const SEARCH_DELAY_MS = 300;
-
-const asRow = (value: string, label: string): TopRow => ({ value, label, clicks: 0, visitors: 0 });
+/** `field:=value`, quoted when the value has spaces. */
+function exactTerm(field: string, value: string): string {
+    return /[\s"]/.test(value) ? `${field}:="${value.replaceAll('"', '')}"` : `${field}:=${value}`;
+}
 
 interface IpCellProps {
     ip: string;
@@ -139,11 +148,11 @@ interface IpCellProps {
     /** AbuseIPDB abuse confidence, or null when not checked. */
     abuseScore: number | null;
     isp: string | null;
-    onSelect: (dim: string, row: TopRow) => void;
+    onAddTerm: (term: string) => void;
 }
 
 /** An IP address: a filter button, an external ISP lookup, and a datacenter badge. */
-function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
+function IpCell({ ip, isDatacenter, abuseScore, isp, onAddTerm }: IpCellProps) {
     const { abuseMinScore } = useConfig();
     const reported = abuseScore !== null && abuseScore > 0;
     return (
@@ -151,8 +160,8 @@ function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
             <button
                 type="button"
                 className="cell-filter"
-                title="Filter to this IP address"
-                onClick={() => onSelect('ip', asRow(ip, ip))}
+                title="Search for this IP address"
+                onClick={() => onAddTerm(exactTerm('ip', ip))}
             >
                 {breakableIp(ip)}
             </button>
@@ -193,8 +202,15 @@ function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
                 </a>
             )}
             {isp && (
-                <span className="history-sub" title={isp}>
-                    {isp}
+                <span className="history-sub">
+                    <button
+                        type="button"
+                        className="cell-filter"
+                        title={`Search for ${isp}`}
+                        onClick={() => onAddTerm(exactTerm('isp', isp))}
+                    >
+                        {isp}
+                    </button>
                 </span>
             )}
         </span>
@@ -206,25 +222,21 @@ export function ClickHistory({
     refreshKey,
     showLink,
     toggles,
-    onSelect
+    text,
+    onText,
+    search,
+    onSearch,
+    onAddTerm
 }: ClickHistoryProps) {
-    const [text, setText] = useState('');
-    const [search, setSearch] = useState('');
     const [showHelp, setShowHelp] = useState(false);
-    useEffect(() => {
-        const timer = setTimeout(() => setSearch(text.trim()), SEARCH_DELAY_MS);
-        return () => clearTimeout(timer);
-    }, [text]);
 
-    const filtered = new URLSearchParams(params);
-    if (search) filtered.set('q', search);
     // Back to the first page whenever the range, filters, toggles or search change.
-    const base = String(filtered);
+    const base = String(params);
     const [paging, setPaging] = useState({ base, page: 0 });
     const [size, setSize] = useState(savedSize);
     const requested = paging.base === base ? paging.page : 0;
 
-    const query = new URLSearchParams(filtered);
+    const query = new URLSearchParams(params);
     query.set('limit', String(size));
     query.set('offset', String(requested * size));
     const { data, error, loading } = useApi(`clicks|${refreshKey}|${query}`, () =>
@@ -259,15 +271,10 @@ export function ClickHistory({
                 role="search"
                 onSubmit={e => {
                     e.preventDefault();
-                    setSearch(text.trim());
+                    onSearch(text);
                 }}
             >
-                <SearchBox
-                    value={text}
-                    onChange={setText}
-                    onCommit={next => setSearch(next.trim())}
-                    params={params}
-                />
+                <SearchBox value={text} onChange={onText} onCommit={onSearch} params={params} />
                 <button
                     type="button"
                     className="text-button"
@@ -304,8 +311,8 @@ export function ClickHistory({
                                         className="cell-filter mono"
                                         title="Use this example"
                                         onClick={() => {
-                                            setText(example);
-                                            setSearch(example);
+                                            onText(example);
+                                            onSearch(example);
                                         }}
                                     >
                                         {example}
@@ -353,12 +360,11 @@ export function ClickHistory({
                                                 <button
                                                     type="button"
                                                     className="cell-filter"
-                                                    title="Filter to this link"
+                                                    title="Search for this link"
                                                     onClick={() =>
-                                                        onSelect(
-                                                            'link',
-                                                            asRow(
-                                                                String(c.linkId),
+                                                        onAddTerm(
+                                                            exactTerm(
+                                                                'link',
                                                                 c.slug === '' ? '/' : (c.slug ?? '')
                                                             )
                                                         )
@@ -378,7 +384,7 @@ export function ClickHistory({
                                                 isDatacenter={c.isDatacenter}
                                                 abuseScore={c.abuseScore}
                                                 isp={c.isp}
-                                                onSelect={onSelect}
+                                                onAddTerm={onAddTerm}
                                             />
                                         )}
                                     </td>
@@ -423,14 +429,10 @@ export function ClickHistory({
                                                 <button
                                                     type="button"
                                                     className="cell-filter mono"
-                                                    title="Filter to this device fingerprint"
+                                                    title="Search for this device fingerprint"
                                                     onClick={() =>
-                                                        onSelect(
-                                                            'fingerprint',
-                                                            asRow(
-                                                                c.fingerprint ?? '',
-                                                                c.fingerprint ?? ''
-                                                            )
+                                                        onAddTerm(
+                                                            exactTerm('fp', c.fingerprint ?? '')
                                                         )
                                                     }
                                                 >

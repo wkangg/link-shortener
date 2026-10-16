@@ -10,6 +10,8 @@ import { ClickHistory, type Toggle } from './ClickHistory.tsx';
 import { type Tab, TopList } from './TopList.tsx';
 
 const DAY = 86_400_000;
+/** The search applies this long after typing stops. */
+const SEARCH_DELAY_MS = 300;
 
 const PRESETS = [
     { id: '24h', label: 'Last 24 hours', ms: DAY },
@@ -110,6 +112,7 @@ function statsParams(opts: {
     bots: boolean;
     dc: boolean;
     abusive: boolean;
+    search: string;
     linkId?: number;
     now: number;
 }): URLSearchParams {
@@ -126,6 +129,7 @@ function statsParams(opts: {
     if (opts.dc) params.set('dc', '1');
     if (opts.abusive) params.set('abusive', '1');
     for (const f of opts.filters) params.append('f', f.value);
+    if (opts.search) params.set('q', opts.search);
     return params;
 }
 
@@ -140,6 +144,21 @@ export function Analytics({ linkId }: AnalyticsProps) {
     const [dc, setDc] = useState(false);
     const [abusive, setAbusive] = useState(false);
     const { reputation } = useConfig();
+    // What's in the search box, and the search applied to the page.
+    const [text, setText] = useState('');
+    const [search, setSearch] = useState('');
+    useEffect(() => {
+        const timer = setTimeout(() => setSearch(text.trim()), SEARCH_DELAY_MS);
+        return () => clearTimeout(timer);
+    }, [text]);
+    const applySearch = (next: string) => {
+        setText(next);
+        setSearch(next.trim());
+    };
+    const addTerm = (term: string) => {
+        if (text.split(/\s+/).includes(term)) return;
+        applySearch(`${text.trim()} ${term}`.trim());
+    };
     // Bumped every 30 s so open dashboards stay current.
     const [tick, setTick] = useState(0);
     const [now, setNow] = useState(() => Date.now());
@@ -152,7 +171,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
         return () => clearInterval(timer);
     }, []);
 
-    const params = statsParams({ preset, filters, bots, dc, abusive, linkId, now });
+    const params = statsParams({ preset, filters, bots, dc, abusive, search, linkId, now });
     const key = `${tick}|${params}`;
     const summary = useApi(`summary|${key}`, () => api.summary(params));
     const series = useApi(`series|${key}`, () => api.timeseries(params));
@@ -210,6 +229,19 @@ export function Analytics({ linkId }: AnalyticsProps) {
                     </label>
                 )}
                 <ul className="chips" aria-label="Active filters">
+                    {search && (
+                        <li>
+                            <button
+                                type="button"
+                                className="chip mono"
+                                aria-label={`Clear search ${search}`}
+                                onClick={() => applySearch('')}
+                            >
+                                Search: {search}
+                                <span aria-hidden="true">×</span>
+                            </button>
+                        </li>
+                    )}
                     {filters.map(f => (
                         <li key={f.value}>
                             <button
@@ -262,7 +294,11 @@ export function Analytics({ linkId }: AnalyticsProps) {
                 refreshKey={String(tick)}
                 showLink={linkId === undefined}
                 toggles={toggles}
-                onSelect={addFilter}
+                text={text}
+                onText={setText}
+                search={search}
+                onSearch={applySearch}
+                onAddTerm={addTerm}
             />
         </div>
     );

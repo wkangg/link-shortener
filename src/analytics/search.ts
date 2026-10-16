@@ -4,6 +4,7 @@
  *   firefox                  any text field contains "firefox"
  *   "san francisco"          quoted phrase
  *   isp:comcast ip:203.0.    a field contains the value
+ *   ip:=203.0.113.5          a field is exactly the value (case-insensitive)
  *   ram:>=8 battery:<20      numeric comparisons (=, >, >=, <, <=)
  *   is:bot is:datacenter     flags (also is:reported, is:private, is:adblock, is:qr, ...)
  *   has:gpu                  the field is set
@@ -93,6 +94,7 @@ const ALIASES: Record<string, string> = {
 /** Every column free text is matched against. */
 const ALL_TEXT = [...new Set(Object.values(TEXT_FIELDS).flat())];
 const SLUG_LIKE = String.raw`c.link_id IN (SELECT id FROM links WHERE slug LIKE ? ESCAPE '\')`;
+const SLUG_IS = 'c.link_id IN (SELECT id FROM links WHERE slug = ? COLLATE NOCASE)';
 
 const MAX_TERMS = 32;
 const MAX_LENGTH = 1000;
@@ -106,14 +108,14 @@ interface Term {
 /** Splits on whitespace, keeping "quoted phrases" (also as `field:"a value"`) together. */
 export function tokenize(q: string): Term[] {
     const terms: Term[] = [];
-    const re = /(-?)(?:([a-z_]+):)?(?:"([^"]*)"?|(\S+))/gi;
+    const re = /(-?)(?:([a-z_]+):)?(=?)(?:"([^"]*)"?|(\S+))/gi;
     for (const m of q.matchAll(re)) {
-        const [, minus, field, quoted, bare] = m;
-        const value = quoted ?? bare ?? '';
+        const [, minus, field, eq, quoted, bare] = m;
+        const value = eq + (quoted ?? bare ?? '');
         if (!field && value === '') continue;
         // A URL ("https://…") or IPv6 address ("abcd:ef01::1") is text, not a field.
         if (field && bare !== undefined && looksLikeText(field, bare)) {
-            terms.push({ negate: minus === '-', field: null, value: `${field}:${bare}` });
+            terms.push({ negate: minus === '-', field: null, value: `${field}:${eq}${bare}` });
             continue;
         }
         terms.push({
@@ -139,6 +141,14 @@ function containsAny(columns: readonly string[], value: string): Condition {
     return {
         sql: `(${columns.map(c => `${c} LIKE ? ESCAPE '\\'`).join(' OR ')})`,
         params: columns.map(() => pattern)
+    };
+}
+
+/** `=value`: the column is exactly the value, ignoring case. */
+function equalsAny(columns: readonly string[], value: string): Condition {
+    return {
+        sql: `(${columns.map(c => `${c} = ? COLLATE NOCASE`).join(' OR ')})`,
+        params: columns.map(() => value)
     };
 }
 
@@ -205,10 +215,17 @@ function termCondition(
         if (!columns) throw new BadQueryError(`Unknown field has:${term.value}`);
         return { sql: `(${columns.map(c => present(c)).join(' OR ')})`, params: [] };
     }
-    if (term.value === '') throw new BadQueryError(`${term.field}: needs a value`);
-    if (name === 'link') return { sql: SLUG_LIKE, params: [likePattern(term.value)] };
+    if (term.value === '' || term.value === '=') {
+        throw new BadQueryError(`${term.field}: needs a value`);
+    }
+    const exact = term.value.startsWith('=') ? term.value.slice(1) : null;
+    if (name === 'link') {
+        // The root link's slug is empty; it's shown as "/".
+        if (exact !== null) return { sql: SLUG_IS, params: [exact === '/' ? '' : exact] };
+        return { sql: SLUG_LIKE, params: [likePattern(term.value)] };
+    }
     const text = TEXT_FIELDS[name];
-    if (text) return containsAny(text, term.value);
+    if (text) return exact === null ? containsAny(text, term.value) : equalsAny(text, exact);
     const number = NUMBER_FIELDS[name];
     if (number) return numberCondition(name, number, term.value);
     throw new BadQueryError(`Unknown search field: ${term.field}`);
