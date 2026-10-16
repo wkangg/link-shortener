@@ -70,6 +70,10 @@ describe('user agents', () => {
         });
     });
 
+    test('unrecognized user agents have no browser or os', () => {
+        expect(parseUserAgent('curl/8.4.0')).toMatchObject({ browser: null, os: null });
+    });
+
     test('bots', () => {
         expect(parseUserAgent(SLACKBOT).isBot).toBe(true);
         expect(parseUserAgent('').isBot).toBe(false);

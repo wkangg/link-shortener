@@ -23,8 +23,9 @@ export function parseUserAgent(ua: string): UaInfo {
         const parsed = Bowser.parse(ua);
         const type = parsed.platform.type;
         info = {
-            browser: parsed.browser.name ?? null,
-            os: parsed.os.name ?? null,
+            // Bowser reports unrecognized browsers as an empty name rather than undefined.
+            browser: parsed.browser.name || null,
+            os: parsed.os.name || null,
             device:
                 type === 'desktop' || type === 'mobile' || type === 'tablet' || type === 'tv'
                     ? type
