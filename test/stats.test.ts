@@ -212,7 +212,9 @@ describe('datacenter and fingerprint', () => {
     const T = Date.UTC(2026, 0, 1);
 
     beforeAll(() => {
-        db2.run("INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://a.com', 0, 0)");
+        db2.run(
+            "INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://a.com', 0, 0)"
+        );
         const ins = db2.query(
             `INSERT INTO clicks (link_id, ts, source, via_qr, is_bot, is_datacenter, fingerprint, visitor_hash, country)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`

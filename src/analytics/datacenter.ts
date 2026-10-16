@@ -57,12 +57,12 @@ const DATACENTER_SUFFIXES = [
 ] as const;
 
 const SUFFIX_RE = new RegExp(
-    `(?:^|\\.)(?:${DATACENTER_SUFFIXES.map(s => s.replaceAll('.', '\\.')).join('|')})$`,
+    `(?:^|\\.)(?:${DATACENTER_SUFFIXES.map(s => s.replaceAll('.', String.raw`\.`)).join('|')})$`,
     'i'
 );
 
 /** True when the reverse-DNS hostname belongs to a hosting/datacenter provider. */
-export function isDatacenterHostname(hostname: string | null | undefined): boolean {
+export function isDatacenterHostname(hostname?: string | null): boolean {
     if (!hostname) return false;
     return SUFFIX_RE.test(hostname.replace(/\.$/, ''));
 }

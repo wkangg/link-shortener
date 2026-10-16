@@ -38,7 +38,7 @@ describe('isDatacenterHostname', () => {
 
     test('empty and missing hostnames are not datacenters', () => {
         expect(isDatacenterHostname(null)).toBe(false);
-        expect(isDatacenterHostname(undefined)).toBe(false);
+        expect(isDatacenterHostname()).toBe(false);
         expect(isDatacenterHostname('')).toBe(false);
     });
 });
