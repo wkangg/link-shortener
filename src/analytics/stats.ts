@@ -5,11 +5,16 @@ import type {
     ClickHistoryRow,
     Dimension,
     StatsQuery,
+    SuggestResponse,
     SummaryResponse,
     TimeseriesResponse,
     TopResponse,
     TopRow
 } from '../shared/types.ts';
+import { BadQueryError } from './errors.ts';
+import { compileSearch, likePattern, suggestColumn } from './search.ts';
+
+export { BadQueryError } from './errors.ts';
 
 type Param = string | number;
 
@@ -36,13 +41,6 @@ type ColumnDimension = keyof typeof COLUMNS;
 const PARAM_KEY_RE = /^[\w.~-]{1,64}$/;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
-
-export class BadQueryError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'BadQueryError';
-    }
-}
 
 function isColumnDimension(dim: string): dim is ColumnDimension {
     return Object.hasOwn(COLUMNS, dim);
@@ -107,7 +105,7 @@ const ABUSE_MIN_SCORE = 25;
 /**
  * WHERE clause for a query over [from, to). Filters on the same dimension are OR-ed.
  * Bots, datacenter IPs and IPs with an abuse score of `abuseMinScore` or more are
- * left out unless the query asks for them.
+ * left out unless the query asks for them, or its search mentions them (`is:bot`).
  */
 export function whereClause(
     query: StatsQuery,
@@ -121,9 +119,10 @@ export function whereClause(
         parts.push('c.link_id = ?');
         params.push(query.link);
     }
-    if (!query.bots) parts.push('c.is_bot = 0');
-    if (!query.dc) parts.push('c.is_datacenter = 0');
-    if (!query.abusive) {
+    const search = compileSearch(query.q ?? '', abuseMinScore);
+    if (!query.bots && !search.overrides.has('bots')) parts.push('c.is_bot = 0');
+    if (!query.dc && !search.overrides.has('dc')) parts.push('c.is_datacenter = 0');
+    if (!query.abusive && !search.overrides.has('abusive')) {
         parts.push('(c.abuse_score IS NULL OR c.abuse_score < ?)');
         params.push(abuseMinScore);
     }
@@ -138,6 +137,10 @@ export function whereClause(
     for (const conditions of groups.values()) {
         parts.push(`(${conditions.map(c => c.sql).join(' OR ')})`);
         params.push(...conditions.flatMap(c => c.params));
+    }
+    if (search.condition) {
+        parts.push(`(${search.condition.sql})`);
+        params.push(...search.condition.params);
     }
     return { sql: parts.join(' AND '), params };
 }
@@ -320,6 +323,30 @@ export class Stats {
             })),
             next: more && last ? `${last.ts}_${last.id}` : null,
             total
+        };
+    }
+
+    /**
+     * Most common values of a search field containing `text`, for autocomplete.
+     * Ignores the query's own search so suggestions don't narrow as it's typed.
+     */
+    suggest(query: StatsQuery, field: string, text: string, limit = 8): SuggestResponse {
+        const column = suggestColumn(field);
+        if (!column) throw new BadQueryError(`No suggestions for ${field}:`);
+        const where = this.#where({ ...query, q: undefined });
+        const value = `CAST(${column} AS TEXT)`;
+        const rows = this.#db
+            .query<{ value: string; clicks: number }, Param[]>(
+                `SELECT ${value} AS value, COUNT(*) AS clicks
+                 FROM clicks c LEFT JOIN links l ON l.id = c.link_id
+                 WHERE ${where.sql} AND ${value} != '' AND ${value} LIKE ? ESCAPE '\\'
+                 GROUP BY value ORDER BY clicks DESC, value LIMIT ?`
+            )
+            .all(...where.params, likePattern(text), Math.min(Math.max(limit, 1), 50));
+        // REAL columns come back as "8.0".
+        return {
+            field,
+            values: rows.map(r => ({ ...r, value: r.value.replace(/^(-?\d+)\.0$/, '$1') }))
         };
     }
 

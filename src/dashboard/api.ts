@@ -42,7 +42,8 @@ const statsQuerySchema = z.object({
     link: z.coerce.number().int().positive().optional(),
     bots: flag,
     dc: flag,
-    abusive: flag
+    abusive: flag,
+    q: z.string().optional()
 });
 
 export function json(body: unknown, status = 200, headers?: HeadersInit): Response {
@@ -77,7 +78,7 @@ function parseId(raw: string): number | null {
 export function parseStatsQuery(url: URL): StatsQuery {
     const parsed = statsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
     if (!parsed.success) throw new BadQueryError(z.prettifyError(parsed.error));
-    const { from, to, tz, link, bots, dc, abusive } = parsed.data;
+    const { from, to, tz, link, bots, dc, abusive, q } = parsed.data;
     if (to <= from) throw new BadQueryError('`to` must be after `from`');
     if (to - from > MAX_RANGE) throw new BadQueryError('Date range is too long (max 5 years)');
     return {
@@ -88,7 +89,8 @@ export function parseStatsQuery(url: URL): StatsQuery {
         dc,
         abusive,
         filters: url.searchParams.getAll('f'),
-        ...(link !== undefined && { link })
+        ...(link !== undefined && { link }),
+        ...(q && { q })
     };
 }
 
@@ -207,6 +209,16 @@ export function apiRoutes(deps: ApiDeps) {
                 const dim = url.searchParams.get('dim') ?? '';
                 const limit = Number(url.searchParams.get('limit') ?? 10) || 10;
                 return json(stats.top(parseStatsQuery(url), dim, limit));
+            })
+        },
+
+        '/api/stats/suggest': {
+            GET: guard(req => {
+                const url = new URL(req.url);
+                const p = url.searchParams;
+                return json(
+                    stats.suggest(parseStatsQuery(url), p.get('field') ?? '', p.get('text') ?? '')
+                );
             })
         },
 

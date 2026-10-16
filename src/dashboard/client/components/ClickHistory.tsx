@@ -1,10 +1,11 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import type { ClickHistoryRow, TopRow } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { useConfig } from '../config.tsx';
 import { countryLabel, formatCount, formatDateTime } from '../format.ts';
 import { useApi } from '../useApi.ts';
+import { SearchBox } from './SearchBox.tsx';
 
 /** "All" still pages, just in very large pages, so a huge history can't freeze the tab. */
 const ALL = 10_000;
@@ -36,12 +37,20 @@ function saveSize(size: number): void {
     }
 }
 
+/** One of the dashboard's include toggles, mirrored here so it's reachable without scrolling up. */
+export interface Toggle {
+    label: string;
+    on: boolean;
+    set: (on: boolean) => void;
+}
+
 interface ClickHistoryProps {
     /** Stats query params (range, link, filters, bots). */
     params: URLSearchParams;
     refreshKey: string;
     /** Hide the link column on a single link's page. */
     showLink: boolean;
+    toggles: Toggle[];
     onSelect: (dim: string, row: TopRow) => void;
 }
 
@@ -103,6 +112,24 @@ function breakableIp(ip: string) {
         );
     });
 }
+
+/** Search help: what to type, and what it matches. Lists of field names aren't runnable. */
+const SEARCH_HELP: [string, string, runnable?: false][] = [
+    ['firefox', 'any field contains “firefox”'],
+    ['"new york"', 'a phrase'],
+    ['ip:203.0.113 isp:comcast', 'a field contains a value'],
+    ['os: browser: device: model: ua: bot:', 'technology', false],
+    ['country: region: city: host: lang: tz:', 'location', false],
+    ['source: referrer: link: utm: query:', 'traffic', false],
+    ['gpu: screen: platform: connection: fp:', 'hardware', false],
+    ['ram:>=8 battery:<20 touch:0 abuse:>50', 'numbers (=, >, >=, <, <=)'],
+    ['is:bot is:datacenter is:reported', 'shows clicks the toggles above hide'],
+    ['is:private is:adblock is:qr is:mobile', 'other flags'],
+    ['has:gpu', 'the field is set'],
+    ['-os:windows -is:bot', 'a leading - excludes']
+];
+
+const SEARCH_DELAY_MS = 300;
 
 const asRow = (value: string, label: string): TopRow => ({ value, label, clicks: 0, visitors: 0 });
 
@@ -174,14 +201,30 @@ function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
     );
 }
 
-export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHistoryProps) {
-    // Back to the first page whenever the range, filters or bots toggle change.
-    const base = String(params);
+export function ClickHistory({
+    params,
+    refreshKey,
+    showLink,
+    toggles,
+    onSelect
+}: ClickHistoryProps) {
+    const [text, setText] = useState('');
+    const [search, setSearch] = useState('');
+    const [showHelp, setShowHelp] = useState(false);
+    useEffect(() => {
+        const timer = setTimeout(() => setSearch(text.trim()), SEARCH_DELAY_MS);
+        return () => clearTimeout(timer);
+    }, [text]);
+
+    const filtered = new URLSearchParams(params);
+    if (search) filtered.set('q', search);
+    // Back to the first page whenever the range, filters, toggles or search change.
+    const base = String(filtered);
     const [paging, setPaging] = useState({ base, page: 0 });
     const [size, setSize] = useState(savedSize);
     const requested = paging.base === base ? paging.page : 0;
 
-    const query = new URLSearchParams(params);
+    const query = new URLSearchParams(filtered);
     query.set('limit', String(size));
     query.set('offset', String(requested * size));
     const { data, error, loading } = useApi(`clicks|${refreshKey}|${query}`, () =>
@@ -211,8 +254,77 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                 <h3>Click history</h3>
                 <span className="history-hint">Every request, newest first</span>
             </header>
-            {error && <p className="panel-empty">Couldn’t load: {error.message}</p>}
-            {!error && data && total === 0 && <p className="panel-empty">Nothing yet</p>}
+            <form
+                className="history-search"
+                role="search"
+                onSubmit={e => {
+                    e.preventDefault();
+                    setSearch(text.trim());
+                }}
+            >
+                <SearchBox
+                    value={text}
+                    onChange={setText}
+                    onCommit={next => setSearch(next.trim())}
+                    params={params}
+                />
+                <button
+                    type="button"
+                    className="text-button"
+                    aria-expanded={showHelp}
+                    onClick={() => setShowHelp(v => !v)}
+                >
+                    Syntax
+                </button>
+                <ul className="chips" aria-label="Include">
+                    {toggles.map(t => (
+                        <li key={t.label}>
+                            <button
+                                type="button"
+                                className="chip"
+                                aria-pressed={t.on}
+                                onClick={() => t.set(!t.on)}
+                            >
+                                {t.label}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </form>
+            {showHelp && (
+                <dl className="search-help">
+                    {SEARCH_HELP.map(([example, meaning, runnable]) => (
+                        <Fragment key={example}>
+                            <dt>
+                                {runnable === false ? (
+                                    <span className="mono">{example}</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="cell-filter mono"
+                                        title="Use this example"
+                                        onClick={() => {
+                                            setText(example);
+                                            setSearch(example);
+                                        }}
+                                    >
+                                        {example}
+                                    </button>
+                                )}
+                            </dt>
+                            <dd>{meaning}</dd>
+                        </Fragment>
+                    ))}
+                </dl>
+            )}
+            {error && (
+                <p className="panel-empty">
+                    {search ? error.message : `Couldn’t load: ${error.message}`}
+                </p>
+            )}
+            {!error && data && total === 0 && (
+                <p className="panel-empty">{search ? 'No clicks match' : 'Nothing yet'}</p>
+            )}
             {clicks.length > 0 && (
                 <div className="history-scroll">
                     <table className="history-table">

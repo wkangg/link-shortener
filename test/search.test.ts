@@ -1,0 +1,134 @@
+import { beforeAll, describe, expect, test } from 'bun:test';
+
+import { compileSearch, tokenize } from '../src/analytics/search.ts';
+import { BadQueryError, Stats } from '../src/analytics/stats.ts';
+import { openDatabase } from '../src/db/client.ts';
+import { SEARCH_FIELDS, SEARCH_FLAGS } from '../src/shared/search.ts';
+import type { StatsQuery } from '../src/shared/types.ts';
+
+const T = Date.UTC(2026, 9, 10);
+const HOUR = 3_600_000;
+const db = openDatabase(':memory:');
+const stats = new Stats(db);
+
+beforeAll(() => {
+    db.run(
+        "INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'launch', 'https://a.com', 0, 0), (2, 'docs', 'https://b.com', 0, 0)"
+    );
+    const insert = db.query(
+        `INSERT INTO clicks (link_id, ts, ip, isp, os, browser, device, city, memory, battery,
+                             is_bot, is_datacenter, abuse_score, incognito, gpu, source, visitor_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    // prettier-ignore
+    const rows: (string | number | null)[][] = [
+        [1, T + HOUR, '203.0.113.5', 'Comcast Cable', 'Windows', 'Firefox', 'desktop', 'New York', 8, null, 0, 0, 0, 0, 'NVIDIA GeForce', 'Direct', 'v1'],
+        [1, T + 2 * HOUR, '198.51.100.7', 'Rogers', 'iOS', 'Safari', 'mobile', 'Toronto', 4, 15, 0, 0, null, 1, null, 'X', 'v2'],
+        [2, T + 3 * HOUR, '2001:db8::1', 'Example Cloud', 'Linux', 'Chrome', 'desktop', null, 16, null, 0, 1, 0, 0, null, 'Direct', 'v3'],
+        [2, T + 4 * HOUR, '192.0.2.9', 'Shady Broadband', 'Windows', 'Chrome', 'desktop', null, null, null, 0, 0, 90, 0, null, 'Direct', 'v4'],
+        [1, T + 5 * HOUR, '192.0.2.10', null, null, null, null, null, null, null, 1, 0, null, null, null, 'Direct', 'v5'],
+    ];
+    for (const row of rows) insert.run(...row);
+});
+
+const q = (search: string, overrides: Partial<StatsQuery> = {}): StatsQuery => ({
+    from: T,
+    to: T + 24 * HOUR,
+    tz: 0,
+    filters: [],
+    q: search,
+    ...overrides
+});
+const ips = (search: string, overrides?: Partial<StatsQuery>) =>
+    stats
+        .history(q(search, overrides))
+        .clicks.map(c => c.ip)
+        .toSorted();
+
+describe('tokenize', () => {
+    test('fields, phrases, negation, URLs and IPv6', () => {
+        expect(tokenize('firefox -os:windows city:"new york" ram:>=8')).toEqual([
+            { negate: false, field: null, value: 'firefox' },
+            { negate: true, field: 'os', value: 'windows' },
+            { negate: false, field: 'city', value: 'new york' },
+            { negate: false, field: 'ram', value: '>=8' }
+        ]);
+        expect(tokenize('https://t.co/x 2001:db8::1 abcd:ef01::2')).toEqual([
+            { negate: false, field: null, value: 'https://t.co/x' },
+            { negate: false, field: null, value: '2001:db8::1' },
+            { negate: false, field: null, value: 'abcd:ef01::2' }
+        ]);
+    });
+});
+
+describe('search', () => {
+    test('free text matches any text field, case-insensitively', () => {
+        expect(ips('comcast')).toEqual(['203.0.113.5']);
+        expect(ips('CHROME')).toEqual([]); // the Chrome clicks are datacenter / reported
+        expect(ips('"new york"')).toEqual(['203.0.113.5']);
+        expect(ips('2001:db8', { dc: true })).toEqual(['2001:db8::1']);
+    });
+
+    test('field values, numbers and negation', () => {
+        expect(ips('ip:198.51')).toEqual(['198.51.100.7']);
+        expect(ips('isp:rogers')).toEqual(['198.51.100.7']);
+        expect(ips('ram:>=8')).toEqual(['203.0.113.5']);
+        expect(ips('ram:4')).toEqual(['198.51.100.7']);
+        expect(ips('battery:<20')).toEqual(['198.51.100.7']);
+        expect(ips('-os:windows')).toEqual(['198.51.100.7']);
+        expect(ips('link:launch')).toEqual(['198.51.100.7', '203.0.113.5']);
+        expect(ips('has:gpu')).toEqual(['203.0.113.5']);
+        expect(ips('is:private')).toEqual(['198.51.100.7']);
+        expect(ips('is:mobile')).toEqual(['198.51.100.7']);
+    });
+
+    test('LIKE wildcards in the value are literal', () => {
+        expect(ips('%')).toEqual([]);
+        expect(ips('isp:_')).toEqual([]);
+    });
+
+    test('is:bot, is:datacenter and is:reported take over from the hiding defaults', () => {
+        expect(ips('is:bot')).toEqual(['192.0.2.10']);
+        expect(ips('is:datacenter')).toEqual(['2001:db8::1']);
+        expect(ips('is:reported')).toEqual(['192.0.2.9']);
+        expect(ips('-is:bot')).toEqual(['198.51.100.7', '203.0.113.5']);
+        expect(ips('-is:reported', { bots: true, dc: true })).toHaveLength(4);
+    });
+
+    test('applies to summaries too', () => {
+        expect(stats.summary(q('os:windows')).clicks).toBe(1);
+    });
+
+    test('bad searches are 400s, not crashes', () => {
+        expect(() => stats.history(q('colour:red'))).toThrow(BadQueryError);
+        expect(() => stats.history(q('ram:lots'))).toThrow(BadQueryError);
+        expect(() => stats.history(q('is:nonsense'))).toThrow(BadQueryError);
+        expect(() => stats.history(q('x '.repeat(40)))).toThrow(BadQueryError);
+    });
+});
+
+describe('autocomplete', () => {
+    test('every listed field and flag is one the search understands', () => {
+        for (const { name } of SEARCH_FIELDS) {
+            const term = name === 'is' ? 'is:bot' : name === 'has' ? 'has:gpu' : `${name}:1`;
+            expect(() => compileSearch(term, 25)).not.toThrow();
+        }
+        for (const { name } of SEARCH_FLAGS) {
+            expect(() => compileSearch(`is:${name}`, 25)).not.toThrow();
+        }
+    });
+
+    test('suggests common values containing the text, ignoring the current search', () => {
+        expect(stats.suggest(q('isp:zzz'), 'isp', 'o').values).toEqual([
+            { value: 'Comcast Cable', clicks: 1 },
+            { value: 'Rogers', clicks: 1 }
+        ]);
+        expect(stats.suggest(q(''), 'link', '').values).toEqual([{ value: 'launch', clicks: 2 }]);
+        expect(stats.suggest(q('', { dc: true }), 'ram', '').values.map(v => v.value)).toEqual([
+            '16',
+            '4',
+            '8'
+        ]);
+        expect(() => stats.suggest(q(''), 'utm', '')).toThrow(BadQueryError);
+    });
+});

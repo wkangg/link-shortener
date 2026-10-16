@@ -6,7 +6,7 @@ import { useConfig } from '../config.tsx';
 import { countryLabel, formatCount, formatDelta } from '../format.ts';
 import { useApi } from '../useApi.ts';
 import { Chart } from './Chart.tsx';
-import { ClickHistory } from './ClickHistory.tsx';
+import { ClickHistory, type Toggle } from './ClickHistory.tsx';
 import { type Tab, TopList } from './TopList.tsx';
 
 const DAY = 86_400_000;
@@ -165,6 +165,12 @@ export function Analytics({ linkId }: AnalyticsProps) {
         );
     };
 
+    const toggles: Toggle[] = [
+        { label: 'Bots', on: bots, set: setBots },
+        { label: 'Datacenter IPs', on: dc, set: setDc },
+        ...(reputation ? [{ label: 'Reported IPs', on: abusive, set: setAbusive }] : [])
+    ];
+
     const exportUrl = `/api/export.csv?${params}`;
     const s = summary.data;
 
@@ -255,6 +261,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
                 params={params}
                 refreshKey={String(tick)}
                 showLink={linkId === undefined}
+                toggles={toggles}
                 onSelect={addFilter}
             />
         </div>

@@ -77,6 +77,12 @@ export const DIMENSIONS = [
 
 export type Dimension = (typeof DIMENSIONS)[number];
 
+export interface SuggestResponse {
+    field: string;
+    /** Most common first. */
+    values: { value: string; clicks: number }[];
+}
+
 export interface StatsQuery {
     from: number;
     to: number;
@@ -90,6 +96,8 @@ export interface StatsQuery {
     abusive?: boolean;
     /** `dim:value`, or `param:key=value` / `param:key` for query params. */
     filters: string[];
+    /** Search over click properties (see analytics/search.ts). */
+    q?: string;
 }
 
 export interface SummaryResponse {
