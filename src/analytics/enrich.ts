@@ -1,5 +1,6 @@
 import { fixUtf8ReadAsLatin1 } from '../shared/text.ts';
 import type { RawClick } from '../shared/types.ts';
+import { computeFingerprint } from './fingerprint.ts';
 import { deriveSource, referrerHost } from './source.ts';
 import { parseUserAgent } from './ua.ts';
 
@@ -34,6 +35,10 @@ export interface ClickRow {
     token: string | null;
     latitude: number | null;
     longitude: number | null;
+    /** Coarse device fingerprint (see analytics/fingerprint.ts). */
+    fingerprint: string | null;
+    /** 1 when the IP is a hosting/datacenter provider; set later from the hostname. */
+    is_datacenter: 0 | 1;
 }
 
 /** Browser-side signals from the device-signals page, validated. Null means not reported. */
@@ -105,6 +110,8 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
     if (host === opts.shortHost) host = null;
 
     const ua = parseUserAgent(click.ua);
+    const lang = language(click.language.split(',')[0]?.split(';')[0] ?? '');
+    const tz = timezone(click.timezone);
 
     return {
         link_id: click.linkId,
@@ -125,13 +132,16 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         query: otherParams(params),
         ip: clean(click.ip.slice(0, MAX_IP)),
         user_agent: clean(click.ua.slice(0, MAX_USER_AGENT)),
-        language: language(click.language.split(',')[0]?.split(';')[0] ?? ''),
-        timezone: timezone(click.timezone),
+        language: lang,
+        timezone: tz,
         bot_name: ua.botName,
         device_model: ua.model,
         token: click.token,
         latitude: coordinate(click.latitude, 90),
-        longitude: coordinate(click.longitude, 180)
+        longitude: coordinate(click.longitude, 180),
+        // Browser signals (if any) refine this later; see ClickBuffer.
+        fingerprint: computeFingerprint({ ua: click.ua, language: lang, timezone: tz }),
+        is_datacenter: 0
     };
 }
 

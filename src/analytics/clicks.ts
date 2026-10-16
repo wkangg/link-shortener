@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 import type { ClickSink, RawClick } from '../shared/types.ts';
+import { isDatacenterHostname } from './datacenter.ts';
 import {
     type ClickRow,
     type DeviceSignals,
@@ -8,6 +9,7 @@ import {
     type EnrichOptions,
     parseSignals
 } from './enrich.ts';
+import { computeFingerprint } from './fingerprint.ts';
 
 const COLUMNS = [
     'link_id',
@@ -38,7 +40,9 @@ const COLUMNS = [
     'device_model',
     'token',
     'latitude',
-    'longitude'
+    'longitude',
+    'fingerprint',
+    'is_datacenter'
 ] as const satisfies readonly (keyof ClickRow)[];
 
 const SIGNAL_COLUMNS = [
@@ -85,7 +89,7 @@ export interface ClickBufferOptions extends EnrichOptions {
 export class ClickBuffer implements ClickSink {
     #pending: RawClick[] = [];
     #signals: PendingSignals[] = [];
-    #hostnames: { id: number; hostname: string }[] = [];
+    #hostnames: { id: number; hostname: string; datacenter: 0 | 1 }[] = [];
     readonly #hostnameCache = new Map<string, string | null>();
     #lookups = 0;
     #timer: ReturnType<typeof setInterval> | null = null;
@@ -94,6 +98,7 @@ export class ClickBuffer implements ClickSink {
     readonly #db: Database;
     readonly #opts: Required<ClickBufferOptions>;
     readonly #insert;
+    readonly #rowForToken;
     readonly #applySignals;
     readonly #setHostname;
     readonly #expireTokens;
@@ -104,13 +109,24 @@ export class ClickBuffer implements ClickSink {
         this.#insert = db.query<{ id: number }, (string | number | null)[]>(
             `INSERT INTO clicks (${COLUMNS.join(', ')}) VALUES (${COLUMNS.map(() => '?').join(', ')}) RETURNING id`
         );
+        // The user agent and headers of the click a token belongs to, so its
+        // fingerprint can be recomputed with the browser signals folded in.
+        this.#rowForToken = db.query<
+            { ua: string | null; language: string | null; timezone: string | null },
+            [string, number]
+        >(
+            'SELECT user_agent AS ua, language, timezone FROM clicks WHERE token = ? AND ts >= ? LIMIT 1'
+        );
         // One use per token, and only shortly after the click.
         this.#applySignals = db.query(
             `UPDATE clicks SET ${SIGNAL_COLUMNS.map(c => `${c} = ?`).join(', ')},
-                timezone = COALESCE(?, timezone), language = COALESCE(?, language), token = NULL
+                timezone = COALESCE(?, timezone), language = COALESCE(?, language),
+                fingerprint = COALESCE(?, fingerprint), token = NULL
              WHERE token = ? AND ts >= ?`
         );
-        this.#setHostname = db.query('UPDATE clicks SET hostname = ? WHERE id = ?');
+        this.#setHostname = db.query(
+            'UPDATE clicks SET hostname = ?, is_datacenter = ? WHERE id = ?'
+        );
         this.#expireTokens = db.query(
             'UPDATE clicks SET token = NULL WHERE token IS NOT NULL AND ts < ?'
         );
@@ -164,15 +180,30 @@ export class ClickBuffer implements ClickSink {
                 for (const s of signals) {
                     const parsed = parseSignals(s.body);
                     if (!parsed) continue;
+                    const since = s.ts - SIGNALS_WINDOW_MS;
+                    const click = this.#rowForToken.get(s.token, since);
+                    const fingerprint = click
+                        ? computeFingerprint({
+                              ua: click.ua,
+                              language: parsed.language ?? click.language,
+                              timezone: parsed.timezone ?? click.timezone,
+                              screen: parsed.screen,
+                              gpu: parsed.gpu,
+                              platform: parsed.platform,
+                              memory: parsed.memory,
+                              touchPoints: parsed.touch_points
+                          })
+                        : null;
                     this.#applySignals.run(
                         ...SIGNAL_COLUMNS.map(column => parsed[column]),
                         parsed.timezone,
                         parsed.language,
+                        fingerprint,
                         s.token,
-                        s.ts - SIGNALS_WINDOW_MS
+                        since
                     );
                 }
-                for (const h of hostnames) this.#setHostname.run(h.hostname, h.id);
+                for (const h of hostnames) this.#setHostname.run(h.hostname, h.datacenter, h.id);
                 if (signals.length > 0) this.#expireTokens.run(Date.now() - SIGNALS_WINDOW_MS);
             })();
             this.#written += batch.length;
@@ -195,7 +226,7 @@ export class ClickBuffer implements ClickSink {
         if (!reverseDns) return;
         const cached = this.#hostnameCache.get(ip);
         if (cached !== undefined) {
-            if (cached) this.#hostnames.push({ id, hostname: cached });
+            if (cached) this.#queueHostname(id, cached);
             return;
         }
         if (this.#lookups >= MAX_LOOKUPS) return;
@@ -205,9 +236,13 @@ export class ClickBuffer implements ClickSink {
             .then(hostname => {
                 if (this.#hostnameCache.size >= MAX_HOSTNAMES) this.#hostnameCache.clear();
                 this.#hostnameCache.set(ip, hostname);
-                if (hostname) this.#hostnames.push({ id, hostname });
+                if (hostname) this.#queueHostname(id, hostname);
             })
             .finally(() => this.#lookups--);
+    }
+
+    #queueHostname(id: number, hostname: string): void {
+        this.#hostnames.push({ id, hostname, datacenter: isDatacenterHostname(hostname) ? 1 : 0 });
     }
 
     stop(): void {

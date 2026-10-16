@@ -163,5 +163,23 @@ for (let n = 0; n < total; n++) {
 }
 
 const written = buffer.flush();
+
+// Mark a slice of visitors as datacenter traffic (with a plausible hosting
+// hostname) so the "Include datacenter IPs" toggle has something to hide.
+const DC_HOSTS = [
+    'compute.amazonaws.com',
+    'googleusercontent.com',
+    'clients.your-server.de',
+    'vultrusercontent.com'
+];
+const markDc = db.query('UPDATE clicks SET is_datacenter = 1, hostname = ? WHERE ip = ?');
+db.transaction(() => {
+    people.forEach((person, i) => {
+        if (i % 13 !== 0) return;
+        const host = `host-${i}.${DC_HOSTS[i % DC_HOSTS.length]}`;
+        markDc.run(host, person.ip);
+    });
+})();
+
 console.log(`Seeded ${links.length} links and ${written} clicks into ${config.dbPath}`);
 db.close();

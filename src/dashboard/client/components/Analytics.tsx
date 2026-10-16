@@ -44,7 +44,8 @@ const DIM_NAMES: Record<string, string> = {
     utm_term: 'utm_term',
     utm_content: 'utm_content',
     qr: 'Opened via',
-    ip: 'IP'
+    ip: 'IP',
+    fingerprint: 'Device'
 };
 
 const PANELS: { title: string; tabs: Tab[]; drill?: boolean; linksOnly?: boolean }[] = [
@@ -69,7 +70,8 @@ const PANELS: { title: string; tabs: Tab[]; drill?: boolean; linksOnly?: boolean
         tabs: [
             { dim: 'browser', label: 'Browsers' },
             { dim: 'os', label: 'OS' },
-            { dim: 'device', label: 'Devices' }
+            { dim: 'device', label: 'Devices' },
+            { dim: 'fingerprint', label: 'Fingerprints' }
         ]
     },
     {
@@ -92,7 +94,12 @@ function filterFor(dim: string, row: TopRow): Filter {
         const key = dim.slice('param:'.length);
         return { dim: `param:${key}`, label: `?${key}=${value}`, value: `param:${key}=${value}` };
     }
-    const shown = dim === 'country' && row.value ? countryLabel(row.value) : row.label;
+    const shown =
+        dim === 'country' && row.value
+            ? countryLabel(row.value)
+            : dim === 'fingerprint' && row.value
+              ? row.value.slice(0, 10)
+              : row.label;
     return { dim, label: `${DIM_NAMES[dim] ?? dim}: ${shown}`, value: `${dim}:${value}` };
 }
 
@@ -100,6 +107,7 @@ function statsParams(opts: {
     preset: PresetId;
     filters: Filter[];
     bots: boolean;
+    dc: boolean;
     linkId?: number;
     now: number;
 }): URLSearchParams {
@@ -113,6 +121,7 @@ function statsParams(opts: {
     });
     if (opts.linkId !== undefined) params.set('link', String(opts.linkId));
     if (opts.bots) params.set('bots', '1');
+    if (opts.dc) params.set('dc', '1');
     for (const f of opts.filters) params.append('f', f.value);
     return params;
 }
@@ -125,6 +134,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
     const [preset, setPreset] = useState<PresetId>('30d');
     const [filters, setFilters] = useState<Filter[]>([]);
     const [bots, setBots] = useState(false);
+    const [dc, setDc] = useState(false);
     // Bumped every 30 s so open dashboards stay current.
     const [tick, setTick] = useState(0);
     const [now, setNow] = useState(() => Date.now());
@@ -137,7 +147,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
         return () => clearInterval(timer);
     }, []);
 
-    const params = statsParams({ preset, filters, bots, linkId, now });
+    const params = statsParams({ preset, filters, bots, dc, linkId, now });
     const key = `${tick}|${params}`;
     const summary = useApi(`summary|${key}`, () => api.summary(params));
     const series = useApi(`series|${key}`, () => api.timeseries(params));
@@ -173,6 +183,10 @@ export function Analytics({ linkId }: AnalyticsProps) {
                         onChange={e => setBots(e.target.checked)}
                     />
                     Include bots
+                </label>
+                <label className="checkbox">
+                    <input type="checkbox" checked={dc} onChange={e => setDc(e.target.checked)} />
+                    Include datacenter IPs
                 </label>
                 <ul className="chips" aria-label="Active filters">
                     {filters.map(f => (

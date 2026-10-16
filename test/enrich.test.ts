@@ -152,6 +152,26 @@ describe('extra click fields', () => {
     });
 });
 
+describe('fingerprint and datacenter', () => {
+    test('a fingerprint is derived from the headers and is independent of time and IP', () => {
+        const row = enrichClick(base, opts);
+        expect(row.fingerprint).toBeString();
+        expect(row.is_datacenter).toBe(0);
+        // Same device, different click time and IP: same fingerprint.
+        expect(enrichClick({ ...base, ts: base.ts + 9999, ip: '9.9.9.9' }, opts).fingerprint).toBe(
+            row.fingerprint
+        );
+        // Different browser: different fingerprint.
+        expect(enrichClick({ ...base, ua: IPHONE }, opts).fingerprint).not.toBe(row.fingerprint);
+    });
+
+    test('no identifying headers means no fingerprint', () => {
+        expect(
+            enrichClick({ ...base, ua: '', language: '', timezone: '' }, opts).fingerprint
+        ).toBeNull();
+    });
+});
+
 describe('user agents', () => {
     test('browser, os and device', () => {
         expect(parseUserAgent(IPHONE)).toEqual({

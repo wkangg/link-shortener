@@ -27,7 +27,8 @@ const COLUMNS = {
     utm_campaign: 'c.utm_campaign',
     utm_term: 'c.utm_term',
     utm_content: 'c.utm_content',
-    ip: 'c.ip'
+    ip: 'c.ip',
+    fingerprint: 'c.fingerprint'
 } as const satisfies Partial<Record<Dimension, string>>;
 
 type ColumnDimension = keyof typeof COLUMNS;
@@ -109,6 +110,7 @@ export function whereClause(query: StatsQuery, from = query.from, to = query.to)
         params.push(query.link);
     }
     if (!query.bots) parts.push('c.is_bot = 0');
+    if (!query.dc) parts.push('c.is_datacenter = 0');
 
     const groups = new Map<string, Condition[]>();
     for (const filter of query.filters) {
@@ -265,12 +267,13 @@ export class Stats {
             sql += ' AND (c.ts < ? OR (c.ts = ? AND c.id < ?))';
             params.push(ts, ts, id);
         }
-        type Flags = 'qr' | 'bot' | 'charging' | 'incognito' | 'adBlocker';
+        type Flags = 'qr' | 'bot' | 'isDatacenter' | 'charging' | 'incognito' | 'adBlocker';
         const rows = this.#db
             .query<Omit<ClickHistoryRow, Flags> & Record<Flags, number | null>, Param[]>(
                 `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
                         c.device, c.browser, c.os, c.is_bot AS bot, c.bot_name AS botName,
+                        c.is_datacenter AS isDatacenter, c.fingerprint,
                         c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
                         c.screen, c.orientation, c.battery, c.charging, c.connection, c.gpu,
                         c.incognito, c.ad_blocker AS adBlocker, c.latitude, c.longitude,
@@ -287,6 +290,7 @@ export class Stats {
                 ...r,
                 qr: r.qr === 1,
                 bot: r.bot === 1,
+                isDatacenter: r.isDatacenter === 1,
                 charging: flag(r.charging),
                 incognito: flag(r.incognito),
                 adBlocker: flag(r.adBlocker)
@@ -312,6 +316,8 @@ export class Stats {
             'browser',
             'os',
             'bot',
+            'datacenter',
+            'fingerprint',
             'utm_source',
             'utm_medium',
             'utm_campaign',
@@ -342,7 +348,7 @@ export class Stats {
         const rows = this.#db
             .query<Record<string, string | number | null>, Param[]>(
                 `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
-                        c.device, c.browser, c.os, c.is_bot, c.utm_source, c.utm_medium,
+                        c.device, c.browser, c.os, c.is_bot, c.is_datacenter, c.fingerprint, c.utm_source, c.utm_medium,
                         c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
                         c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
                         c.orientation, c.battery, c.charging, c.connection, c.gpu, c.incognito,

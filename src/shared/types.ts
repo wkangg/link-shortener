@@ -67,7 +67,8 @@ export const DIMENSIONS = [
     'utm_content',
     'qr',
     'param',
-    'ip'
+    'ip',
+    'fingerprint'
 ] as const;
 
 export type Dimension = (typeof DIMENSIONS)[number];
@@ -79,6 +80,8 @@ export interface StatsQuery {
     tz: number;
     link?: number;
     bots?: boolean;
+    /** Include clicks from datacenter/hosting IPs (hidden by default, like bots). */
+    dc?: boolean;
     /** `dim:value`, or `param:key=value` / `param:key` for query params. */
     filters: string[];
 }
@@ -130,6 +133,10 @@ export interface ClickHistoryRow {
     os: string | null;
     bot: boolean;
     botName: string | null;
+    /** 1 when the IP belongs to a hosting/datacenter provider. */
+    isDatacenter: boolean;
+    /** Coarse device fingerprint; groups clicks from the same device. */
+    fingerprint: string | null;
     deviceModel: string | null;
     language: string | null;
     timezone: string | null;
