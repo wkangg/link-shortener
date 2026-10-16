@@ -1,7 +1,9 @@
 import type { Database } from 'bun:sqlite';
 
 import { ClickBuffer, type ReverseDns } from './analytics/clicks.ts';
+import { backfillDatacenterHostnames } from './analytics/datacenter.ts';
 import { createReverseDns } from './analytics/hostname.ts';
+import { type CheckIp, createAbuseIpdb, IpReputation } from './analytics/reputation.ts';
 import { Stats } from './analytics/stats.ts';
 import { parseUserAgent } from './analytics/ua.ts';
 import type { Config } from './config.ts';
@@ -23,7 +25,12 @@ export interface AppOptions {
     flushIntervalMs?: number;
     /** Hostname lookups for click IPs; null turns them off (tests). */
     reverseDns?: ReverseDns | null;
+    /** IP reputation lookups; defaults to AbuseIPDB when a key is configured, null turns them off. */
+    checkIp?: CheckIp | null;
 }
+
+/** Reputation backfill runs at startup and then this often. */
+const BACKFILL_INTERVAL_MS = 6 * 3_600_000;
 
 /** Wires both servers to one database, one cache and one click buffer. */
 export function startApp(opts: AppOptions) {
@@ -31,11 +38,27 @@ export function startApp(opts: AppOptions) {
     const shortHost = new URL(config.shortOrigin).hostname;
 
     const cache = new LinkCache();
+    backfillDatacenterHostnames(db);
+
+    const checkIp =
+        opts.checkIp === undefined
+            ? config.abuseIpdb && createAbuseIpdb(config.abuseIpdb.apiKey)
+            : opts.checkIp;
+    const reputation = checkIp
+        ? new IpReputation(db, { check: checkIp, dailyLimit: config.abuseIpdb?.dailyLimit })
+        : null;
+    reputation?.backfill();
+    const backfill = reputation
+        ? setInterval(() => reputation.backfill(), BACKFILL_INTERVAL_MS)
+        : null;
+    backfill?.unref();
+
     const clicks = new ClickBuffer(db, {
         shortHost,
         salt: config.visitorSalt,
         intervalMs: opts.flushIntervalMs ?? 1000,
-        reverseDns: opts.reverseDns === undefined ? createReverseDns() : opts.reverseDns
+        reverseDns: opts.reverseDns === undefined ? createReverseDns() : opts.reverseDns,
+        reputation
     });
     clicks.start();
 
@@ -53,11 +76,13 @@ export function startApp(opts: AppOptions) {
         db,
         version: opts.version,
         links: new LinkRepo(db, cache),
-        stats: new Stats(db),
+        stats: new Stats(db, { abuseMinScore: config.abuseMinScore }),
         schemas: linkSchemas(shortHost),
         authenticate: opts.authenticate ?? createAuthenticator(config.cfAccess),
         dashOrigin: config.dashOrigin,
-        shortOrigin: config.shortOrigin
+        shortOrigin: config.shortOrigin,
+        reputation: reputation !== null,
+        abuseMinScore: config.abuseMinScore
     });
 
     return {
@@ -65,8 +90,11 @@ export function startApp(opts: AppOptions) {
         dash,
         cache,
         clicks,
+        reputation,
         async stop() {
             await Promise.all([short.stop(), dash.stop()]);
+            if (backfill) clearInterval(backfill);
+            reputation?.stop();
             clicks.stop();
         }
     };

@@ -4,6 +4,7 @@ import net from 'node:net';
 import type {
     ApiError,
     ClickHistoryResponse,
+    ConfigResponse,
     Link,
     LinkListResponse,
     SummaryResponse,
@@ -279,5 +280,70 @@ describe('detailed device tracking', () => {
             incognito: true,
             adBlocker: false
         });
+    });
+});
+
+describe('IP reputation', () => {
+    test('config reports it off by default', async () => {
+        expect(await t.get<ConfigResponse>('/api/config')).toMatchObject({
+            reputation: false,
+            abuseMinScore: 25
+        });
+    });
+
+    test('clicks from reported and hosting IPs are hidden until asked for', async () => {
+        const r = testApp({
+            checkIp: ip =>
+                Promise.resolve(
+                    ip === '203.0.113.7'
+                        ? { score: 90, reports: 30, usageType: 'Fixed Line ISP', isp: 'Bad ISP' }
+                        : ip === '198.51.100.20'
+                          ? {
+                                score: 0,
+                                reports: 0,
+                                usageType: 'Data Center/Web Hosting/Transit',
+                                isp: 'Some Cloud'
+                            }
+                          : { score: 0, reports: 0, usageType: 'Mobile ISP', isp: 'Good Mobile' }
+                )
+        });
+        try {
+            expect(await r.get<ConfigResponse>('/api/config')).toMatchObject({
+                reputation: true
+            });
+            const created = await r.api('/api/links', {
+                method: 'POST',
+                body: JSON.stringify({ url: 'https://example.com/', slug: 'rep' })
+            });
+            expect(created.status).toBe(201);
+            for (const ip of ['203.0.113.7', '198.51.100.20', '192.0.2.44']) {
+                const res = await r.click('/rep', { 'cf-connecting-ip': ip, 'user-agent': SAFARI });
+                expect(res.status).toBe(302);
+            }
+            r.app.clicks.flush();
+            await Bun.sleep(20);
+
+            const summary = (flags: string) =>
+                r.get<SummaryResponse>(`/api/stats/summary?${range()}${flags}`);
+            expect(await summary('')).toMatchObject({ clicks: 1 });
+            expect(await summary('&abusive=1')).toMatchObject({ clicks: 2 });
+            expect(await summary('&dc=1')).toMatchObject({ clicks: 2 });
+            expect(await summary('&abusive=1&dc=1')).toMatchObject({ clicks: 3 });
+
+            const history = await r.get<ClickHistoryResponse>(
+                `/api/stats/clicks?${range()}&abusive=1&dc=1`
+            );
+            expect(
+                history.clicks
+                    .map(c => [c.ip, c.abuseScore, c.isp, c.isDatacenter])
+                    .toSorted((a, b) => String(a[0]).localeCompare(String(b[0])))
+            ).toEqual([
+                ['192.0.2.44', 0, 'Good Mobile', false],
+                ['198.51.100.20', 0, 'Some Cloud', true],
+                ['203.0.113.7', 90, 'Bad ISP', false]
+            ]);
+        } finally {
+            await r.close();
+        }
     });
 });

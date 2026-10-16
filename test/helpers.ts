@@ -1,3 +1,4 @@
+import type { CheckIp } from '../src/analytics/reputation.ts';
 import { startApp } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
 import type { Identity } from '../src/dashboard/auth.ts';
@@ -5,8 +6,11 @@ import { openDatabase } from '../src/db/client.ts';
 
 export const DASH = 'https://dash.example';
 
-/** Both servers on random ports, an in-memory database, and switchable auth. */
-export function testApp() {
+/**
+ * Both servers on random ports, an in-memory database, and switchable auth.
+ * IP reputation is off unless a `checkIp` stub is passed.
+ */
+export function testApp(opts: { checkIp?: CheckIp } = {}) {
     const db = openDatabase(':memory:');
     const config = loadConfig({
         SHORT_PORT: '0',
@@ -22,7 +26,8 @@ export function testApp() {
         version: 'test',
         authenticate: () => Promise.resolve(auth.identity),
         flushIntervalMs: 60_000,
-        reverseDns: null
+        reverseDns: null,
+        checkIp: opts.checkIp ?? null
     });
 
     const api = (path: string, init: RequestInit = {}) =>

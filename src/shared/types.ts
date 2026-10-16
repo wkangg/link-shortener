@@ -11,6 +11,10 @@ export interface ConfigResponse {
     shortOrigin: string;
     dashOrigin: string;
     version: string;
+    /** AbuseIPDB lookups are on (ABUSEIPDB_API_KEY is set). */
+    reputation: boolean;
+    /** Abuse score at or above which a click's IP counts as reported. */
+    abuseMinScore: number;
 }
 
 export type RedirectType = 301 | 302 | 307 | 308;
@@ -82,6 +86,8 @@ export interface StatsQuery {
     bots?: boolean;
     /** Include clicks from datacenter/hosting IPs (hidden by default, like bots). */
     dc?: boolean;
+    /** Include clicks from IPs reported for abuse (hidden by default). */
+    abusive?: boolean;
     /** `dim:value`, or `param:key=value` / `param:key` for query params. */
     filters: string[];
 }
@@ -137,6 +143,10 @@ export interface ClickHistoryRow {
     isDatacenter: boolean;
     /** Coarse device fingerprint; groups clicks from the same device. */
     fingerprint: string | null;
+    /** AbuseIPDB abuse confidence (0-100); null when not checked. */
+    abuseScore: number | null;
+    /** ISP of the IP, from AbuseIPDB. */
+    isp: string | null;
     deviceModel: string | null;
     language: string | null;
     timezone: string | null;

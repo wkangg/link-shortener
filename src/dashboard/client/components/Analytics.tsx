@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import type { TopRow } from '../../../shared/types.ts';
 import { api, localTz } from '../api.ts';
+import { useConfig } from '../config.tsx';
 import { countryLabel, formatCount, formatDelta } from '../format.ts';
 import { useApi } from '../useApi.ts';
 import { Chart } from './Chart.tsx';
@@ -108,6 +109,7 @@ function statsParams(opts: {
     filters: Filter[];
     bots: boolean;
     dc: boolean;
+    abusive: boolean;
     linkId?: number;
     now: number;
 }): URLSearchParams {
@@ -122,6 +124,7 @@ function statsParams(opts: {
     if (opts.linkId !== undefined) params.set('link', String(opts.linkId));
     if (opts.bots) params.set('bots', '1');
     if (opts.dc) params.set('dc', '1');
+    if (opts.abusive) params.set('abusive', '1');
     for (const f of opts.filters) params.append('f', f.value);
     return params;
 }
@@ -135,6 +138,8 @@ export function Analytics({ linkId }: AnalyticsProps) {
     const [filters, setFilters] = useState<Filter[]>([]);
     const [bots, setBots] = useState(false);
     const [dc, setDc] = useState(false);
+    const [abusive, setAbusive] = useState(false);
+    const { reputation } = useConfig();
     // Bumped every 30 s so open dashboards stay current.
     const [tick, setTick] = useState(0);
     const [now, setNow] = useState(() => Date.now());
@@ -147,7 +152,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
         return () => clearInterval(timer);
     }, []);
 
-    const params = statsParams({ preset, filters, bots, dc, linkId, now });
+    const params = statsParams({ preset, filters, bots, dc, abusive, linkId, now });
     const key = `${tick}|${params}`;
     const summary = useApi(`summary|${key}`, () => api.summary(params));
     const series = useApi(`series|${key}`, () => api.timeseries(params));
@@ -188,6 +193,16 @@ export function Analytics({ linkId }: AnalyticsProps) {
                     <input type="checkbox" checked={dc} onChange={e => setDc(e.target.checked)} />
                     Include datacenter IPs
                 </label>
+                {reputation && (
+                    <label className="checkbox">
+                        <input
+                            type="checkbox"
+                            checked={abusive}
+                            onChange={e => setAbusive(e.target.checked)}
+                        />
+                        Include reported IPs
+                    </label>
+                )}
                 <ul className="chips" aria-label="Active filters">
                     {filters.map(f => (
                         <li key={f.value}>

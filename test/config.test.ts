@@ -12,6 +12,21 @@ describe('loadConfig', () => {
         expect(c.dashOrigin).toBe('http://localhost:3001');
         expect(c.dbPath).toBe('./data/links.db');
         expect(c.cfAccess).toBeNull();
+        expect(c.abuseIpdb).toBeNull();
+        expect(c.abuseMinScore).toBe(25);
+    });
+
+    test('AbuseIPDB settings', () => {
+        expect(
+            loadConfig({
+                ABUSEIPDB_API_KEY: 'k',
+                ABUSEIPDB_MIN_SCORE: '50',
+                ABUSEIPDB_DAILY_LIMIT: '5000'
+            })
+        ).toMatchObject({ abuseIpdb: { apiKey: 'k', dailyLimit: 5000 }, abuseMinScore: 50 });
+        expect(loadConfig({ ABUSEIPDB_API_KEY: '' }).abuseIpdb).toBeNull();
+        expect(() => loadConfig({ ABUSEIPDB_MIN_SCORE: '0' })).toThrow();
+        expect(() => loadConfig({ ABUSEIPDB_MIN_SCORE: '101' })).toThrow();
     });
 
     test('production uses the configured domains', () => {

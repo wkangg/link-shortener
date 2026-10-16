@@ -12,6 +12,11 @@ console.log(`  short links → ${app.short.url}  (public: ${config.shortOrigin})
 console.log(`  dashboard   → ${app.dash.url}  (public: ${config.dashOrigin})`);
 console.log(`  database    → ${config.dbPath}`);
 if (!config.cfAccess) console.log('  auth        → disabled (no Cloudflare Access config)');
+console.log(
+    config.abuseIpdb
+        ? `  reputation  → AbuseIPDB, hiding scores ≥ ${config.abuseMinScore} by default`
+        : '  reputation  → off (set ABUSEIPDB_API_KEY to hide reported IPs)'
+);
 if (config.isProd && !process.env.VISITOR_SALT) {
     console.warn('  warning     → VISITOR_SALT is unset; unique visitors reset on every restart');
 }

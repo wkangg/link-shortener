@@ -5,7 +5,7 @@ import { useConfig } from '../config.tsx';
 import { hostOf } from '../format.ts';
 
 export function SettingsPage() {
-    const { dashOrigin, shortOrigin, version } = useConfig();
+    const { dashOrigin, shortOrigin, version, reputation, abuseMinScore } = useConfig();
     const toast = useToast();
     const origin = dashOrigin || location.origin;
     const bookmarklet = `javascript:location.href='${origin}/links?new='+encodeURIComponent(location.href)`;
@@ -66,6 +66,34 @@ export function SettingsPage() {
                 >
                     Copy command
                 </button>
+            </section>
+
+            <section>
+                <h2>Abusive and datacenter IPs</h2>
+                {reputation ? (
+                    <p>
+                        Every visitor IP is checked against AbuseIPDB. Clicks from IPs with an abuse
+                        confidence of {abuseMinScore}% or more, or that AbuseIPDB lists as
+                        datacenter or hosting addresses, are hidden unless you tick “Include
+                        reported IPs” or “Include datacenter IPs”. Lookups run in the background, so
+                        a new IP can take a few seconds to be flagged.
+                    </p>
+                ) : (
+                    <p>
+                        Only datacenter IPs that are recognisable from their hostname are hidden
+                        now. To hide IPs reported for abuse as well, and to catch datacenter IPs
+                        much more reliably, create a free API key at{' '}
+                        <a
+                            href="https://www.abuseipdb.com/account/api"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            abuseipdb.com
+                        </a>{' '}
+                        and set <code>ABUSEIPDB_API_KEY</code>. Clicks from the last 30 days are
+                        checked once it’s set, busiest IPs first, within the daily quota.
+                    </p>
+                )}
             </section>
 
             <section>

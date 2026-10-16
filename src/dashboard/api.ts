@@ -20,25 +20,29 @@ export interface ApiDeps {
     /** Browser requests that change data must come from this origin. */
     dashOrigin: string;
     shortOrigin: string;
+    /** AbuseIPDB lookups are on. */
+    reputation: boolean;
+    abuseMinScore: number;
 }
 
 type Handler<Path extends string> = (req: BunRequest<Path>) => Response | Promise<Response>;
 
 const MAX_RANGE = 5 * 366 * 86_400_000;
 
+/** An optional `1`/`true` query flag. */
+const flag = z
+    .enum(['0', '1', 'true', 'false'])
+    .optional()
+    .transform(v => v === '1' || v === 'true');
+
 const statsQuerySchema = z.object({
     from: z.coerce.number().int(),
     to: z.coerce.number().int(),
     tz: z.coerce.number().int().min(-840).max(840).default(0),
     link: z.coerce.number().int().positive().optional(),
-    bots: z
-        .enum(['0', '1', 'true', 'false'])
-        .optional()
-        .transform(v => v === '1' || v === 'true'),
-    dc: z
-        .enum(['0', '1', 'true', 'false'])
-        .optional()
-        .transform(v => v === '1' || v === 'true')
+    bots: flag,
+    dc: flag,
+    abusive: flag
 });
 
 export function json(body: unknown, status = 200, headers?: HeadersInit): Response {
@@ -73,7 +77,7 @@ function parseId(raw: string): number | null {
 export function parseStatsQuery(url: URL): StatsQuery {
     const parsed = statsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
     if (!parsed.success) throw new BadQueryError(z.prettifyError(parsed.error));
-    const { from, to, tz, link, bots, dc } = parsed.data;
+    const { from, to, tz, link, bots, dc, abusive } = parsed.data;
     if (to <= from) throw new BadQueryError('`to` must be after `from`');
     if (to - from > MAX_RANGE) throw new BadQueryError('Date range is too long (max 5 years)');
     return {
@@ -82,6 +86,7 @@ export function parseStatsQuery(url: URL): StatsQuery {
         tz,
         bots,
         dc,
+        abusive,
         filters: url.searchParams.getAll('f'),
         ...(link !== undefined && { link })
     };
@@ -145,7 +150,9 @@ export function apiRoutes(deps: ApiDeps) {
                 const body: ConfigResponse = {
                     shortOrigin: deps.shortOrigin,
                     dashOrigin: deps.dashOrigin,
-                    version: deps.version
+                    version: deps.version,
+                    reputation: deps.reputation,
+                    abuseMinScore: deps.abuseMinScore
                 };
                 return json(body);
             })

@@ -12,7 +12,10 @@ const schema = z.object({
     DB_PATH: z.string().min(1).default('./data/links.db'),
     CF_ACCESS_TEAM_DOMAIN: z.string().min(1).optional(),
     CF_ACCESS_AUD: z.string().min(1).optional(),
-    VISITOR_SALT: z.string().min(16).optional()
+    VISITOR_SALT: z.string().min(16).optional(),
+    ABUSEIPDB_API_KEY: z.string().min(1).optional(),
+    ABUSEIPDB_MIN_SCORE: z.coerce.number().int().min(1).max(100).default(25),
+    ABUSEIPDB_DAILY_LIMIT: z.coerce.number().int().min(1).default(1000)
 });
 
 export interface Config {
@@ -28,6 +31,10 @@ export interface Config {
     cfAccess: { teamDomain: string; aud: string } | null;
     /** Secret mixed into the daily visitor hash. Random per process when unset. */
     visitorSalt: string;
+    /** AbuseIPDB reputation lookups; null when no API key is set. */
+    abuseIpdb: { apiKey: string; dailyLimit: number } | null;
+    /** Clicks from IPs with an abuse confidence score at or above this are hidden by default. */
+    abuseMinScore: number;
 }
 
 type Env = Record<string, string | undefined>;
@@ -75,6 +82,10 @@ export function loadConfig(env: Env = process.env): Config {
             e.CF_ACCESS_TEAM_DOMAIN && e.CF_ACCESS_AUD
                 ? { teamDomain: e.CF_ACCESS_TEAM_DOMAIN, aud: e.CF_ACCESS_AUD }
                 : null,
-        visitorSalt: e.VISITOR_SALT ?? crypto.randomUUID()
+        visitorSalt: e.VISITOR_SALT ?? crypto.randomUUID(),
+        abuseIpdb: e.ABUSEIPDB_API_KEY
+            ? { apiKey: e.ABUSEIPDB_API_KEY, dailyLimit: e.ABUSEIPDB_DAILY_LIMIT }
+            : null,
+        abuseMinScore: e.ABUSEIPDB_MIN_SCORE
     };
 }

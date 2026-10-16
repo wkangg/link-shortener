@@ -5,7 +5,9 @@ import type { ConfigResponse } from '../../shared/types.ts';
 export const ConfigContext = createContext<ConfigResponse>({
     shortOrigin: '',
     dashOrigin: '',
-    version: ''
+    version: '',
+    reputation: false,
+    abuseMinScore: 25
 });
 
 export const useConfig = () => useContext(ConfigContext);

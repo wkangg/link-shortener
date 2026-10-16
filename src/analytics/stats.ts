@@ -101,8 +101,20 @@ export function filterCondition(filter: string): { group: string; condition: Con
     throw new BadQueryError(`Unknown filter dimension: ${dim}`);
 }
 
-/** WHERE clause for a query over [from, to). Filters on the same dimension are OR-ed. */
-export function whereClause(query: StatsQuery, from = query.from, to = query.to): Condition {
+/** Default for `abuseMinScore`: matches ABUSEIPDB_MIN_SCORE's default. */
+const ABUSE_MIN_SCORE = 25;
+
+/**
+ * WHERE clause for a query over [from, to). Filters on the same dimension are OR-ed.
+ * Bots, datacenter IPs and IPs with an abuse score of `abuseMinScore` or more are
+ * left out unless the query asks for them.
+ */
+export function whereClause(
+    query: StatsQuery,
+    from = query.from,
+    to = query.to,
+    abuseMinScore = ABUSE_MIN_SCORE
+): Condition {
     const parts: string[] = ['c.ts >= ?', 'c.ts < ?'];
     const params: Param[] = [from, to];
     if (query.link !== undefined) {
@@ -111,6 +123,10 @@ export function whereClause(query: StatsQuery, from = query.from, to = query.to)
     }
     if (!query.bots) parts.push('c.is_bot = 0');
     if (!query.dc) parts.push('c.is_datacenter = 0');
+    if (!query.abusive) {
+        parts.push('(c.abuse_score IS NULL OR c.abuse_score < ?)');
+        params.push(abuseMinScore);
+    }
 
     const groups = new Map<string, Condition[]>();
     for (const filter of query.filters) {
@@ -128,9 +144,15 @@ export function whereClause(query: StatsQuery, from = query.from, to = query.to)
 
 export class Stats {
     readonly #db: Database;
+    readonly #abuseMinScore: number;
 
-    constructor(db: Database) {
+    constructor(db: Database, opts: { abuseMinScore?: number } = {}) {
         this.#db = db;
+        this.#abuseMinScore = opts.abuseMinScore ?? ABUSE_MIN_SCORE;
+    }
+
+    #where(query: StatsQuery, from = query.from, to = query.to): Condition {
+        return whereClause(query, from, to, this.#abuseMinScore);
     }
 
     summary(query: StatsQuery): SummaryResponse {
@@ -145,7 +167,7 @@ export class Stats {
         const interval = query.to - query.from <= 3 * DAY ? 'hour' : 'day';
         const bucket = interval === 'hour' ? HOUR : DAY;
         const offset = query.tz * 60_000;
-        const where = whereClause(query);
+        const where = this.#where(query);
         const rows = this.#db
             .query<{ b: number; clicks: number; visitors: number }, Param[]>(
                 `SELECT (c.ts + ?) / ${bucket} AS b, COUNT(*) AS clicks,
@@ -170,7 +192,7 @@ export class Stats {
     }
 
     top(query: StatsQuery, dim: string, limit = 10): TopResponse {
-        const where = whereClause(query);
+        const where = this.#where(query);
         const lim = Math.min(Math.max(limit, 1), 100);
         const agg = 'COUNT(*) AS clicks, COUNT(DISTINCT c.visitor_hash) AS visitors';
         let rows: {
@@ -247,7 +269,7 @@ export class Stats {
         query: StatsQuery,
         opts: { limit?: number; before?: string; offset?: number } = {}
     ): ClickHistoryResponse {
-        const where = whereClause(query);
+        const where = this.#where(query);
         const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 50), 1), 10_000);
         const offset = Math.max(Math.trunc(opts.offset ?? 0), 0);
         const total =
@@ -274,6 +296,7 @@ export class Stats {
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
                         c.device, c.browser, c.os, c.is_bot AS bot, c.bot_name AS botName,
                         c.is_datacenter AS isDatacenter, c.fingerprint,
+                        c.abuse_score AS abuseScore, c.isp,
                         c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
                         c.screen, c.orientation, c.battery, c.charging, c.connection, c.gpu,
                         c.incognito, c.ad_blocker AS adBlocker, c.latitude, c.longitude,
@@ -302,7 +325,7 @@ export class Stats {
 
     /** Raw clicks matching the query as CSV, newest first. */
     csv(query: StatsQuery, maxRows = 100_000): string {
-        const where = whereClause(query);
+        const where = this.#where(query);
         const header = [
             'time',
             'slug',
@@ -318,6 +341,8 @@ export class Stats {
             'bot',
             'datacenter',
             'fingerprint',
+            'abuse_score',
+            'isp',
             'utm_source',
             'utm_medium',
             'utm_campaign',
@@ -348,7 +373,7 @@ export class Stats {
         const rows = this.#db
             .query<Record<string, string | number | null>, Param[]>(
                 `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
-                        c.device, c.browser, c.os, c.is_bot, c.is_datacenter, c.fingerprint, c.utm_source, c.utm_medium,
+                        c.device, c.browser, c.os, c.is_bot, c.is_datacenter, c.fingerprint, c.abuse_score, c.isp, c.utm_source, c.utm_medium,
                         c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
                         c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
                         c.orientation, c.battery, c.charging, c.connection, c.gpu, c.incognito,
@@ -369,7 +394,7 @@ export class Stats {
     }
 
     #totals(query: StatsQuery, from: number, to: number) {
-        const where = whereClause(query, from, to);
+        const where = this.#where(query, from, to);
         const row = this.#db
             .query<{ clicks: number; visitors: number }, Param[]>(
                 `SELECT COUNT(*) AS clicks, COUNT(DISTINCT c.visitor_hash) AS visitors
