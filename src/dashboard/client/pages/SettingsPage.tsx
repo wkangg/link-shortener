@@ -97,6 +97,24 @@ export function SettingsPage() {
             </section>
 
             <section>
+                <h2>VPNs and scrapers</h2>
+                <p>
+                    Clicks from Tor exits, iCloud Private Relay and Cloudflare WARP are marked as
+                    VPN / relay from public address lists, refreshed daily. A hosting IP whose
+                    visitor behaves like a person (it runs the device page with a local clock, or it
+                    belongs to a VPN provider’s network) counts as VPN too. These are real people,
+                    so they stay counted unless you untick “Include VPN / relay”.
+                </p>
+                <p>
+                    Clicks that look automated without saying they’re bots are marked as scrapers
+                    and hidden unless you tick “Include scrapers”. That covers clicks with no user
+                    agent or Accept-Language header, browsers driven by automation or rendering
+                    without a GPU, and, from hosting IPs, a UTC clock or skipping the device page.
+                    The last two need device tracking on the link.
+                </p>
+            </section>
+
+            <section>
                 <h2>About</h2>
                 <p>
                     Short links on <code>{shortOrigin}</code>, version {version}.

@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 import type { ClickSink, RawClick } from '../shared/types.ts';
+import { ClickClassifier, SIGNALS_WINDOW_MS } from './classify.ts';
 import { isDatacenterHostname } from './datacenter.ts';
 import {
     type ClickRow,
@@ -42,7 +43,8 @@ const COLUMNS = [
     'latitude',
     'longitude',
     'fingerprint',
-    'is_datacenter'
+    'is_datacenter',
+    'js'
 ] as const satisfies readonly (keyof ClickRow)[];
 
 const SIGNAL_COLUMNS = [
@@ -56,11 +58,12 @@ const SIGNAL_COLUMNS = [
     'ad_blocker',
     'memory',
     'platform',
-    'touch_points'
+    'touch_points',
+    'webdriver'
 ] as const satisfies readonly (keyof DeviceSignals)[];
 
-/** Signals must arrive within this long of the click; unused tokens are cleared after it. */
-const SIGNALS_WINDOW_MS = 10 * 60_000;
+/** Unused tokens are cleared (and their clicks reclassified) at most this often. */
+const EXPIRE_INTERVAL_MS = 60_000;
 /** Reverse DNS lookups in flight at once; clicks beyond it just get no hostname. */
 const MAX_LOOKUPS = 32;
 const MAX_HOSTNAMES = 5000;
@@ -87,6 +90,8 @@ export interface ClickBufferOptions extends EnrichOptions {
     reverseDns?: ReverseDns | null;
     /** Fills `abuse_score` and `isp` after insert. Off when null. */
     reputation?: ClickAnnotator | null;
+    /** Sets `vpn` and `scraper` as a click's facts arrive. */
+    classifier?: ClickClassifier;
 }
 
 /**
@@ -102,8 +107,10 @@ export class ClickBuffer implements ClickSink {
     #timer: ReturnType<typeof setInterval> | null = null;
     #dropped = 0;
     #written = 0;
+    #lastExpiry = Date.now();
     readonly #db: Database;
-    readonly #opts: Required<ClickBufferOptions>;
+    readonly #opts: Required<Omit<ClickBufferOptions, 'classifier'>>;
+    readonly #classifier: ClickClassifier;
     readonly #insert;
     readonly #rowForToken;
     readonly #applySignals;
@@ -119,29 +126,30 @@ export class ClickBuffer implements ClickSink {
             reputation: null,
             ...opts
         };
+        this.#classifier = opts.classifier ?? new ClickClassifier(db);
         this.#insert = db.query<{ id: number }, (string | number | null)[]>(
             `INSERT INTO clicks (${COLUMNS.join(', ')}) VALUES (${COLUMNS.map(() => '?').join(', ')}) RETURNING id`
         );
         // The user agent and headers of the click a token belongs to, so its
         // fingerprint can be recomputed with the browser signals folded in.
         this.#rowForToken = db.query<
-            { ua: string | null; language: string | null; timezone: string | null },
+            { id: number; ua: string | null; language: string | null; timezone: string | null },
             [string, number]
         >(
-            'SELECT user_agent AS ua, language, timezone FROM clicks WHERE token = ? AND ts >= ? LIMIT 1'
+            'SELECT id, user_agent AS ua, language, timezone FROM clicks WHERE token = ? AND ts >= ? LIMIT 1'
         );
         // One use per token, and only shortly after the click.
         this.#applySignals = db.query(
             `UPDATE clicks SET ${SIGNAL_COLUMNS.map(c => `${c} = ?`).join(', ')},
                 timezone = COALESCE(?, timezone), language = COALESCE(?, language),
-                fingerprint = COALESCE(?, fingerprint), token = NULL
+                fingerprint = COALESCE(?, fingerprint), js = 1, token = NULL
              WHERE token = ? AND ts >= ?`
         );
         this.#setHostname = db.query(
             'UPDATE clicks SET hostname = ?, is_datacenter = ? WHERE id = ?'
         );
-        this.#expireTokens = db.query(
-            'UPDATE clicks SET token = NULL WHERE token IS NOT NULL AND ts < ?'
+        this.#expireTokens = db.query<{ id: number }, [number]>(
+            'UPDATE clicks SET token = NULL WHERE token IS NOT NULL AND ts < ? RETURNING id'
         );
     }
 
@@ -168,10 +176,13 @@ export class ClickBuffer implements ClickSink {
 
     /** Writes everything pending. Returns the number of click rows written. */
     flush(): number {
+        const now = Date.now();
+        const expire = now - this.#lastExpiry >= EXPIRE_INTERVAL_MS;
         if (
             this.#pending.length === 0 &&
             this.#signals.length === 0 &&
-            this.#hostnames.length === 0
+            this.#hostnames.length === 0 &&
+            !expire
         ) {
             return 0;
         }
@@ -182,11 +193,14 @@ export class ClickBuffer implements ClickSink {
         this.#signals = [];
         this.#hostnames = [];
         const inserted: { id: number; ip: string }[] = [];
+        // Clicks whose facts changed, to classify once everything is written.
+        const touched: number[] = [];
         try {
             this.#db.transaction(() => {
                 for (const click of batch) {
                     const row = enrichClick(click, this.#opts);
                     const id = this.#insert.get(...COLUMNS.map(column => row[column]))?.id;
+                    if (id !== undefined) touched.push(id);
                     if (id !== undefined && row.ip) {
                         inserted.push({ id, ip: row.ip });
                         this.#opts.reputation?.annotate(id, row.ip);
@@ -198,6 +212,7 @@ export class ClickBuffer implements ClickSink {
                     if (!parsed) continue;
                     const since = s.ts - SIGNALS_WINDOW_MS;
                     const click = this.#rowForToken.get(s.token, since);
+                    if (click) touched.push(click.id);
                     const fingerprint = click
                         ? computeFingerprint({
                               ua: click.ua,
@@ -219,8 +234,18 @@ export class ClickBuffer implements ClickSink {
                         since
                     );
                 }
-                for (const h of hostnames) this.#setHostname.run(h.hostname, h.datacenter, h.id);
-                if (signals.length > 0) this.#expireTokens.run(Date.now() - SIGNALS_WINDOW_MS);
+                for (const h of hostnames) {
+                    this.#setHostname.run(h.hostname, h.datacenter, h.id);
+                    touched.push(h.id);
+                }
+                if (signals.length > 0 || expire) {
+                    // The page never reported back: that's a fact too.
+                    for (const row of this.#expireTokens.all(now - SIGNALS_WINDOW_MS)) {
+                        touched.push(row.id);
+                    }
+                    this.#lastExpiry = now;
+                }
+                this.#classifier.ids(touched);
             })();
             this.#written += batch.length;
             for (const row of inserted) this.#resolve(row.id, row.ip);

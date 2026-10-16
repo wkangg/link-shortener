@@ -131,11 +131,20 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['source: referrer: link: utm: query:', 'traffic', false],
     ['gpu: screen: platform: connection: fp:', 'hardware', false],
     ['ram:>=8 battery:<20 touch:0 abuse:>50', 'numbers (=, >, >=, <, <=)'],
-    ['is:bot is:datacenter is:abusive', 'shows clicks the toggles above hide'],
+    ['is:bot is:scraper is:datacenter is:vpn is:abusive', 'overrides the toggles above'],
+    ['vpn:tor scraper:', 'which VPN, or why a click looks automated'],
     ['is:private is:adblock is:qr is:mobile', 'other flags'],
     ['has:gpu', 'the field is set'],
     ['-os:windows -is:bot', 'a leading - excludes']
 ];
+
+/** Short badge text for a VPN verdict: the service when it's a named one. */
+function vpnBadge(vpn: string): string {
+    if (vpn === 'Tor') return 'tor';
+    if (vpn === 'iCloud Private Relay') return 'private relay';
+    if (vpn === 'Cloudflare WARP') return 'warp';
+    return 'vpn';
+}
 
 /** `field:=value`, quoted when the value has spaces. */
 function exactTerm(field: string, value: string): string {
@@ -145,6 +154,8 @@ function exactTerm(field: string, value: string): string {
 interface IpCellProps {
     ip: string;
     isDatacenter: boolean;
+    vpn: string | null;
+    scraper: string | null;
     /** AbuseIPDB abuse confidence, or null when not checked. */
     abuseScore: number | null;
     isp: string | null;
@@ -152,7 +163,7 @@ interface IpCellProps {
 }
 
 /** An IP address: a filter button, an external ISP lookup, and a datacenter badge. */
-function IpCell({ ip, isDatacenter, abuseScore, isp, onAddTerm }: IpCellProps) {
+function IpCell({ ip, isDatacenter, vpn, scraper, abuseScore, isp, onAddTerm }: IpCellProps) {
     const { abuseMinScore } = useConfig();
     const reported = abuseScore !== null && abuseScore > 0;
     const abusive = reported && abuseScore >= abuseMinScore;
@@ -186,10 +197,31 @@ function IpCell({ ip, isDatacenter, abuseScore, isp, onAddTerm }: IpCellProps) {
             >
                 ⚑
             </a>
-            {isDatacenter && (
-                <span className="badge" title="Hosting / datacenter IP">
-                    datacenter
-                </span>
+            {vpn ? (
+                <button
+                    type="button"
+                    className="badge"
+                    title={`VPN / relay: ${vpn}`}
+                    onClick={() => onAddTerm(exactTerm('vpn', vpn))}
+                >
+                    {vpnBadge(vpn)}
+                </button>
+            ) : (
+                isDatacenter && (
+                    <span className="badge" title="Hosting / datacenter IP">
+                        datacenter
+                    </span>
+                )
+            )}
+            {scraper && (
+                <button
+                    type="button"
+                    className="badge badge-danger"
+                    title={`Looks automated: ${scraper}`}
+                    onClick={() => onAddTerm('is:scraper')}
+                >
+                    scraper
+                </button>
             )}
             {reported && (
                 <a
@@ -382,6 +414,8 @@ export function ClickHistory({
                                             <IpCell
                                                 ip={c.ip}
                                                 isDatacenter={c.isDatacenter}
+                                                vpn={c.vpn}
+                                                scraper={c.scraper}
                                                 abuseScore={c.abuseScore}
                                                 isp={c.isp}
                                                 onAddTerm={onAddTerm}

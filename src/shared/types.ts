@@ -92,6 +92,10 @@ export interface StatsQuery {
     bots?: boolean;
     /** Include clicks from datacenter/hosting IPs (hidden by default, like bots). */
     dc?: boolean;
+    /** Include clicks that look automated (hidden by default; see analytics/classify.ts). */
+    scrapers?: boolean;
+    /** Include clicks through a VPN or relay. Shown unless this is false. */
+    vpn?: boolean;
     /** Include clicks from IPs reported for abuse (hidden by default). */
     abusive?: boolean;
     /** `dim:value`, or `param:key=value` / `param:key` for query params. */
@@ -149,6 +153,10 @@ export interface ClickHistoryRow {
     botName: string | null;
     /** 1 when the IP belongs to a hosting/datacenter provider. */
     isDatacenter: boolean;
+    /** The VPN or relay the click came through (e.g. "Tor"), or null. */
+    vpn: string | null;
+    /** Why the click looks automated, or null. */
+    scraper: string | null;
     /** Coarse device fingerprint; groups clicks from the same device. */
     fingerprint: string | null;
     /** AbuseIPDB abuse confidence (0-100); null when not checked. */

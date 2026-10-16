@@ -27,7 +27,8 @@ export function testApp(opts: { checkIp?: CheckIp } = {}) {
         authenticate: () => Promise.resolve(auth.identity),
         flushIntervalMs: 60_000,
         reverseDns: null,
-        checkIp: opts.checkIp ?? null
+        checkIp: opts.checkIp ?? null,
+        fetchText: null
     });
 
     const api = (path: string, init: RequestInit = {}) =>
@@ -41,8 +42,12 @@ export function testApp(opts: { checkIp?: CheckIp } = {}) {
                 ...init.headers
             }
         });
+    // Browsers always send Accept-Language; a click without it counts as a scraper.
     const click = (path: string, headers: Record<string, string> = {}) =>
-        fetch(new URL(path, app.short.url), { redirect: 'manual', headers });
+        fetch(new URL(path, app.short.url), {
+            redirect: 'manual',
+            headers: { 'accept-language': 'en-US', ...headers }
+        });
 
     /** Status code of a dashboard request. */
     const status = async (path: string, init?: RequestInit) => {

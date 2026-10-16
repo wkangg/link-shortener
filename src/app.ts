@@ -1,11 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
+import { ClickClassifier } from './analytics/classify.ts';
 import { ClickBuffer, type ReverseDns } from './analytics/clicks.ts';
 import { backfillDatacenterHostnames } from './analytics/datacenter.ts';
 import { createReverseDns } from './analytics/hostname.ts';
 import { type CheckIp, createAbuseIpdb, IpReputation } from './analytics/reputation.ts';
 import { Stats } from './analytics/stats.ts';
 import { parseUserAgent } from './analytics/ua.ts';
+import { type FetchText, VpnLists } from './analytics/vpn.ts';
 import type { Config } from './config.ts';
 import { type Authenticate, createAuthenticator } from './dashboard/auth.ts';
 import { LinkRepo } from './dashboard/links.ts';
@@ -27,6 +29,8 @@ export interface AppOptions {
     reverseDns?: ReverseDns | null;
     /** IP reputation lookups; defaults to AbuseIPDB when a key is configured, null turns them off. */
     checkIp?: CheckIp | null;
+    /** Downloads the VPN / relay lists; null uses only the stored copies (tests). */
+    fetchText?: FetchText | null;
 }
 
 /** Reputation backfill runs at startup and then this often. */
@@ -40,14 +44,24 @@ export function startApp(opts: AppOptions) {
     const cache = new LinkCache();
     backfillDatacenterHostnames(db);
 
+    const vpnLists = new VpnLists(db, { fetchText: opts.fetchText });
+    const classifier = new ClickClassifier(db, { lookup: ip => vpnLists.lookup(ip) });
+
     const checkIp =
         opts.checkIp === undefined
             ? config.abuseIpdb && createAbuseIpdb(config.abuseIpdb.apiKey)
             : opts.checkIp;
     const reputation = checkIp
-        ? new IpReputation(db, { check: checkIp, dailyLimit: config.abuseIpdb?.dailyLimit })
+        ? new IpReputation(db, {
+              check: checkIp,
+              dailyLimit: config.abuseIpdb?.dailyLimit,
+              onUpdate: ip => classifier.ip(ip)
+          })
         : null;
     reputation?.backfill();
+    // Catches up on clicks recorded before classification existed or changed.
+    classifier.all();
+    vpnLists.start(() => classifier.all());
     const backfill = reputation
         ? setInterval(() => reputation.backfill(), BACKFILL_INTERVAL_MS)
         : null;
@@ -58,7 +72,8 @@ export function startApp(opts: AppOptions) {
         salt: config.visitorSalt,
         intervalMs: opts.flushIntervalMs ?? 1000,
         reverseDns: opts.reverseDns === undefined ? createReverseDns() : opts.reverseDns,
-        reputation
+        reputation,
+        classifier
     });
     clicks.start();
 
@@ -91,10 +106,12 @@ export function startApp(opts: AppOptions) {
         cache,
         clicks,
         reputation,
+        vpnLists,
         async stop() {
             await Promise.all([short.stop(), dash.stop()]);
             if (backfill) clearInterval(backfill);
             reputation?.stop();
+            vpnLists.stop();
             clicks.stop();
         }
     };

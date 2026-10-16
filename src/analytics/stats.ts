@@ -104,8 +104,10 @@ const ABUSE_MIN_SCORE = 25;
 
 /**
  * WHERE clause for a query over [from, to). Filters on the same dimension are OR-ed.
- * Bots, datacenter IPs and IPs with an abuse score of `abuseMinScore` or more are
- * left out unless the query asks for them, or its search mentions them (`is:bot`).
+ * Bots, scrapers, datacenter IPs and IPs with an abuse score of `abuseMinScore` or
+ * more are left out unless the query asks for them, or its search mentions them
+ * (`is:bot`). VPN clicks are kept unless `vpn` is false; they don't count as
+ * datacenter clicks even when the VPN runs on a hosting network.
  */
 export function whereClause(
     query: StatsQuery,
@@ -121,7 +123,11 @@ export function whereClause(
     }
     const search = compileSearch(query.q ?? '', abuseMinScore);
     if (!query.bots && !search.overrides.has('bots')) parts.push('c.is_bot = 0');
-    if (!query.dc && !search.overrides.has('dc')) parts.push('c.is_datacenter = 0');
+    if (!query.scrapers && !search.overrides.has('scrapers')) parts.push('c.scraper IS NULL');
+    if (!query.dc && !search.overrides.has('dc')) {
+        parts.push('(c.is_datacenter = 0 OR c.vpn IS NOT NULL)');
+    }
+    if (query.vpn === false && !search.overrides.has('vpn')) parts.push('c.vpn IS NULL');
     if (!query.abusive && !search.overrides.has('abusive')) {
         parts.push('(c.abuse_score IS NULL OR c.abuse_score < ?)');
         params.push(abuseMinScore);
@@ -298,7 +304,7 @@ export class Stats {
                 `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
                         c.device, c.browser, c.os, c.is_bot AS bot, c.bot_name AS botName,
-                        c.is_datacenter AS isDatacenter, c.fingerprint,
+                        c.is_datacenter AS isDatacenter, c.vpn, c.scraper, c.fingerprint,
                         c.abuse_score AS abuseScore, c.isp,
                         c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
                         c.screen, c.orientation, c.battery, c.charging, c.connection, c.gpu,
@@ -367,6 +373,8 @@ export class Stats {
             'os',
             'bot',
             'datacenter',
+            'vpn',
+            'scraper',
             'fingerprint',
             'abuse_score',
             'isp',
@@ -400,7 +408,7 @@ export class Stats {
         const rows = this.#db
             .query<Record<string, string | number | null>, Param[]>(
                 `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
-                        c.device, c.browser, c.os, c.is_bot, c.is_datacenter, c.fingerprint, c.abuse_score, c.isp, c.utm_source, c.utm_medium,
+                        c.device, c.browser, c.os, c.is_bot, c.is_datacenter, c.vpn, c.scraper, c.fingerprint, c.abuse_score, c.isp, c.utm_source, c.utm_medium,
                         c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
                         c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
                         c.orientation, c.battery, c.charging, c.connection, c.gpu, c.incognito,

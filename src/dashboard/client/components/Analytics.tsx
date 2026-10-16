@@ -111,6 +111,8 @@ function statsParams(opts: {
     filters: Filter[];
     bots: boolean;
     dc: boolean;
+    scrapers: boolean;
+    vpn: boolean;
     abusive: boolean;
     search: string;
     linkId?: number;
@@ -127,6 +129,8 @@ function statsParams(opts: {
     if (opts.linkId !== undefined) params.set('link', String(opts.linkId));
     if (opts.bots) params.set('bots', '1');
     if (opts.dc) params.set('dc', '1');
+    if (opts.scrapers) params.set('scrapers', '1');
+    if (!opts.vpn) params.set('vpn', '0');
     if (opts.abusive) params.set('abusive', '1');
     for (const f of opts.filters) params.append('f', f.value);
     if (opts.search) params.set('q', opts.search);
@@ -142,6 +146,9 @@ export function Analytics({ linkId }: AnalyticsProps) {
     const [filters, setFilters] = useState<Filter[]>([]);
     const [bots, setBots] = useState(false);
     const [dc, setDc] = useState(false);
+    const [scrapers, setScrapers] = useState(false);
+    // VPN users are people, so they're counted unless unticked.
+    const [vpn, setVpn] = useState(true);
     const [abusive, setAbusive] = useState(false);
     const { reputation } = useConfig();
     // What's in the search box, and the search applied to the page.
@@ -171,7 +178,18 @@ export function Analytics({ linkId }: AnalyticsProps) {
         return () => clearInterval(timer);
     }, []);
 
-    const params = statsParams({ preset, filters, bots, dc, abusive, search, linkId, now });
+    const params = statsParams({
+        preset,
+        filters,
+        bots,
+        dc,
+        scrapers,
+        vpn,
+        abusive,
+        search,
+        linkId,
+        now
+    });
     const key = `${tick}|${params}`;
     const summary = useApi(`summary|${key}`, () => api.summary(params));
     const series = useApi(`series|${key}`, () => api.timeseries(params));
@@ -186,7 +204,9 @@ export function Analytics({ linkId }: AnalyticsProps) {
 
     const toggles: Toggle[] = [
         { label: 'Bots', on: bots, set: setBots },
+        { label: 'Scrapers', on: scrapers, set: setScrapers },
         { label: 'Datacenter IPs', on: dc, set: setDc },
+        { label: 'VPN / relay', on: vpn, set: setVpn },
         ...(reputation ? [{ label: 'Abusive IPs', on: abusive, set: setAbusive }] : [])
     ];
 
@@ -214,9 +234,27 @@ export function Analytics({ linkId }: AnalyticsProps) {
                     />
                     Include bots
                 </label>
+                <label
+                    className="checkbox"
+                    title="Scripts and headless browsers that don't say they're bots"
+                >
+                    <input
+                        type="checkbox"
+                        checked={scrapers}
+                        onChange={e => setScrapers(e.target.checked)}
+                    />
+                    Include scrapers
+                </label>
                 <label className="checkbox">
                     <input type="checkbox" checked={dc} onChange={e => setDc(e.target.checked)} />
                     Include datacenter IPs
+                </label>
+                <label
+                    className="checkbox"
+                    title="People on a VPN, Tor, iCloud Private Relay or Cloudflare WARP"
+                >
+                    <input type="checkbox" checked={vpn} onChange={e => setVpn(e.target.checked)} />
+                    Include VPN / relay
                 </label>
                 {reputation && (
                     <label className="checkbox">

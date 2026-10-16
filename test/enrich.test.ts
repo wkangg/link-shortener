@@ -116,7 +116,8 @@ describe('extra click fields', () => {
                     language: 'en-GB',
                     memory: 8,
                     platform: 'Windows 11',
-                    touch: 10
+                    touch: 10,
+                    webdriver: false
                 })
             )
         ).toEqual({
@@ -131,6 +132,7 @@ describe('extra click fields', () => {
             memory: 8,
             platform: 'Windows 11',
             touch_points: 10,
+            webdriver: 0,
             timezone: 'Europe/Paris',
             language: 'en-GB'
         });

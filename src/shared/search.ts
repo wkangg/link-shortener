@@ -21,6 +21,8 @@ export const SEARCH_FIELDS: readonly SearchField[] = [
     { name: 'model', hint: 'device model' },
     { name: 'ua', hint: 'user agent' },
     { name: 'bot', hint: 'bot name' },
+    { name: 'vpn', hint: 'VPN or relay, e.g. vpn:tor' },
+    { name: 'scraper', hint: 'why a click looks automated' },
     { name: 'lang', hint: 'language' },
     { name: 'tz', hint: 'timezone' },
     { name: 'fp', hint: 'device fingerprint' },
@@ -49,6 +51,8 @@ export const SEARCH_FIELDS: readonly SearchField[] = [
 export const SEARCH_FLAGS: readonly SearchField[] = [
     { name: 'bot', hint: 'bots and crawlers' },
     { name: 'datacenter', hint: 'hosting / datacenter IPs' },
+    { name: 'vpn', hint: 'VPN, Tor or relay (iCloud Private Relay, WARP)' },
+    { name: 'scraper', hint: 'scripts and headless browsers' },
     { name: 'abusive', hint: 'IPs flagged as abusive on AbuseIPDB' },
     { name: 'private', hint: 'private / incognito window' },
     { name: 'adblock', hint: 'ad blocker detected' },
