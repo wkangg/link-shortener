@@ -49,7 +49,7 @@ export const SEARCH_FIELDS: readonly SearchField[] = [
 export const SEARCH_FLAGS: readonly SearchField[] = [
     { name: 'bot', hint: 'bots and crawlers' },
     { name: 'datacenter', hint: 'hosting / datacenter IPs' },
-    { name: 'reported', hint: 'IPs reported on AbuseIPDB' },
+    { name: 'abusive', hint: 'IPs flagged as abusive on AbuseIPDB' },
     { name: 'private', hint: 'private / incognito window' },
     { name: 'adblock', hint: 'ad blocker detected' },
     { name: 'charging', hint: 'battery charging' },

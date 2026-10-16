@@ -131,7 +131,7 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['source: referrer: link: utm: query:', 'traffic', false],
     ['gpu: screen: platform: connection: fp:', 'hardware', false],
     ['ram:>=8 battery:<20 touch:0 abuse:>50', 'numbers (=, >, >=, <, <=)'],
-    ['is:bot is:datacenter is:reported', 'shows clicks the toggles above hide'],
+    ['is:bot is:datacenter is:abusive', 'shows clicks the toggles above hide'],
     ['is:private is:adblock is:qr is:mobile', 'other flags'],
     ['has:gpu', 'the field is set'],
     ['-os:windows -is:bot', 'a leading - excludes']
@@ -155,6 +155,7 @@ interface IpCellProps {
 function IpCell({ ip, isDatacenter, abuseScore, isp, onAddTerm }: IpCellProps) {
     const { abuseMinScore } = useConfig();
     const reported = abuseScore !== null && abuseScore > 0;
+    const abusive = reported && abuseScore >= abuseMinScore;
     return (
         <span className="ip-cell">
             <button
@@ -192,13 +193,13 @@ function IpCell({ ip, isDatacenter, abuseScore, isp, onAddTerm }: IpCellProps) {
             )}
             {reported && (
                 <a
-                    className={abuseScore >= abuseMinScore ? 'badge badge-danger' : 'badge'}
+                    className={abusive ? 'badge badge-danger' : 'badge'}
                     href={abuseReportUrl(ip)}
                     target="_blank"
                     rel="noreferrer noopener"
                     title={`AbuseIPDB abuse confidence ${abuseScore}%`}
                 >
-                    reported {abuseScore}%
+                    {abusive ? 'abusive' : 'reported'} {abuseScore}%
                 </a>
             )}
             {isp && (
@@ -264,7 +265,6 @@ export function ClickHistory({
         <section className="panel history" aria-label="Click history">
             <header className="panel-header">
                 <h3>Click history</h3>
-                <span className="history-hint">Every request, newest first</span>
             </header>
             <form
                 className="history-search"

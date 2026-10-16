@@ -187,7 +187,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
     const toggles: Toggle[] = [
         { label: 'Bots', on: bots, set: setBots },
         { label: 'Datacenter IPs', on: dc, set: setDc },
-        ...(reputation ? [{ label: 'Reported IPs', on: abusive, set: setAbusive }] : [])
+        ...(reputation ? [{ label: 'Abusive IPs', on: abusive, set: setAbusive }] : [])
     ];
 
     const exportUrl = `/api/export.csv?${params}`;
@@ -225,7 +225,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
                             checked={abusive}
                             onChange={e => setAbusive(e.target.checked)}
                         />
-                        Include reported IPs
+                        Include abusive IPs
                     </label>
                 )}
                 <ul className="chips" aria-label="Active filters">

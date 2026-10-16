@@ -68,7 +68,7 @@ describe('tokenize', () => {
 describe('search', () => {
     test('free text matches any text field, case-insensitively', () => {
         expect(ips('comcast')).toEqual(['203.0.113.5']);
-        expect(ips('CHROME')).toEqual([]); // the Chrome clicks are datacenter / reported
+        expect(ips('CHROME')).toEqual([]); // the Chrome clicks are datacenter / abusive
         expect(ips('"new york"')).toEqual(['203.0.113.5']);
         expect(ips('launc')).toEqual(['198.51.100.7', '203.0.113.5']);
         expect(ips('2001:db8', { dc: true })).toEqual(['2001:db8::1']);
@@ -97,12 +97,13 @@ describe('search', () => {
         expect(ips('isp:_')).toEqual([]);
     });
 
-    test('is:bot, is:datacenter and is:reported take over from the hiding defaults', () => {
+    test('is:bot, is:datacenter and is:abusive take over from the hiding defaults', () => {
         expect(ips('is:bot')).toEqual(['192.0.2.10']);
         expect(ips('is:datacenter')).toEqual(['2001:db8::1']);
-        expect(ips('is:reported')).toEqual(['192.0.2.9']);
+        expect(ips('is:abusive')).toEqual(['192.0.2.9']);
+        expect(ips('is:reported')).toEqual(['192.0.2.9']); // old name still works
         expect(ips('-is:bot')).toEqual(['198.51.100.7', '203.0.113.5']);
-        expect(ips('-is:reported', { bots: true, dc: true })).toHaveLength(4);
+        expect(ips('-is:abusive', { bots: true, dc: true })).toHaveLength(4);
     });
 
     test('applies to summaries too', () => {

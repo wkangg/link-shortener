@@ -74,9 +74,9 @@ export function SettingsPage() {
                     <p>
                         Every visitor IP is checked against AbuseIPDB. Clicks from IPs with an abuse
                         confidence of {abuseMinScore}% or more, or that AbuseIPDB lists as
-                        datacenter or hosting addresses, are hidden unless you tick “Include
-                        reported IPs” or “Include datacenter IPs”. Lookups run in the background, so
-                        a new IP can take a few seconds to be flagged.
+                        datacenter or hosting addresses, are hidden unless you tick “Include abusive
+                        IPs” or “Include datacenter IPs”. Lookups run in the background, so a new IP
+                        can take a few seconds to be flagged.
                     </p>
                 ) : (
                     <p>
