@@ -1,3 +1,4 @@
+import { fixUtf8ReadAsLatin1 } from '../shared/text.ts';
 import type { RawClick } from '../shared/types.ts';
 import { deriveSource, referrerHost } from './source.ts';
 import { parseUserAgent } from './ua.ts';
@@ -126,8 +127,12 @@ function clean(value: string): string | null {
     return trimmed === '' ? null : trimmed;
 }
 
-/** Cloudflare sends non-ASCII city/region names percent-encoded in some setups. */
-function decodeHeader(value: string): string {
+/**
+ * Cloudflare sends non-ASCII city/region names as raw UTF-8 (read here as Latin-1),
+ * or percent-encoded in some setups. Handles both.
+ */
+function decodeHeader(raw: string): string {
+    const value = fixUtf8ReadAsLatin1(raw);
     if (!value.includes('%')) return value;
     try {
         return decodeURIComponent(value);

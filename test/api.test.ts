@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
+import net from 'node:net';
 
 import type {
     ApiError,
@@ -181,5 +182,34 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(await t.status('/api/links')).toBe(401);
         expect(await t.status('/api/health')).toBe(200);
         t.auth.identity = { subject: 'me@example.com' };
+    });
+});
+
+describe('non-ASCII Cloudflare location headers', () => {
+    test('raw UTF-8 bytes in cf-ipcity are stored correctly', async () => {
+        await send('POST', '/api/links', { url: 'https://example.com/', slug: 'mtl' });
+        const { hostname, port } = t.app.short.url;
+        // fetch() can't send non-Latin-1 header bytes, so write the request by hand.
+        await new Promise<void>((resolve, reject) => {
+            const sock = net.connect(Number(port), hostname, () => {
+                sock.write(
+                    Buffer.concat([
+                        Buffer.from('GET /mtl HTTP/1.1\r\nHost: s.example\r\n'),
+                        Buffer.from('cf-ipcity: Montréal\r\ncf-region: Québec\r\n', 'utf8'),
+                        Buffer.from('Connection: close\r\n\r\n')
+                    ])
+                );
+            });
+            sock.on('data', () => sock.end());
+            sock.on('close', () => resolve());
+            sock.on('error', reject);
+        });
+        t.app.clicks.flush();
+        const history = await t.get<ClickHistoryResponse>(`/api/stats/clicks?${range()}&limit=1`);
+        expect(history.clicks[0]).toMatchObject({
+            slug: 'mtl',
+            city: 'Montréal',
+            region: 'Québec'
+        });
     });
 });

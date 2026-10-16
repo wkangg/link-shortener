@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { migrate } from './migrate.ts';
+import { repairGeoEncoding } from './repair.ts';
 
 export const MIGRATIONS_DIR = path.join(import.meta.dir, 'migrations');
 
@@ -26,6 +27,9 @@ export function openDatabase(file: string, opts: { log?: boolean } = {}): Databa
     const applied = migrate(db, MIGRATIONS_DIR);
     if (opts.log && applied.length > 0)
         console.log(`[db] applied migrations: ${applied.join(', ')}`);
+    const repaired = repairGeoEncoding(db);
+    if (opts.log && repaired > 0)
+        console.log(`[db] fixed city/region encoding on ${repaired} clicks`);
 
     return db;
 }

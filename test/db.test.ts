@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { MIGRATIONS_DIR, openDatabase, pingDatabase } from '../src/db/client.ts';
 import { migrate } from '../src/db/migrate.ts';
+import { repairGeoEncoding } from '../src/db/repair.ts';
 
 const tmp = mkdtempSync(path.join(tmpdir(), 'shortener-db-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -23,6 +24,28 @@ describe('database', () => {
             .map(r => r.name);
         expect(tables).toEqual(expect.arrayContaining(['_migrations', 'clicks', 'links']));
         expect(pingDatabase(db)).toBe(true);
+        db.close();
+    });
+
+    test('repairs city/region stored as UTF-8 read as Latin-1, once', () => {
+        const db = openDatabase(':memory:');
+        db.run("DELETE FROM _migrations WHERE name LIKE 'data:%'");
+        db.run(
+            "INSERT INTO clicks (link_id, ts, city, region) VALUES (1, 0, 'MontrÃ©al', 'QuÃ©bec'), (1, 0, 'Zürich', NULL), (1, 0, 'Toronto', 'Ontario')"
+        );
+        expect(repairGeoEncoding(db)).toBe(1);
+        const cities = db
+            .query<{ city: string; region: string | null }, []>(
+                'SELECT city, region FROM clicks ORDER BY id'
+            )
+            .all();
+        expect(cities).toEqual([
+            { city: 'Montréal', region: 'Québec' },
+            { city: 'Zürich', region: null },
+            { city: 'Toronto', region: 'Ontario' }
+        ]);
+        db.run("UPDATE clicks SET city = 'MontrÃ©al' WHERE id = 1");
+        expect(repairGeoEncoding(db)).toBe(0); // already ran
         db.close();
     });
 

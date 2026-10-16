@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { enrichClick } from '../src/analytics/enrich.ts';
 import { deriveSource, referrerHost, sourceForHost } from '../src/analytics/source.ts';
 import { parseUserAgent } from '../src/analytics/ua.ts';
+import { fixUtf8ReadAsLatin1 } from '../src/shared/text.ts';
 import type { RawClick } from '../src/shared/types.ts';
 
 const IPHONE =
@@ -25,6 +26,25 @@ const base: RawClick = {
     query: ''
 };
 const opts = { shortHost: 's.example', salt: 'salt' };
+
+describe('header encoding', () => {
+    test('UTF-8 read as Latin-1 is decoded', () => {
+        expect(fixUtf8ReadAsLatin1('MontrÃ©al')).toBe('Montréal');
+        expect(fixUtf8ReadAsLatin1('QuÃ©bec')).toBe('Québec');
+        expect(fixUtf8ReadAsLatin1('SÃ£o Paulo')).toBe('São Paulo');
+    });
+
+    test('correct text is left alone', () => {
+        for (const s of ['Montréal', 'Toronto', '東京', 'Zürich', '']) {
+            expect(fixUtf8ReadAsLatin1(s)).toBe(s);
+        }
+    });
+
+    test('enrich fixes city and region', () => {
+        const row = enrichClick({ ...base, city: 'MontrÃ©al', region: 'QuÃ©bec' }, opts);
+        expect(row).toMatchObject({ city: 'Montréal', region: 'Québec' });
+    });
+});
 
 describe('click history fields', () => {
     test('raw ip and user agent are stored, capped', () => {
