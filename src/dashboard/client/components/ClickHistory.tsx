@@ -51,7 +51,30 @@ function location(c: ClickHistoryRow): string {
 }
 
 function technology(c: ClickHistoryRow): string {
-    return [c.browser, c.os, c.device].filter(Boolean).join(' · ') || 'Unknown';
+    return [c.browser, c.os, c.deviceModel ?? c.device].filter(Boolean).join(' · ') || 'Unknown';
+}
+
+/** Timezone and language, e.g. "America/Toronto · en-CA". */
+function locale(c: ClickHistoryRow): string {
+    return [c.timezone, c.language].filter(Boolean).join(' · ');
+}
+
+/** Screen, orientation, battery and connection, as reported by the browser. */
+function hardware(c: ClickHistoryRow): string {
+    const orientation = c.orientation?.split('-')[0];
+    const battery =
+        c.battery === null ? null : `${c.battery}% battery${c.charging ? ', charging' : ''}`;
+    const memory = c.memory === null ? null : `${c.memory} GB RAM`;
+    const touch = c.touchPoints === null ? null : c.touchPoints > 0 ? 'touch' : 'no touch';
+    return [c.platform, c.screen, orientation, memory, touch, battery, c.connection]
+        .filter(Boolean)
+        .join(' · ');
+}
+
+/** Approximate coordinates of the IP, e.g. "43.65, -79.38". */
+function coordinates(c: ClickHistoryRow): string {
+    if (c.latitude === null || c.longitude === null) return '';
+    return `${c.latitude.toFixed(2)}, ${c.longitude.toFixed(2)}`;
 }
 
 const asRow = (value: string, label: string): TopRow => ({ value, label, clicks: 0, visitors: 0 });
@@ -105,6 +128,7 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                 <th scope="col">IP address</th>
                                 <th scope="col">Location</th>
                                 <th scope="col">Source</th>
+                                <th scope="col">Device</th>
                                 <th scope="col">User agent</th>
                             </tr>
                         </thead>
@@ -154,7 +178,25 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                             </button>
                                         )}
                                     </td>
-                                    <td>{location(c)}</td>
+                                    <td>
+                                        {location(c)}
+                                        {locale(c) && (
+                                            <span className="history-sub">{locale(c)}</span>
+                                        )}
+                                        {coordinates(c) && (
+                                            <span
+                                                className="history-sub mono"
+                                                title="Approximate, from the IP address"
+                                            >
+                                                {coordinates(c)}
+                                            </span>
+                                        )}
+                                        {c.hostname && (
+                                            <span className="history-sub mono" title={c.hostname}>
+                                                {c.hostname}
+                                            </span>
+                                        )}
+                                    </td>
                                     <td>
                                         {c.source}
                                         {c.referrer && (
@@ -163,9 +205,23 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                             </span>
                                         )}
                                     </td>
+                                    <td className="history-device">
+                                        {hardware(c) || <span className="muted">–</span>}
+                                        {c.gpu && (
+                                            <span className="history-sub" title={c.gpu}>
+                                                {c.gpu}
+                                            </span>
+                                        )}
+                                        {c.incognito && <span className="badge">private</span>}
+                                        {c.adBlocker && <span className="badge">ad blocker</span>}
+                                    </td>
                                     <td className="history-ua">
                                         {technology(c)}
-                                        {c.bot && <span className="badge">bot</span>}
+                                        {c.bot && (
+                                            <span className="badge">
+                                                {c.botName ? `bot: ${c.botName}` : 'bot'}
+                                            </span>
+                                        )}
                                         {c.userAgent && (
                                             <span className="history-sub mono">{c.userAgent}</span>
                                         )}

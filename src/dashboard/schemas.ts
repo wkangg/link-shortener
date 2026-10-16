@@ -26,6 +26,7 @@ export function linkSchemas(shortHost: string) {
         redirectType: z.union([z.literal(301), z.literal(302), z.literal(307), z.literal(308)]),
         expiresAt: z.number().int().positive().nullable(),
         archived: z.boolean(),
+        trackDevice: z.boolean(),
         tags: z
             .array(tag)
             .max(20)
@@ -46,6 +47,7 @@ export function linkSchemas(shortHost: string) {
             title: fields.title.optional(),
             redirectType: fields.redirectType.optional(),
             expiresAt: fields.expiresAt.optional(),
+            trackDevice: fields.trackDevice.optional(),
             tags: fields.tags.optional()
         }),
         update: z.strictObject({
@@ -55,6 +57,7 @@ export function linkSchemas(shortHost: string) {
             redirectType: fields.redirectType.optional(),
             expiresAt: fields.expiresAt.optional(),
             archived: fields.archived.optional(),
+            trackDevice: fields.trackDevice.optional(),
             tags: fields.tags.optional()
         })
     };

@@ -1,7 +1,9 @@
 import type { Database } from 'bun:sqlite';
 
-import { ClickBuffer } from './analytics/clicks.ts';
+import { ClickBuffer, type ReverseDns } from './analytics/clicks.ts';
+import { createReverseDns } from './analytics/hostname.ts';
 import { Stats } from './analytics/stats.ts';
+import { parseUserAgent } from './analytics/ua.ts';
 import type { Config } from './config.ts';
 import { type Authenticate, createAuthenticator } from './dashboard/auth.ts';
 import { LinkRepo } from './dashboard/links.ts';
@@ -19,6 +21,8 @@ export interface AppOptions {
     authenticate?: Authenticate;
     /** Click flush interval (tests use a manual flush). */
     flushIntervalMs?: number;
+    /** Hostname lookups for click IPs; null turns them off (tests). */
+    reverseDns?: ReverseDns | null;
 }
 
 /** Wires both servers to one database, one cache and one click buffer. */
@@ -30,7 +34,8 @@ export function startApp(opts: AppOptions) {
     const clicks = new ClickBuffer(db, {
         shortHost,
         salt: config.visitorSalt,
-        intervalMs: opts.flushIntervalMs ?? 1000
+        intervalMs: opts.flushIntervalMs ?? 1000,
+        reverseDns: opts.reverseDns === undefined ? createReverseDns() : opts.reverseDns
     });
     clicks.start();
 
@@ -38,7 +43,8 @@ export function startApp(opts: AppOptions) {
         port: config.shortPort,
         cache,
         lookup: createLinkLookup(db),
-        clicks
+        clicks,
+        isBot: ua => parseUserAgent(ua).isBot
     });
 
     const dash = startDashboardServer({

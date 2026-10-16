@@ -265,11 +265,16 @@ export class Stats {
             sql += ' AND (c.ts < ? OR (c.ts = ? AND c.id < ?))';
             params.push(ts, ts, id);
         }
+        type Flags = 'qr' | 'bot' | 'charging' | 'incognito' | 'adBlocker';
         const rows = this.#db
-            .query<Omit<ClickHistoryRow, 'qr' | 'bot'> & { qr: number; bot: number }, Param[]>(
+            .query<Omit<ClickHistoryRow, Flags> & Record<Flags, number | null>, Param[]>(
                 `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
-                        c.device, c.browser, c.os, c.is_bot AS bot
+                        c.device, c.browser, c.os, c.is_bot AS bot, c.bot_name AS botName,
+                        c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
+                        c.screen, c.orientation, c.battery, c.charging, c.connection, c.gpu,
+                        c.incognito, c.ad_blocker AS adBlocker, c.latitude, c.longitude,
+                        c.memory, c.platform, c.touch_points AS touchPoints
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -278,7 +283,14 @@ export class Stats {
         const page = more ? rows.slice(0, limit) : rows;
         const last = page.at(-1);
         return {
-            clicks: page.map(r => ({ ...r, qr: r.qr === 1, bot: r.bot === 1 })),
+            clicks: page.map(r => ({
+                ...r,
+                qr: r.qr === 1,
+                bot: r.bot === 1,
+                charging: flag(r.charging),
+                incognito: flag(r.incognito),
+                adBlocker: flag(r.adBlocker)
+            })),
             next: more && last ? `${last.ts}_${last.id}` : null,
             total
         };
@@ -307,13 +319,35 @@ export class Stats {
             'utm_content',
             'query',
             'ip',
-            'user_agent'
+            'user_agent',
+            'hostname',
+            'language',
+            'timezone',
+            'bot_name',
+            'device_model',
+            'screen',
+            'orientation',
+            'battery',
+            'charging',
+            'connection',
+            'gpu',
+            'incognito',
+            'ad_blocker',
+            'latitude',
+            'longitude',
+            'memory',
+            'platform',
+            'touch_points'
         ];
         const rows = this.#db
             .query<Record<string, string | number | null>, Param[]>(
                 `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
                         c.device, c.browser, c.os, c.is_bot, c.utm_source, c.utm_medium,
-                        c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent
+                        c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
+                        c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
+                        c.orientation, c.battery, c.charging, c.connection, c.gpu, c.incognito,
+                        c.ad_blocker, c.latitude, c.longitude, c.memory, c.platform,
+                        c.touch_points
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${where.sql} ORDER BY c.ts DESC LIMIT ?`
             )
@@ -351,4 +385,9 @@ function csvCell(
     if (value === null || value === undefined) return '';
     const text = value instanceof Uint8Array ? '' : String(value);
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+/** A nullable 0/1 column as a boolean, keeping null for "not reported". */
+function flag(value: number | null): boolean | null {
+    return value === null ? null : value === 1;
 }

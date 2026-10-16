@@ -14,11 +14,13 @@ const LINK: CachedLink = {
     id: 7,
     url: 'https://example.com/page?a=1',
     status: 302,
-    expiresAt: null
+    expiresAt: null,
+    track: false
 };
 
 function setup(links: Record<string, CachedLink>, now = 1_000_000) {
     const recorded: RawClick[] = [];
+    const signals: { token: string; body: string; ts: number }[] = [];
     const lookups: string[] = [];
     const cache = new LinkCache();
     const handle = createRedirectHandler({
@@ -27,12 +29,22 @@ function setup(links: Record<string, CachedLink>, now = 1_000_000) {
             lookups.push(slug);
             return links[slug] ?? null;
         },
-        clicks: { push: c => recorded.push(c) },
+        clicks: {
+            push: c => recorded.push(c),
+            pushSignals: (token, body, ts) => signals.push({ token, body, ts })
+        },
+        isBot: ua => ua.includes('bot'),
         now: () => now
     });
+    // Only the signals POST is async.
     const get = (path: string, init?: RequestInit) =>
-        handle(new Request(`https://s.example${path}`, init));
-    return { get, recorded, lookups, cache };
+        handle(new Request(`https://s.example${path}`, init)) as Response;
+    /** Status of a POST (only the signals POST is async). */
+    const post = async (path: string, body: string) => {
+        const res = await handle(new Request(`https://s.example${path}`, { method: 'POST', body }));
+        return res.status;
+    };
+    return { get, post, recorded, signals, lookups, cache };
 }
 
 describe('url helpers', () => {
@@ -101,7 +113,10 @@ describe('redirect handler', () => {
             country: 'CA',
             city: 'Toronto',
             qr: false,
-            query: ''
+            query: '',
+            token: null,
+            latitude: '',
+            longitude: ''
         });
     });
 
@@ -156,6 +171,62 @@ describe('redirect handler', () => {
 
     test('/healthz is not special on the short domain', () => {
         expect(setup({ abc: LINK }).get('/healthz').status).toBe(404);
+    });
+
+    test('records language and timezone headers', () => {
+        const { get, recorded } = setup({ abc: LINK });
+        get('/abc', {
+            headers: { 'accept-language': 'fr-CA,fr;q=0.9', 'cf-timezone': 'America/Toronto' }
+        });
+        expect(recorded[0]).toMatchObject({
+            language: 'fr-CA,fr;q=0.9',
+            timezone: 'America/Toronto'
+        });
+    });
+
+    test('records the edge-reported coordinates', () => {
+        const { get, recorded } = setup({ abc: LINK });
+        get('/abc', { headers: { 'cf-iplatitude': '43.6532', 'cf-iplongitude': '-79.3832' } });
+        expect(recorded[0]).toMatchObject({ latitude: '43.6532', longitude: '-79.3832' });
+    });
+});
+
+describe('device tracking', () => {
+    const TRACKED = { ...LINK, track: true, url: 'https://example.com/a?x=</script><b>"' };
+
+    test('tracked links serve the signals page with a token, not a redirect', async () => {
+        const { get, recorded } = setup({ t: TRACKED });
+        // No query to merge: the destination goes into the page exactly as stored.
+        const res = get('/t');
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toContain('text/html');
+        expect(res.headers.get('cache-control')).toBe('private, no-store');
+        const token = recorded[0]?.token;
+        expect(token).toMatch(/^[\w-]{36}$/);
+        const html = await res.text();
+        expect(html).toContain(JSON.stringify(token));
+        // The destination can't break out of the script or the attribute.
+        expect(html).not.toContain('</script><b>');
+        expect(html).toContain(
+            'content="3;url=https://example.com/a?x=&lt;/script&gt;&lt;b&gt;&quot;"'
+        );
+    });
+
+    test('bots and HEAD still get the plain redirect', () => {
+        const { get, recorded } = setup({ t: TRACKED });
+        expect(get('/t', { headers: { 'user-agent': 'Slackbot' } }).status).toBe(302);
+        expect(recorded[0]?.token).toBeNull();
+        expect(get('/t', { method: 'HEAD' }).status).toBe(302);
+    });
+
+    test('signals POST is queued by token', async () => {
+        const { post, signals } = setup({});
+        const body = JSON.stringify({ t: 'abc-123', battery: 50 });
+        expect(await post('/_/signals', body)).toBe(204);
+        expect(signals).toEqual([{ token: 'abc-123', body, ts: 1_000_000 }]);
+        expect(await post('/_/signals', '{}')).toBe(204);
+        expect(await post('/_/signals', 'x'.repeat(5000))).toBe(413);
+        expect(signals).toHaveLength(1);
     });
 });
 

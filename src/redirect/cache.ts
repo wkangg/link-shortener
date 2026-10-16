@@ -6,6 +6,8 @@ export interface CachedLink {
     url: string;
     status: number;
     expiresAt: number | null;
+    /** Serve the device-signals page instead of a bare redirect. */
+    track: boolean;
 }
 
 const MISS_TTL_MS = 60_000;

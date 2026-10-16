@@ -152,7 +152,12 @@ for (let n = 0; n < total; n++) {
         region,
         city,
         qr: isMenu ? Math.random() < 0.9 : Math.random() < 0.04,
-        query: link.slug === 'nl-oct' ? QUERIES[1][0] : pick(QUERIES)[0]
+        query: link.slug === 'nl-oct' ? QUERIES[1][0] : pick(QUERIES)[0],
+        language: 'en-US,en;q=0.9',
+        timezone: '',
+        token: null,
+        latitude: '',
+        longitude: ''
     };
     buffer.push(click);
 }

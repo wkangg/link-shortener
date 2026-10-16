@@ -40,13 +40,14 @@ const us = (ms: number) => `${(ms * 1000).toFixed(1)} µs`;
         clicks: new ClickBuffer(db, { shortHost: 's.example', salt: 'bench', intervalMs: 1000 })
     });
     const headers = { 'user-agent': 'bench', 'cf-connecting-ip': '1.2.3.4' };
-    for (let i = 0; i < 20_000; i++) handle(new Request('http://s.example/bench', { headers }));
+    for (let i = 0; i < 20_000; i++)
+        void handle(new Request('http://s.example/bench', { headers }));
     const n = 200_000;
     const samples = new Float64Array(n);
     for (let i = 0; i < n; i++) {
         const req = new Request('http://s.example/bench?utm_source=x', { headers });
         const t = Bun.nanoseconds();
-        handle(req);
+        void handle(req);
         samples[i] = (Bun.nanoseconds() - t) / 1e6;
     }
     const p = percentiles(samples);

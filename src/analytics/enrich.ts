@@ -27,6 +27,30 @@ export interface ClickRow {
     query: string | null;
     ip: string | null;
     user_agent: string | null;
+    language: string | null;
+    timezone: string | null;
+    bot_name: string | null;
+    device_model: string | null;
+    token: string | null;
+    latitude: number | null;
+    longitude: number | null;
+}
+
+/** Browser-side signals from the device-signals page, validated. Null means not reported. */
+export interface DeviceSignals {
+    screen: string | null;
+    orientation: string | null;
+    battery: number | null;
+    charging: 0 | 1 | null;
+    connection: string | null;
+    gpu: string | null;
+    incognito: 0 | 1 | null;
+    ad_blocker: 0 | 1 | null;
+    memory: number | null;
+    platform: string | null;
+    touch_points: number | null;
+    timezone: string | null;
+    language: string | null;
 }
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
@@ -38,6 +62,32 @@ const MAX_VALUE = 200;
 const MAX_REFERRER = 500;
 const MAX_IP = 64;
 const MAX_USER_AGENT = 512;
+const MAX_GPU = 200;
+
+const LANGUAGE_RE = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
+const TIMEZONE_RE = /^[A-Za-z][\w+-]*(?:\/[\w+-]+){0,2}$/;
+const SCREEN_RE = /^[1-9]\d{0,4}x[1-9]\d{0,4}(?:@\d{1,2}(?:\.\d{1,2})?)?$/;
+const PLATFORM_RE = /^[\w .-]{1,40}$/;
+const ORIENTATIONS = new Set([
+    'portrait-primary',
+    'portrait-secondary',
+    'landscape-primary',
+    'landscape-secondary'
+]);
+const CONNECTIONS = new Set([
+    'bluetooth',
+    'cellular',
+    'ethernet',
+    'mixed',
+    'none',
+    'other',
+    'wifi',
+    'wimax',
+    'slow-2g',
+    '2g',
+    '3g',
+    '4g'
+]);
 
 export interface EnrichOptions {
     /** Host of the short domain; clicks referred from it are treated as Direct. */
@@ -74,8 +124,74 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         ...utm,
         query: otherParams(params),
         ip: clean(click.ip.slice(0, MAX_IP)),
-        user_agent: clean(click.ua.slice(0, MAX_USER_AGENT))
+        user_agent: clean(click.ua.slice(0, MAX_USER_AGENT)),
+        language: language(click.language.split(',')[0]?.split(';')[0] ?? ''),
+        timezone: timezone(click.timezone),
+        bot_name: ua.botName,
+        device_model: ua.model,
+        token: click.token,
+        latitude: coordinate(click.latitude, 90),
+        longitude: coordinate(click.longitude, 180)
     };
+}
+
+/** Parses the JSON body the device-signals page posts. Anything malformed is dropped. */
+export function parseSignals(body: string): DeviceSignals | null {
+    let raw: unknown;
+    try {
+        raw = JSON.parse(body);
+    } catch {
+        return null;
+    }
+    if (typeof raw !== 'object' || raw === null) return null;
+    const s = raw as Record<string, unknown>;
+    const str = (key: string) => (typeof s[key] === 'string' ? s[key] : '');
+    const flag = (key: string) => (typeof s[key] === 'boolean' ? (s[key] ? 1 : 0) : null);
+    const battery = s.battery;
+    return {
+        screen: SCREEN_RE.test(str('screen')) ? str('screen') : null,
+        orientation: ORIENTATIONS.has(str('orientation')) ? str('orientation') : null,
+        battery:
+            typeof battery === 'number' &&
+            Number.isInteger(battery) &&
+            battery >= 0 &&
+            battery <= 100
+                ? battery
+                : null,
+        charging: flag('charging'),
+        connection: CONNECTIONS.has(str('connection')) ? str('connection') : null,
+        gpu: clean(str('gpu').slice(0, MAX_GPU)),
+        incognito: flag('incognito'),
+        ad_blocker: flag('adBlocker'),
+        memory: typeof s.memory === 'number' && s.memory > 0 && s.memory <= 1024 ? s.memory : null,
+        platform: PLATFORM_RE.test(str('platform')) ? clean(str('platform')) : null,
+        touch_points:
+            typeof s.touch === 'number' &&
+            Number.isInteger(s.touch) &&
+            s.touch >= 0 &&
+            s.touch <= 100
+                ? s.touch
+                : null,
+        timezone: timezone(str('timezone')),
+        language: language(str('language'))
+    };
+}
+
+/** A latitude/longitude header as a number within ±limit, or null. */
+function coordinate(value: string, limit: number): number | null {
+    if (value.trim() === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) && Math.abs(n) <= limit ? n : null;
+}
+
+function language(value: string): string | null {
+    const trimmed = value.trim();
+    return LANGUAGE_RE.test(trimmed) && trimmed.length <= 35 ? trimmed : null;
+}
+
+function timezone(value: string): string | null {
+    const trimmed = value.trim();
+    return TIMEZONE_RE.test(trimmed) && trimmed.length <= 64 ? trimmed : null;
 }
 
 function utmFrom(params: URLSearchParams): Record<UtmKey, string | null> | null {

@@ -3,12 +3,15 @@
 import { ROOT_SLUG, SLUG_RE } from '../shared/slug.ts';
 import type { ClickSink } from '../shared/types.ts';
 import type { LinkCache } from './cache.ts';
+import { interstitialHtml, MAX_SIGNALS_BODY, SIGNALS_PATH } from './interstitial.ts';
 import type { LinkLookup } from './lookup.ts';
 
 export interface RedirectHandlerOptions {
     cache: LinkCache;
     lookup: LinkLookup;
     clicks: ClickSink;
+    /** Bots skip the device-signals page so link previews still see the redirect. */
+    isBot?: (ua: string) => boolean;
     /** Injectable clock for tests. */
     now?: () => number;
 }
@@ -65,9 +68,13 @@ export function mergeQuery(destination: string, query: string): string {
 export function createRedirectHandler(opts: RedirectHandlerOptions) {
     const { cache, lookup, clicks } = opts;
     const now = opts.now ?? Date.now;
+    const isBot = opts.isBot ?? (() => false);
 
-    return function handleRedirect(req: Request, server?: PeerInfo): Response {
+    return function handleRedirect(req: Request, server?: PeerInfo): Response | Promise<Response> {
         const isHead = req.method === 'HEAD';
+        if (req.method === 'POST' && pathOf(req.url) === SIGNALS_PATH) {
+            return receiveSignals(req, clicks, now());
+        }
         if (req.method !== 'GET' && !isHead) {
             return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
         }
@@ -87,27 +94,60 @@ export function createRedirectHandler(opts: RedirectHandlerOptions) {
         if (link.expiresAt !== null && link.expiresAt <= t) return gone();
 
         const [query, qr] = takeQrFlag(rawQuery);
+        const destination = mergeQuery(link.url, query);
 
         // HEAD is what link-preview bots and uptime checks send; don't count it.
         if (!isHead) {
             const h = req.headers;
+            const ua = h.get('user-agent') ?? '';
+            const token = link.track && !isBot(ua) ? crypto.randomUUID() : null;
             clicks.push({
                 linkId: link.id,
                 ts: t,
                 url: link.url,
                 ip: h.get('cf-connecting-ip') ?? server?.requestIP(req)?.address ?? '',
-                ua: h.get('user-agent') ?? '',
+                ua,
                 referrer: h.get('referer') ?? '',
                 country: h.get('cf-ipcountry') ?? '',
                 region: h.get('cf-region') ?? '',
                 city: h.get('cf-ipcity') ?? '',
                 qr,
-                query
+                query,
+                language: h.get('accept-language') ?? '',
+                timezone: h.get('cf-timezone') ?? '',
+                latitude: h.get('cf-iplatitude') ?? '',
+                longitude: h.get('cf-iplongitude') ?? '',
+                token
             });
+            if (token) return interstitial(destination, token);
         }
 
-        return redirect(mergeQuery(link.url, query), link.status);
+        return redirect(destination, link.status);
     };
+}
+
+async function receiveSignals(req: Request, clicks: ClickSink, ts: number): Promise<Response> {
+    const length = Number(req.headers.get('content-length') ?? 0);
+    if (length > MAX_SIGNALS_BODY) return new Response(null, { status: 413 });
+    const body = await req.text();
+    if (body.length > MAX_SIGNALS_BODY) return new Response(null, { status: 413 });
+    // The token is checked against the clicks table at flush time; just find it here.
+    const token = /"t":"([\w-]{1,64})"/.exec(body)?.[1];
+    if (token) clicks.pushSignals(token, body, ts);
+    return new Response(null, { status: 204, headers: { 'Cache-Control': NO_STORE } });
+}
+
+function interstitial(destination: string, token: string): Response {
+    return new Response(interstitialHtml(destination, token), {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': NO_STORE,
+            'X-Robots-Tag': 'noindex',
+            'Content-Security-Policy':
+                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'"
+        }
+    });
 }
 
 function redirect(location: string, status: number): Response {

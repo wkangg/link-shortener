@@ -158,6 +158,7 @@ function LinkRow({
                         </span>
                     )}
                     {link.redirectType !== 302 && <span>{link.redirectType}</span>}
+                    {link.trackDevice && <span title="Detailed device tracking">tracked</span>}
                     {link.tags.map(t => (
                         <button key={t} type="button" className="tag" onClick={() => onTag(t)}>
                             {t}

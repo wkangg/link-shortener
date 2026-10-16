@@ -44,6 +44,7 @@ export interface LinkInput {
     expiresAt?: number | null;
     tags?: string[];
     archived?: boolean;
+    trackDevice?: boolean;
 }
 
 export const api = {

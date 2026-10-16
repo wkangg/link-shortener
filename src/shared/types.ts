@@ -24,6 +24,8 @@ export interface Link {
     /** Unix ms, or null for never. */
     expiresAt: number | null;
     archived: boolean;
+    /** Serve a JS page that reports browser-side signals before forwarding. */
+    trackDevice: boolean;
     tags: string[];
     createdAt: number;
     updatedAt: number;
@@ -125,6 +127,31 @@ export interface ClickHistoryRow {
     browser: string | null;
     os: string | null;
     bot: boolean;
+    botName: string | null;
+    deviceModel: string | null;
+    language: string | null;
+    timezone: string | null;
+    /** Reverse DNS of `ip`. */
+    hostname: string | null;
+    // Reported by the browser on links with trackDevice; null otherwise.
+    screen: string | null;
+    orientation: string | null;
+    /** 0-100. */
+    battery: number | null;
+    charging: boolean | null;
+    connection: string | null;
+    gpu: string | null;
+    incognito: boolean | null;
+    adBlocker: boolean | null;
+    /** Approximate (city-level) position of the IP, from the edge. */
+    latitude: number | null;
+    longitude: number | null;
+    /** GB of RAM as rounded by the browser (Chromium only). */
+    memory: number | null;
+    /** e.g. "Windows 11" (Chromium only). */
+    platform: string | null;
+    /** Max simultaneous touches; 0 = no touch screen. */
+    touchPoints: number | null;
 }
 
 export interface ClickHistoryResponse {
@@ -150,8 +177,19 @@ export interface RawClick {
     qr: boolean;
     /** Query string from the short URL, without the leading `?` and without `qr`. */
     query: string;
+    /** Accept-Language header. */
+    language: string;
+    /** CF-Timezone header. */
+    timezone: string;
+    /** CF-IPLatitude / CF-IPLongitude headers. */
+    latitude: string;
+    longitude: string;
+    /** One-time id the device-signals page reports back with; null for plain redirects. */
+    token: string | null;
 }
 
 export interface ClickSink {
     push(click: RawClick): void;
+    /** Browser-side signals for the click with this token (raw, unvalidated JSON body). */
+    pushSignals(token: string, body: string, ts: number): void;
 }

@@ -21,7 +21,8 @@ export function testApp() {
         db,
         version: 'test',
         authenticate: () => Promise.resolve(auth.identity),
-        flushIntervalMs: 60_000
+        flushIntervalMs: 60_000,
+        reverseDns: null
     });
 
     const api = (path: string, init: RequestInit = {}) =>

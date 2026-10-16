@@ -52,6 +52,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     const [tags, setTags] = useState(link.tags.join(', '));
     const [redirectType, setRedirectType] = useState<RedirectType>(link.redirectType);
     const [expires, setExpires] = useState(toLocalInput(link.expiresAt));
+    const [trackDevice, setTrackDevice] = useState(link.trackDevice);
     const [utm, setUtm] = useState(() => utmOf(link.url));
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
@@ -71,6 +72,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                     .map(t => t.trim())
                     .filter(t => t !== ''),
                 redirectType,
+                trackDevice,
                 expiresAt: expires ? new Date(expires).getTime() : null
             });
             onSaved(saved);
@@ -166,6 +168,21 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                         </select>
                     </label>
                 </div>
+                <label className="checkbox track-device">
+                    <input
+                        type="checkbox"
+                        checked={trackDevice}
+                        onChange={e => setTrackDevice(e.target.checked)}
+                    />
+                    <span>
+                        Detailed device tracking
+                        <small>
+                            Shows a brief redirect page that records battery, screen, GPU,
+                            connection and more before forwarding. Adds a short delay; bots still
+                            get a plain redirect.
+                        </small>
+                    </span>
+                </label>
                 {errors.form && <p className="error">{errors.form}</p>}
                 <div className="button-row spread">
                     {confirmDelete ? (

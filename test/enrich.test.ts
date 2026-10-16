@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { enrichClick } from '../src/analytics/enrich.ts';
+import { enrichClick, parseSignals } from '../src/analytics/enrich.ts';
 import { deriveSource, referrerHost, sourceForHost } from '../src/analytics/source.ts';
 import { parseUserAgent } from '../src/analytics/ua.ts';
 import { fixUtf8ReadAsLatin1 } from '../src/shared/text.ts';
@@ -23,7 +23,12 @@ const base: RawClick = {
     region: 'Ontario',
     city: 'Toronto',
     qr: false,
-    query: ''
+    query: '',
+    language: '',
+    timezone: '',
+    token: null,
+    latitude: '',
+    longitude: ''
 };
 const opts = { shortHost: 's.example', salt: 'salt' };
 
@@ -55,13 +60,107 @@ describe('click history fields', () => {
     });
 });
 
+describe('extra click fields', () => {
+    test('language, timezone, bot name and device model', () => {
+        const row = enrichClick(
+            { ...base, language: 'fr-CA,fr;q=0.9,en;q=0.8', timezone: 'America/Toronto' },
+            opts
+        );
+        expect(row).toMatchObject({
+            language: 'fr-CA',
+            timezone: 'America/Toronto',
+            bot_name: null
+        });
+        expect(enrichClick({ ...base, language: '*', timezone: '<x>' }, opts)).toMatchObject({
+            language: null,
+            timezone: null
+        });
+        expect(enrichClick({ ...base, ua: SLACKBOT }, opts)).toMatchObject({
+            is_bot: 1,
+            bot_name: 'SlackBot',
+            device_model: null
+        });
+        expect(parseUserAgent('curl/8.4.0').botName).toBe('curl');
+        expect(
+            parseUserAgent(
+                'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
+            ).model
+        ).toBe('Pixel 8');
+    });
+
+    test('edge coordinates are range-checked', () => {
+        expect(
+            enrichClick({ ...base, latitude: '43.6532', longitude: '-79.3832' }, opts)
+        ).toMatchObject({ latitude: 43.6532, longitude: -79.3832 });
+        expect(enrichClick({ ...base, latitude: '91', longitude: 'abc' }, opts)).toMatchObject({
+            latitude: null,
+            longitude: null
+        });
+        expect(enrichClick(base, opts)).toMatchObject({ latitude: null, longitude: null });
+    });
+
+    test('device signals are validated field by field', () => {
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    t: 'tok',
+                    screen: '1920x1080@1.25',
+                    orientation: 'landscape-primary',
+                    battery: 87,
+                    charging: true,
+                    connection: 'wifi',
+                    gpu: 'ANGLE (NVIDIA GeForce RTX 4070)',
+                    incognito: false,
+                    adBlocker: true,
+                    timezone: 'Europe/Paris',
+                    language: 'en-GB',
+                    memory: 8,
+                    platform: 'Windows 11',
+                    touch: 10
+                })
+            )
+        ).toEqual({
+            screen: '1920x1080@1.25',
+            orientation: 'landscape-primary',
+            battery: 87,
+            charging: 1,
+            connection: 'wifi',
+            gpu: 'ANGLE (NVIDIA GeForce RTX 4070)',
+            incognito: 0,
+            ad_blocker: 1,
+            memory: 8,
+            platform: 'Windows 11',
+            touch_points: 10,
+            timezone: 'Europe/Paris',
+            language: 'en-GB'
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    screen: '0x0@1',
+                    battery: 140,
+                    charging: 'yes',
+                    connection: 'fiber'
+                })
+            )
+        ).toMatchObject({ screen: null, battery: null, charging: null, connection: null });
+        expect(
+            parseSignals(JSON.stringify({ memory: -1, platform: '<b>x</b>', touch: 2.5 }))
+        ).toMatchObject({ memory: null, platform: null, touch_points: null });
+        expect(parseSignals('not json')).toBeNull();
+        expect(parseSignals('[1]')).toMatchObject({ screen: null });
+    });
+});
+
 describe('user agents', () => {
     test('browser, os and device', () => {
         expect(parseUserAgent(IPHONE)).toEqual({
             browser: 'Safari',
             os: 'iOS',
             device: 'mobile',
-            isBot: false
+            isBot: false,
+            botName: null,
+            model: 'Apple iPhone'
         });
         expect(parseUserAgent(CHROME_WIN)).toMatchObject({
             browser: 'Chrome',

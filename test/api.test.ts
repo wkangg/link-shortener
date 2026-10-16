@@ -219,3 +219,65 @@ describe('non-ASCII Cloudflare location headers', () => {
         });
     });
 });
+
+describe('detailed device tracking', () => {
+    test('tracked link reports signals that land on the click', async () => {
+        const created = await send('POST', '/api/links', {
+            url: 'https://example.com/dev',
+            slug: 'dev',
+            trackDevice: true
+        });
+        const link = (await created.json()) as Link;
+        expect(link.trackDevice).toBe(true);
+
+        const page = await t.click('/dev', {
+            'user-agent': SAFARI,
+            'accept-language': 'en-CA,en;q=0.9',
+            'cf-timezone': 'America/Toronto'
+        });
+        expect(page.status).toBe(200);
+        const token = /T="([\w-]+)"/.exec(await page.text())?.[1] ?? '';
+        expect(token).not.toBe('');
+
+        const signals = {
+            t: token,
+            screen: '390x844@3',
+            orientation: 'portrait-primary',
+            battery: 42,
+            charging: false,
+            connection: '4g',
+            gpu: 'Apple GPU',
+            incognito: true,
+            adBlocker: false,
+            timezone: 'America/Vancouver'
+        };
+        const post = (body: unknown) =>
+            fetch(new URL('/_/signals', t.app.short.url), {
+                method: 'POST',
+                body: JSON.stringify(body)
+            });
+        const accepted = await post(signals);
+        expect(accepted.status).toBe(204);
+        t.app.clicks.flush();
+        // The token is single-use.
+        await post({ ...signals, battery: 1 });
+        t.app.clicks.flush();
+
+        const history = await t.get<ClickHistoryResponse>(
+            `/api/stats/clicks?${range()}&f=link:${link.id}&limit=1`
+        );
+        expect(history.clicks[0]).toMatchObject({
+            slug: 'dev',
+            language: 'en-CA',
+            timezone: 'America/Vancouver',
+            screen: '390x844@3',
+            orientation: 'portrait-primary',
+            battery: 42,
+            charging: false,
+            connection: '4g',
+            gpu: 'Apple GPU',
+            incognito: true,
+            adBlocker: false
+        });
+    });
+});

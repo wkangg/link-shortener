@@ -12,6 +12,7 @@ interface LinkRow {
     redirect_type: number;
     expires_at: number | null;
     archived: number;
+    track_device: number;
     created_at: number;
     updated_at: number;
 }
@@ -123,8 +124,8 @@ export class LinkRepo {
     create(input: CreateLinkInput): Link {
         const now = this.#now();
         const insert = this.#db.query<{ id: number }, (string | number | null)[]>(
-            `INSERT INTO links (slug, url, title, redirect_type, expires_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`
+            `INSERT INTO links (slug, url, title, redirect_type, expires_at, track_device, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
         );
         const custom = input.slug ?? null;
 
@@ -138,6 +139,7 @@ export class LinkRepo {
                         input.title ?? null,
                         input.redirectType ?? 302,
                         input.expiresAt ?? null,
+                        input.trackDevice ? 1 : 0,
                         now,
                         now
                     );
@@ -173,6 +175,7 @@ export class LinkRepo {
         if (patch.redirectType !== undefined) column('redirect_type', patch.redirectType);
         if (patch.expiresAt !== undefined) column('expires_at', patch.expiresAt);
         if (patch.archived !== undefined) column('archived', patch.archived ? 1 : 0);
+        if (patch.trackDevice !== undefined) column('track_device', patch.trackDevice ? 1 : 0);
         column('updated_at', this.#now());
 
         try {
@@ -263,6 +266,7 @@ function toLink(row: LinkRow, tags: string[]): Link {
         redirectType: row.redirect_type as RedirectType,
         expiresAt: row.expires_at,
         archived: row.archived === 1,
+        trackDevice: row.track_device === 1,
         tags,
         createdAt: row.created_at,
         updatedAt: row.updated_at
