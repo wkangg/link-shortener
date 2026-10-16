@@ -26,6 +26,15 @@ const base: RawClick = {
 };
 const opts = { shortHost: 's.example', salt: 'salt' };
 
+describe('click history fields', () => {
+    test('raw ip and user agent are stored, capped', () => {
+        expect(enrichClick(base, opts)).toMatchObject({ ip: '1.2.3.4', user_agent: CHROME_WIN });
+        const empty = enrichClick({ ...base, ip: '', ua: 'x'.repeat(2000) }, opts);
+        expect(empty.ip).toBeNull();
+        expect(empty.user_agent).toHaveLength(512);
+    });
+});
+
 describe('user agents', () => {
     test('browser, os and device', () => {
         expect(parseUserAgent(IPHONE)).toEqual({

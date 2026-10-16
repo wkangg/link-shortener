@@ -62,7 +62,8 @@ export const DIMENSIONS = [
     'utm_term',
     'utm_content',
     'qr',
-    'param'
+    'param',
+    'ip'
 ] as const;
 
 export type Dimension = (typeof DIMENSIONS)[number];
@@ -102,6 +103,34 @@ export interface TopRow {
 export interface TopResponse {
     dim: string;
     rows: TopRow[];
+}
+
+/** One click in the per-request history, newest first. */
+export interface ClickHistoryRow {
+    id: number;
+    /** Unix ms. */
+    ts: number;
+    linkId: number;
+    /** Null if the link was deleted. */
+    slug: string | null;
+    ip: string | null;
+    userAgent: string | null;
+    country: string | null;
+    region: string | null;
+    city: string | null;
+    referrer: string | null;
+    source: string;
+    qr: boolean;
+    device: string | null;
+    browser: string | null;
+    os: string | null;
+    bot: boolean;
+}
+
+export interface ClickHistoryResponse {
+    clicks: ClickHistoryRow[];
+    /** Pass as `before` to get the next (older) page; null when there are no more. */
+    next: string | null;
 }
 
 /** What the redirect handler records per click. Enriched later, off the hot path. */

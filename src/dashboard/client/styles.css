@@ -732,6 +732,87 @@ a.slug:hover {
     font-variant-numeric: tabular-nums;
 }
 
+/* ---------- click history ---------- */
+
+.history {
+    margin-top: 2.5rem;
+}
+
+.history-hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.history-scroll {
+    overflow-x: auto;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.history-table th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--muted);
+    padding: 0.35rem 0.75rem 0.35rem 0;
+    white-space: nowrap;
+}
+
+.history-table td {
+    padding: 0.45rem 0.75rem 0.45rem 0;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+}
+
+.history-table .mono {
+    font-family: var(--mono);
+}
+
+.history-table .nowrap {
+    white-space: nowrap;
+}
+
+.history-ua {
+    min-width: 14rem;
+    max-width: 28rem;
+}
+
+.history-sub {
+    display: block;
+    max-width: 28rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.cell-filter {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.cell-filter:hover {
+    text-decoration: underline;
+}
+
+.badge {
+    margin-left: 0.4rem;
+    padding: 0 0.35rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: var(--muted);
+}
+
 /* ---------- dialogs ---------- */
 
 .dialog {

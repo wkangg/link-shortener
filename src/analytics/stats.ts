@@ -1,6 +1,8 @@
 import type { Database } from 'bun:sqlite';
 
 import type {
+    ClickHistoryResponse,
+    ClickHistoryRow,
     Dimension,
     StatsQuery,
     SummaryResponse,
@@ -24,7 +26,8 @@ const COLUMNS = {
     utm_medium: 'c.utm_medium',
     utm_campaign: 'c.utm_campaign',
     utm_term: 'c.utm_term',
-    utm_content: 'c.utm_content'
+    utm_content: 'c.utm_content',
+    ip: 'c.ip'
 } as const satisfies Partial<Record<Dimension, string>>;
 
 type ColumnDimension = keyof typeof COLUMNS;
@@ -232,6 +235,45 @@ export class Stats {
         };
     }
 
+    /**
+     * Individual clicks matching the query, newest first, `limit` per page.
+     * Keyset-paged on (ts, id): pass the previous page's `next` as `before`.
+     */
+    history(
+        query: StatsQuery,
+        opts: { limit?: number; before?: string } = {}
+    ): ClickHistoryResponse {
+        const where = whereClause(query);
+        const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 50), 1), 1000);
+        const params: Param[] = [...where.params];
+        let sql = where.sql;
+        if (opts.before !== undefined) {
+            const cursor = /^(\d+)_(\d+)$/.exec(opts.before);
+            if (!cursor)
+                throw new BadQueryError('`before` must be a `next` value from a previous page');
+            const ts = Number(cursor[1]);
+            const id = Number(cursor[2]);
+            sql += ' AND (c.ts < ? OR (c.ts = ? AND c.id < ?))';
+            params.push(ts, ts, id);
+        }
+        const rows = this.#db
+            .query<Omit<ClickHistoryRow, 'qr' | 'bot'> & { qr: number; bot: number }, Param[]>(
+                `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
+                        c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
+                        c.device, c.browser, c.os, c.is_bot AS bot
+                 FROM clicks c LEFT JOIN links l ON l.id = c.link_id
+                 WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ?`
+            )
+            .all(...params, limit + 1);
+        const more = rows.length > limit;
+        const page = more ? rows.slice(0, limit) : rows;
+        const last = page.at(-1);
+        return {
+            clicks: page.map(r => ({ ...r, qr: r.qr === 1, bot: r.bot === 1 })),
+            next: more && last ? `${last.ts}_${last.id}` : null
+        };
+    }
+
     /** Raw clicks matching the query as CSV, newest first. */
     csv(query: StatsQuery, maxRows = 100_000): string {
         const where = whereClause(query);
@@ -253,13 +295,15 @@ export class Stats {
             'utm_campaign',
             'utm_term',
             'utm_content',
-            'query'
+            'query',
+            'ip',
+            'user_agent'
         ];
         const rows = this.#db
             .query<Record<string, string | number | null>, Param[]>(
                 `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
                         c.device, c.browser, c.os, c.is_bot, c.utm_source, c.utm_medium,
-                        c.utm_campaign, c.utm_term, c.utm_content, c.query
+                        c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${where.sql} ORDER BY c.ts DESC LIMIT ?`
             )

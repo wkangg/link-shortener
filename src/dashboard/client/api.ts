@@ -1,5 +1,6 @@
 import type {
     ApiError,
+    ClickHistoryResponse,
     ConfigResponse,
     Link,
     LinkListResponse,
@@ -57,7 +58,9 @@ export const api = {
     summary: (params: URLSearchParams) => getJson<SummaryResponse>(`/api/stats/summary?${params}`),
     timeseries: (params: URLSearchParams) =>
         getJson<TimeseriesResponse>(`/api/stats/timeseries?${params}`),
-    top: (params: URLSearchParams) => getJson<TopResponse>(`/api/stats/top?${params}`)
+    top: (params: URLSearchParams) => getJson<TopResponse>(`/api/stats/top?${params}`),
+    clicks: (params: URLSearchParams) =>
+        getJson<ClickHistoryResponse>(`/api/stats/clicks?${params}`)
 };
 
 /** Minutes to add to UTC to get local time. */

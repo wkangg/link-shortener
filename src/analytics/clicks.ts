@@ -23,7 +23,9 @@ const COLUMNS = [
     'utm_campaign',
     'utm_term',
     'utm_content',
-    'query'
+    'query',
+    'ip',
+    'user_agent'
 ] as const satisfies readonly (keyof ClickRow)[];
 
 export interface ClickBufferOptions extends EnrichOptions {

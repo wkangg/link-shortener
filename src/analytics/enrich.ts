@@ -24,6 +24,8 @@ export interface ClickRow {
     utm_term: string | null;
     utm_content: string | null;
     query: string | null;
+    ip: string | null;
+    user_agent: string | null;
 }
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
@@ -33,6 +35,8 @@ const UTM_SET = new Set<string>(UTM_KEYS);
 const MAX_PARAMS = 20;
 const MAX_VALUE = 200;
 const MAX_REFERRER = 500;
+const MAX_IP = 64;
+const MAX_USER_AGENT = 512;
 
 export interface EnrichOptions {
     /** Host of the short domain; clicks referred from it are treated as Direct. */
@@ -67,7 +71,9 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         is_bot: ua.isBot ? 1 : 0,
         visitor_hash: visitorHash(click, opts.salt),
         ...utm,
-        query: otherParams(params)
+        query: otherParams(params),
+        ip: clean(click.ip.slice(0, MAX_IP)),
+        user_agent: clean(click.ua.slice(0, MAX_USER_AGENT))
     };
 }
 

@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 
 import type {
     ApiError,
+    ClickHistoryResponse,
     Link,
     LinkListResponse,
     SummaryResponse,
@@ -108,6 +109,26 @@ describe('links API + redirects + analytics, end to end', () => {
         });
         expect(edited.status).toBe(200);
         expect(await location('/e2e')).toBe('https://example.org/');
+
+        const history = await t.get<ClickHistoryResponse>(
+            `/api/stats/clicks?${range()}&bots=1&limit=2`
+        );
+        expect(history.clicks).toHaveLength(2);
+        expect(history.clicks[0]).toMatchObject({
+            slug: 'e2e',
+            userAgent: 'curl/8.0',
+            bot: true
+        });
+        expect(history.clicks[1]).toMatchObject({ ip: '8.8.8.8', userAgent: SAFARI, qr: true });
+        expect(history.next).toBe(`${history.clicks[1]?.ts}_${history.clicks[1]?.id}`);
+        const older = await t.get<ClickHistoryResponse>(
+            `/api/stats/clicks?${range()}&bots=1&before=${history.next ?? ''}`
+        );
+        expect(older.clicks.map(c => c.ip)).toEqual(['9.9.9.9']);
+        expect(older.next).toBeNull();
+        const byIp = await t.get<ClickHistoryResponse>(`/api/stats/clicks?${range()}&f=ip:9.9.9.9`);
+        expect(byIp.clicks).toHaveLength(1);
+        expect(await t.status(`/api/stats/clicks?${range()}&before=x`)).toBe(400);
 
         const csv = await t.api(`/api/export.csv?${range()}`);
         expect(csv.headers.get('content-type')).toContain('text/csv');

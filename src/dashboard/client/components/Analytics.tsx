@@ -5,6 +5,7 @@ import { api, localTz } from '../api.ts';
 import { countryLabel, formatCount, formatDelta } from '../format.ts';
 import { useApi } from '../useApi.ts';
 import { Chart } from './Chart.tsx';
+import { ClickHistory } from './ClickHistory.tsx';
 import { type Tab, TopList } from './TopList.tsx';
 
 const DAY = 86_400_000;
@@ -42,7 +43,8 @@ const DIM_NAMES: Record<string, string> = {
     utm_campaign: 'utm_campaign',
     utm_term: 'utm_term',
     utm_content: 'utm_content',
-    qr: 'Opened via'
+    qr: 'Opened via',
+    ip: 'IP'
 };
 
 const PANELS: { title: string; tabs: Tab[]; drill?: boolean; linksOnly?: boolean }[] = [
@@ -219,6 +221,13 @@ export function Analytics({ linkId }: AnalyticsProps) {
                     />
                 ))}
             </div>
+
+            <ClickHistory
+                params={params}
+                refreshKey={String(tick)}
+                showLink={linkId === undefined}
+                onSelect={addFilter}
+            />
         </div>
     );
 }

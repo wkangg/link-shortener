@@ -198,6 +198,20 @@ export function apiRoutes(deps: ApiDeps) {
             })
         },
 
+        '/api/stats/clicks': {
+            GET: guard(req => {
+                const url = new URL(req.url);
+                const p = url.searchParams;
+                const before = p.get('before') ?? undefined;
+                return json(
+                    stats.history(parseStatsQuery(url), {
+                        limit: numberParam(p, 'limit', 50),
+                        ...(before !== undefined && { before })
+                    })
+                );
+            })
+        },
+
         '/api/export.csv': {
             GET: guard(req => {
                 const body = stats.csv(statsQueryOf(req));
