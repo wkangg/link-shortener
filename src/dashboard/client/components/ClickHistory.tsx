@@ -1,10 +1,11 @@
 import { Fragment, useState } from 'react';
 
-import type { ClickHistoryRow, TopRow } from '../../../shared/types.ts';
+import type { ClickHistoryRow } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { useConfig } from '../config.tsx';
 import { countryLabel, formatCount, formatDateTime } from '../format.ts';
 import { useApi } from '../useApi.ts';
+import { SearchBox } from './SearchBox.tsx';
 
 /** "All" still pages, just in very large pages, so a huge history can't freeze the tab. */
 const ALL = 10_000;
@@ -36,13 +37,28 @@ function saveSize(size: number): void {
     }
 }
 
+/** One of the dashboard's include toggles, mirrored here so it's reachable without scrolling up. */
+export interface Toggle {
+    label: string;
+    on: boolean;
+    set: (on: boolean) => void;
+}
+
 interface ClickHistoryProps {
     /** Stats query params (range, link, filters, bots). */
     params: URLSearchParams;
     refreshKey: string;
     /** Hide the link column on a single link's page. */
     showLink: boolean;
-    onSelect: (dim: string, row: TopRow) => void;
+    toggles: Toggle[];
+    /** The search box text, and the search applied to the whole page. */
+    text: string;
+    onText: (text: string) => void;
+    search: string;
+    /** Apply a search now. */
+    onSearch: (search: string) => void;
+    /** Add a term (e.g. `ip:=1.2.3.4`) to the search. */
+    onAddTerm: (term: string) => void;
 }
 
 function location(c: ClickHistoryRow): string {
@@ -104,7 +120,27 @@ function breakableIp(ip: string) {
     });
 }
 
-const asRow = (value: string, label: string): TopRow => ({ value, label, clicks: 0, visitors: 0 });
+/** Search help: what to type, and what it matches. Lists of field names aren't runnable. */
+const SEARCH_HELP: [string, string, runnable?: false][] = [
+    ['firefox', 'any field contains “firefox”'],
+    ['"new york"', 'a phrase'],
+    ['ip:203.0.113 isp:comcast', 'a field contains a value'],
+    ['ip:=203.0.113.5', 'a field is exactly a value (clicking a cell adds one)'],
+    ['os: browser: device: model: ua: bot:', 'technology', false],
+    ['country: region: city: host: lang: tz:', 'location', false],
+    ['source: referrer: link: utm: query:', 'traffic', false],
+    ['gpu: screen: platform: connection: fp:', 'hardware', false],
+    ['ram:>=8 battery:<20 touch:0 abuse:>50', 'numbers (=, >, >=, <, <=)'],
+    ['is:bot is:datacenter is:reported', 'shows clicks the toggles above hide'],
+    ['is:private is:adblock is:qr is:mobile', 'other flags'],
+    ['has:gpu', 'the field is set'],
+    ['-os:windows -is:bot', 'a leading - excludes']
+];
+
+/** `field:=value`, quoted when the value has spaces. */
+function exactTerm(field: string, value: string): string {
+    return /[\s"]/.test(value) ? `${field}:="${value.replaceAll('"', '')}"` : `${field}:=${value}`;
+}
 
 interface IpCellProps {
     ip: string;
@@ -112,11 +148,11 @@ interface IpCellProps {
     /** AbuseIPDB abuse confidence, or null when not checked. */
     abuseScore: number | null;
     isp: string | null;
-    onSelect: (dim: string, row: TopRow) => void;
+    onAddTerm: (term: string) => void;
 }
 
 /** An IP address: a filter button, an external ISP lookup, and a datacenter badge. */
-function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
+function IpCell({ ip, isDatacenter, abuseScore, isp, onAddTerm }: IpCellProps) {
     const { abuseMinScore } = useConfig();
     const reported = abuseScore !== null && abuseScore > 0;
     return (
@@ -124,8 +160,8 @@ function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
             <button
                 type="button"
                 className="cell-filter"
-                title="Filter to this IP address"
-                onClick={() => onSelect('ip', asRow(ip, ip))}
+                title="Search for this IP address"
+                onClick={() => onAddTerm(exactTerm('ip', ip))}
             >
                 {breakableIp(ip)}
             </button>
@@ -166,16 +202,35 @@ function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
                 </a>
             )}
             {isp && (
-                <span className="history-sub" title={isp}>
-                    {isp}
+                <span className="history-sub">
+                    <button
+                        type="button"
+                        className="cell-filter"
+                        title={`Search for ${isp}`}
+                        onClick={() => onAddTerm(exactTerm('isp', isp))}
+                    >
+                        {isp}
+                    </button>
                 </span>
             )}
         </span>
     );
 }
 
-export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHistoryProps) {
-    // Back to the first page whenever the range, filters or bots toggle change.
+export function ClickHistory({
+    params,
+    refreshKey,
+    showLink,
+    toggles,
+    text,
+    onText,
+    search,
+    onSearch,
+    onAddTerm
+}: ClickHistoryProps) {
+    const [showHelp, setShowHelp] = useState(false);
+
+    // Back to the first page whenever the range, filters, toggles or search change.
     const base = String(params);
     const [paging, setPaging] = useState({ base, page: 0 });
     const [size, setSize] = useState(savedSize);
@@ -211,8 +266,72 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                 <h3>Click history</h3>
                 <span className="history-hint">Every request, newest first</span>
             </header>
-            {error && <p className="panel-empty">Couldn’t load: {error.message}</p>}
-            {!error && data && total === 0 && <p className="panel-empty">Nothing yet</p>}
+            <form
+                className="history-search"
+                role="search"
+                onSubmit={e => {
+                    e.preventDefault();
+                    onSearch(text);
+                }}
+            >
+                <SearchBox value={text} onChange={onText} onCommit={onSearch} params={params} />
+                <button
+                    type="button"
+                    className="text-button"
+                    aria-expanded={showHelp}
+                    onClick={() => setShowHelp(v => !v)}
+                >
+                    Syntax
+                </button>
+                <ul className="chips" aria-label="Include">
+                    {toggles.map(t => (
+                        <li key={t.label}>
+                            <button
+                                type="button"
+                                className="chip"
+                                aria-pressed={t.on}
+                                onClick={() => t.set(!t.on)}
+                            >
+                                {t.label}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </form>
+            {showHelp && (
+                <dl className="search-help">
+                    {SEARCH_HELP.map(([example, meaning, runnable]) => (
+                        <Fragment key={example}>
+                            <dt>
+                                {runnable === false ? (
+                                    <span className="mono">{example}</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="cell-filter mono"
+                                        title="Use this example"
+                                        onClick={() => {
+                                            onText(example);
+                                            onSearch(example);
+                                        }}
+                                    >
+                                        {example}
+                                    </button>
+                                )}
+                            </dt>
+                            <dd>{meaning}</dd>
+                        </Fragment>
+                    ))}
+                </dl>
+            )}
+            {error && (
+                <p className="panel-empty">
+                    {search ? error.message : `Couldn’t load: ${error.message}`}
+                </p>
+            )}
+            {!error && data && total === 0 && (
+                <p className="panel-empty">{search ? 'No clicks match' : 'Nothing yet'}</p>
+            )}
             {clicks.length > 0 && (
                 <div className="history-scroll">
                     <table className="history-table">
@@ -241,12 +360,11 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                                 <button
                                                     type="button"
                                                     className="cell-filter"
-                                                    title="Filter to this link"
+                                                    title="Search for this link"
                                                     onClick={() =>
-                                                        onSelect(
-                                                            'link',
-                                                            asRow(
-                                                                String(c.linkId),
+                                                        onAddTerm(
+                                                            exactTerm(
+                                                                'link',
                                                                 c.slug === '' ? '/' : (c.slug ?? '')
                                                             )
                                                         )
@@ -266,7 +384,7 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                                 isDatacenter={c.isDatacenter}
                                                 abuseScore={c.abuseScore}
                                                 isp={c.isp}
-                                                onSelect={onSelect}
+                                                onAddTerm={onAddTerm}
                                             />
                                         )}
                                     </td>
@@ -311,14 +429,10 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                                 <button
                                                     type="button"
                                                     className="cell-filter mono"
-                                                    title="Filter to this device fingerprint"
+                                                    title="Search for this device fingerprint"
                                                     onClick={() =>
-                                                        onSelect(
-                                                            'fingerprint',
-                                                            asRow(
-                                                                c.fingerprint ?? '',
-                                                                c.fingerprint ?? ''
-                                                            )
+                                                        onAddTerm(
+                                                            exactTerm('fp', c.fingerprint ?? '')
                                                         )
                                                     }
                                                 >

@@ -5,6 +5,7 @@ import type {
     Link,
     LinkListResponse,
     RedirectType,
+    SuggestResponse,
     SummaryResponse,
     TimeseriesResponse,
     TopResponse
@@ -60,6 +61,7 @@ export const api = {
     timeseries: (params: URLSearchParams) =>
         getJson<TimeseriesResponse>(`/api/stats/timeseries?${params}`),
     top: (params: URLSearchParams) => getJson<TopResponse>(`/api/stats/top?${params}`),
+    suggest: (params: URLSearchParams) => getJson<SuggestResponse>(`/api/stats/suggest?${params}`),
     clicks: (params: URLSearchParams) =>
         getJson<ClickHistoryResponse>(`/api/stats/clicks?${params}`)
 };
