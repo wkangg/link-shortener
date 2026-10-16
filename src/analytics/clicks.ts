@@ -65,6 +65,11 @@ const SIGNALS_WINDOW_MS = 10 * 60_000;
 const MAX_LOOKUPS = 32;
 const MAX_HOSTNAMES = 5000;
 
+/** Fills reputation columns on a click after insert (see analytics/reputation.ts). */
+export interface ClickAnnotator {
+    annotate(id: number, ip: string): void;
+}
+
 /** Reverse DNS: the IP's hostname, or null. */
 export type ReverseDns = (ip: string) => Promise<string | null>;
 
@@ -80,6 +85,8 @@ export interface ClickBufferOptions extends EnrichOptions {
     maxBuffered?: number;
     /** Fills `hostname` after insert. Off when null. */
     reverseDns?: ReverseDns | null;
+    /** Fills `abuse_score` and `isp` after insert. Off when null. */
+    reputation?: ClickAnnotator | null;
 }
 
 /**
@@ -105,7 +112,13 @@ export class ClickBuffer implements ClickSink {
 
     constructor(db: Database, opts: ClickBufferOptions) {
         this.#db = db;
-        this.#opts = { intervalMs: 1000, maxBuffered: 100_000, reverseDns: null, ...opts };
+        this.#opts = {
+            intervalMs: 1000,
+            maxBuffered: 100_000,
+            reverseDns: null,
+            reputation: null,
+            ...opts
+        };
         this.#insert = db.query<{ id: number }, (string | number | null)[]>(
             `INSERT INTO clicks (${COLUMNS.join(', ')}) VALUES (${COLUMNS.map(() => '?').join(', ')}) RETURNING id`
         );
@@ -174,7 +187,10 @@ export class ClickBuffer implements ClickSink {
                 for (const click of batch) {
                     const row = enrichClick(click, this.#opts);
                     const id = this.#insert.get(...COLUMNS.map(column => row[column]))?.id;
-                    if (id !== undefined && row.ip) inserted.push({ id, ip: row.ip });
+                    if (id !== undefined && row.ip) {
+                        inserted.push({ id, ip: row.ip });
+                        this.#opts.reputation?.annotate(id, row.ip);
+                    }
                 }
                 // After the inserts: a click and its signals can land in the same batch.
                 for (const s of signals) {

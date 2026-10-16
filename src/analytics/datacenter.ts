@@ -1,3 +1,5 @@
+import type { Database } from 'bun:sqlite';
+
 // Flags clicks whose IP reverse-resolves to a known hosting/datacenter provider.
 // Traffic from these ranges is overwhelmingly bots, scrapers and link scanners
 // wearing a browser-like user agent, so the dashboard hides it by default, the
@@ -65,4 +67,25 @@ const SUFFIX_RE = new RegExp(
 export function isDatacenterHostname(hostname?: string | null): boolean {
     if (!hostname) return false;
     return SUFFIX_RE.test(hostname.replace(/\.$/, ''));
+}
+
+/**
+ * Flags clicks whose stored hostname is a datacenter's but that aren't flagged yet:
+ * clicks recorded before this check existed, or before a provider was added to the
+ * list. Runs at startup. Returns the number of clicks flagged.
+ */
+export function backfillDatacenterHostnames(db: Database): number {
+    const hostnames = db
+        .query<{ hostname: string }, []>(
+            'SELECT DISTINCT hostname FROM clicks WHERE hostname IS NOT NULL AND is_datacenter = 0'
+        )
+        .all()
+        .map(row => row.hostname)
+        .filter(hostname => isDatacenterHostname(hostname));
+    const flag = db.query('UPDATE clicks SET is_datacenter = 1 WHERE hostname = ?');
+    let flagged = 0;
+    db.transaction(() => {
+        for (const hostname of hostnames) flagged += flag.run(hostname).changes;
+    })();
+    return flagged;
 }

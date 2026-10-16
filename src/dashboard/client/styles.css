@@ -956,10 +956,28 @@ a.slug:hover {
     gap: 0.1rem 0.35rem;
 }
 
+/* The ISP goes on its own line under the address. */
+.ip-cell .history-sub {
+    flex-basis: 100%;
+}
+
+.ip-cell .badge {
+    margin-left: 0;
+}
+
 .ip-lookup {
     color: var(--muted);
     text-decoration: none;
     font-size: 0.8rem;
+}
+
+.badge-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+a.badge {
+    text-decoration: none;
 }
 
 .ip-lookup:hover {

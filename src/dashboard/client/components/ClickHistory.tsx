@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 
 import type { ClickHistoryRow, TopRow } from '../../../shared/types.ts';
 import { api } from '../api.ts';
+import { useConfig } from '../config.tsx';
 import { countryLabel, formatCount, formatDateTime } from '../format.ts';
 import { useApi } from '../useApi.ts';
 
@@ -82,6 +83,11 @@ function ipLookupUrl(ip: string): string {
     return `https://ipinfo.io/${encodeURIComponent(ip)}`;
 }
 
+/** AbuseIPDB's report page for an address. */
+function abuseReportUrl(ip: string): string {
+    return `https://www.abuseipdb.com/check/${encodeURIComponent(ip)}`;
+}
+
 /** IPv6 addresses may wrap after a colon; IPv4 has no break points and stays on one line. */
 function breakableIp(ip: string) {
     // Each group plus its colon, keyed by where it ends in the address.
@@ -103,11 +109,16 @@ const asRow = (value: string, label: string): TopRow => ({ value, label, clicks:
 interface IpCellProps {
     ip: string;
     isDatacenter: boolean;
+    /** AbuseIPDB abuse confidence, or null when not checked. */
+    abuseScore: number | null;
+    isp: string | null;
     onSelect: (dim: string, row: TopRow) => void;
 }
 
 /** An IP address: a filter button, an external ISP lookup, and a datacenter badge. */
-function IpCell({ ip, isDatacenter, onSelect }: IpCellProps) {
+function IpCell({ ip, isDatacenter, abuseScore, isp, onSelect }: IpCellProps) {
+    const { abuseMinScore } = useConfig();
+    const reported = abuseScore !== null && abuseScore > 0;
     return (
         <span className="ip-cell">
             <button
@@ -128,9 +139,35 @@ function IpCell({ ip, isDatacenter, onSelect }: IpCellProps) {
             >
                 ↗
             </a>
+            <a
+                className="ip-lookup"
+                href={abuseReportUrl(ip)}
+                target="_blank"
+                rel="noreferrer noopener"
+                title="Check abuse reports (AbuseIPDB)"
+                aria-label="Check abuse reports for this IP address"
+            >
+                ⚑
+            </a>
             {isDatacenter && (
                 <span className="badge" title="Hosting / datacenter IP">
                     datacenter
+                </span>
+            )}
+            {reported && (
+                <a
+                    className={abuseScore >= abuseMinScore ? 'badge badge-danger' : 'badge'}
+                    href={abuseReportUrl(ip)}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    title={`AbuseIPDB abuse confidence ${abuseScore}%`}
+                >
+                    reported {abuseScore}%
+                </a>
+            )}
+            {isp && (
+                <span className="history-sub" title={isp}>
+                    {isp}
                 </span>
             )}
         </span>
@@ -227,6 +264,8 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                             <IpCell
                                                 ip={c.ip}
                                                 isDatacenter={c.isDatacenter}
+                                                abuseScore={c.abuseScore}
+                                                isp={c.isp}
                                                 onSelect={onSelect}
                                             />
                                         )}
