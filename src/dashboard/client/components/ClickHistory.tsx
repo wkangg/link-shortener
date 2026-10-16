@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import type { ClickHistoryRow, TopRow } from '../../../shared/types.ts';
 import { api } from '../api.ts';
@@ -75,6 +75,22 @@ function hardware(c: ClickHistoryRow): string {
 function coordinates(c: ClickHistoryRow): string {
     if (c.latitude === null || c.longitude === null) return '';
     return `${c.latitude.toFixed(2)}, ${c.longitude.toFixed(2)}`;
+}
+
+/** IPv6 addresses may wrap after a colon; IPv4 has no break points and stays on one line. */
+function breakableIp(ip: string) {
+    // Each group plus its colon, keyed by where it ends in the address.
+    const groups = ip.match(/[^:]*:?/g)?.filter(Boolean) ?? [ip];
+    let end = 0;
+    return groups.map(group => {
+        end += group.length;
+        return (
+            <Fragment key={end}>
+                {group}
+                {group.endsWith(':') && <wbr />}
+            </Fragment>
+        );
+    });
 }
 
 const asRow = (value: string, label: string): TopRow => ({ value, label, clicks: 0, visitors: 0 });
@@ -162,7 +178,7 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                             )}
                                         </td>
                                     )}
-                                    <td className="mono nowrap">
+                                    <td className="mono">
                                         {c.ip === null ? (
                                             <span className="muted">–</span>
                                         ) : (
@@ -174,7 +190,7 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                                     onSelect('ip', asRow(c.ip ?? '', c.ip ?? ''))
                                                 }
                                             >
-                                                {c.ip}
+                                                {breakableIp(c.ip)}
                                             </button>
                                         )}
                                     </td>
