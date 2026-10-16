@@ -70,6 +70,7 @@ describe('search', () => {
         expect(ips('comcast')).toEqual(['203.0.113.5']);
         expect(ips('CHROME')).toEqual([]); // the Chrome clicks are datacenter / reported
         expect(ips('"new york"')).toEqual(['203.0.113.5']);
+        expect(ips('launc')).toEqual(['198.51.100.7', '203.0.113.5']);
         expect(ips('2001:db8', { dc: true })).toEqual(['2001:db8::1']);
     });
 

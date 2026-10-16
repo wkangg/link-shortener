@@ -205,7 +205,14 @@ function termCondition(
     abuseMinScore: number,
     overrides: Set<SearchOverride>
 ): Condition {
-    if (term.field === null) return containsAny(ALL_TEXT, term.value);
+    if (term.field === null) {
+        // Every text column, plus the link's slug.
+        const text = containsAny(ALL_TEXT, term.value);
+        return {
+            sql: `(${text.sql} OR ${SLUG_LIKE})`,
+            params: [...text.params, likePattern(term.value)]
+        };
+    }
     const name = ALIASES[term.field] ?? term.field;
     const value = ALIASES[term.value.toLowerCase()] ?? term.value.toLowerCase();
 
