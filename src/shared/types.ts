@@ -131,6 +131,8 @@ export interface ClickHistoryResponse {
     clicks: ClickHistoryRow[];
     /** Pass as `before` to get the next (older) page; null when there are no more. */
     next: string | null;
+    /** Clicks matching the query in total (all pages). */
+    total: number;
 }
 
 /** What the redirect handler records per click. Enriched later, off the hot path. */

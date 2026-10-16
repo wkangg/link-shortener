@@ -206,6 +206,7 @@ export function apiRoutes(deps: ApiDeps) {
                 return json(
                     stats.history(parseStatsQuery(url), {
                         limit: numberParam(p, 'limit', 50),
+                        offset: numberParam(p, 'offset', 0),
                         ...(before !== undefined && { before })
                     })
                 );

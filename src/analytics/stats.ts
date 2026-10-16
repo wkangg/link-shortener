@@ -237,14 +237,23 @@ export class Stats {
 
     /**
      * Individual clicks matching the query, newest first, `limit` per page.
-     * Keyset-paged on (ts, id): pass the previous page's `next` as `before`.
+     * Page with `offset` (page numbers, used by the dashboard), or keyset-page on
+     * (ts, id) by passing the previous page's `next` as `before` (stable for scripts).
+     * `total` is the number of clicks matching the query, ignoring `before`/`offset`.
      */
     history(
         query: StatsQuery,
-        opts: { limit?: number; before?: string } = {}
+        opts: { limit?: number; before?: string; offset?: number } = {}
     ): ClickHistoryResponse {
         const where = whereClause(query);
-        const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 50), 1), 1000);
+        const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 50), 1), 10_000);
+        const offset = Math.max(Math.trunc(opts.offset ?? 0), 0);
+        const total =
+            this.#db
+                .query<{ n: number }, Param[]>(
+                    `SELECT COUNT(*) AS n FROM clicks c WHERE ${where.sql}`
+                )
+                .get(...where.params)?.n ?? 0;
         const params: Param[] = [...where.params];
         let sql = where.sql;
         if (opts.before !== undefined) {
@@ -262,15 +271,16 @@ export class Stats {
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
                         c.device, c.browser, c.os, c.is_bot AS bot
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
-                 WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ?`
+                 WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
-            .all(...params, limit + 1);
+            .all(...params, limit + 1, offset);
         const more = rows.length > limit;
         const page = more ? rows.slice(0, limit) : rows;
         const last = page.at(-1);
         return {
             clicks: page.map(r => ({ ...r, qr: r.qr === 1, bot: r.bot === 1 })),
-            next: more && last ? `${last.ts}_${last.id}` : null
+            next: more && last ? `${last.ts}_${last.id}` : null,
+            total
         };
     }
 

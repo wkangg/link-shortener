@@ -127,6 +127,12 @@ describe('links API + redirects + analytics, end to end', () => {
         );
         expect(older.clicks.map(c => c.ip)).toEqual(['9.9.9.9']);
         expect(older.next).toBeNull();
+        expect(history.total).toBe(3);
+        const page2 = await t.get<ClickHistoryResponse>(
+            `/api/stats/clicks?${range()}&bots=1&limit=2&offset=2`
+        );
+        expect(page2.clicks.map(c => c.ip)).toEqual(['9.9.9.9']);
+        expect(page2).toMatchObject({ next: null, total: 3 });
         const byIp = await t.get<ClickHistoryResponse>(`/api/stats/clicks?${range()}&f=ip:9.9.9.9`);
         expect(byIp.clicks).toHaveLength(1);
         expect(await t.status(`/api/stats/clicks?${range()}&before=x`)).toBe(400);

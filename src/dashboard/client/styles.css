@@ -790,6 +790,51 @@ a.slug:hover {
     font-size: 0.75rem;
 }
 
+/* Pager under the click history; wraps under the range on narrow screens. */
+.pager {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.pager-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+}
+
+.pager-size {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.pager-size select {
+    font-size: 0.85rem;
+    padding: 0.15rem 0.3rem;
+}
+
+.pager-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.pager-page {
+    padding: 0 0.4rem;
+    white-space: nowrap;
+}
+
+.pager-range {
+    font-variant-numeric: tabular-nums;
+}
+
 /* Full user agent, wrapped (UAs have few spaces, so break anywhere). */
 .history-ua .history-sub {
     white-space: normal;
