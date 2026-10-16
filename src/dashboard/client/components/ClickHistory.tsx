@@ -122,9 +122,7 @@ export function ClickHistory({ params, refreshKey, showLink, onSelect }: ClickHi
                                         {technology(c)}
                                         {c.bot && <span className="badge">bot</span>}
                                         {c.userAgent && (
-                                            <span className="history-sub mono" title={c.userAgent}>
-                                                {c.userAgent}
-                                            </span>
+                                            <span className="history-sub mono">{c.userAgent}</span>
                                         )}
                                     </td>
                                 </tr>

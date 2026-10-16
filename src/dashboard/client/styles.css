@@ -790,6 +790,14 @@ a.slug:hover {
     font-size: 0.75rem;
 }
 
+/* Full user agent, wrapped (UAs have few spaces, so break anywhere). */
+.history-ua .history-sub {
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    margin-top: 0.15rem;
+}
+
 .cell-filter {
     border: 0;
     background: none;
