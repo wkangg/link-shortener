@@ -23,6 +23,7 @@
     },
     "dependencies": {
         "bowser": "^2.14.1",
+        "country-flag-emoji-polyfill": "^0.1.10",
         "isbot": "^5.2.2",
         "jose": "^6.2.12",
         "react": "^19.2.0",
