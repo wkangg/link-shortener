@@ -335,8 +335,9 @@ const LINK_COLUMNS: Record<string, string> = {
 
 /**
  * The links search: words match the slug, destination or title;
- * `slug:`, `destination:` (or `url:`) and `title:` match one of them (`:=` for
- * the whole value); `has:webhook`, `webhook:<name>` and `is:tracked` filter. Terms are AND-ed; a
+ * `slug:`, `destination:` (or `url:`), `title:` and `tag:` match one of them
+ * (`:=` for the whole value); `has:webhook`, `has:tag`, `webhook:<name>` and
+ * `is:tracked` filter. Terms are AND-ed; a
  * leading `-` negates one; "quoted phrases" stay together.
  */
 export function compileLinkSearch(q: string): { where: string[]; params: string[] } {
@@ -350,11 +351,23 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
         let sql: string;
         switch (term.field ?? '') {
             case 'has':
-                if (!/^webhooks?$/i.test(value)) {
-                    throw new BadQueryError(`Unknown has:${value}. Try has:webhook.`);
+                if (/^webhooks?$/i.test(value)) sql = `EXISTS (${LINK_WEBHOOKS})`;
+                else if (/^tags?$/i.test(value)) {
+                    sql = 'EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id)';
+                } else {
+                    throw new BadQueryError(`Unknown has:${value}. Try has:webhook or has:tag.`);
                 }
-                sql = `EXISTS (${LINK_WEBHOOKS})`;
                 break;
+            case 'tag': {
+                // Tags are stored lowercase, without the #.
+                const tag = value.replace(/^#/, '').toLowerCase();
+                const exact = term.value.startsWith('=');
+                sql = `EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id AND t.tag ${
+                    exact ? '= ?' : LIKE
+                })`;
+                params.push(exact ? tag : likePattern(tag));
+                break;
+            }
             case 'is':
                 if (value.toLowerCase() !== 'tracked') {
                     throw new BadQueryError(`Unknown is:${value}. Try is:tracked.`);

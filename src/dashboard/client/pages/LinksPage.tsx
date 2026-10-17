@@ -124,7 +124,7 @@ export function LinksPage() {
     );
 }
 
-const LINK_VALUE_FIELDS = new Set(['slug', 'destination', 'url', 'title', 'webhook']);
+const LINK_VALUE_FIELDS = new Set(['slug', 'destination', 'url', 'title', 'tag', 'webhook']);
 
 /** Slugs, destinations or titles of links matching what's typed, each with a reminder of the link. */
 async function linkValues(field: string, text: string) {
@@ -144,13 +144,22 @@ async function linkValues(field: string, text: string) {
 /** The links search: slug, destination and title, plus webhook and tracking filters. */
 const LINK_SYNTAX: SearchSyntax = {
     label: 'Search links',
-    placeholder: 'Search links: slug, destination, title, webhook:, is:tracked, …',
+    placeholder: 'Search links: slug, destination, title, tag:, webhook:, is:tracked, …',
     fields: LINK_SEARCH_FIELDS,
     flags: LINK_SEARCH_FLAGS,
     has: LINK_SEARCH_HAS,
     hasValues: field => LINK_VALUE_FIELDS.has(field),
     loadValues: async (field, text) => {
         const typed = text.toLowerCase();
+        if (field === 'tag') {
+            const tags = await api.tags();
+            return tags
+                .filter(t => t.tag.includes(typed.replace(/^#/, '')))
+                .map(t => ({
+                    value: t.tag,
+                    hint: `${t.count} ${t.count === 1 ? 'link' : 'links'}`
+                }));
+        }
         if (field !== 'webhook') return linkValues(field, text);
         // Webhook names, as the rows and the search know them.
         const endpoints = await api.webhooks();

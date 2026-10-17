@@ -321,6 +321,11 @@ describe('webhook endpoints API', () => {
         expect(await slugs('title:"spring launch"')).toEqual(['sb']);
         // Links without a title count as not matching, so -title: keeps them.
         expect(await slugs('-title:spring')).toEqual(['sa', 'sc']);
+        expect(await slugs('tag:launch')).toEqual(['sb']);
+        expect(await slugs('tag:#LAUN')).toEqual(['sb']);
+        expect(await slugs('tag:=laun')).toEqual([]);
+        expect(await slugs('has:tag')).toEqual(['sb']);
+        expect(await slugs('-has:tag')).toEqual(['sa', 'sc']);
         // A field match isn't a match on the other properties.
         expect(await slugs('title:example')).toEqual([]);
         // Plain words still match slug, destination and title.
