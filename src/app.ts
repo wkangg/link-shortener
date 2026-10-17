@@ -17,6 +17,7 @@ import { LinkCache } from './redirect/cache.ts';
 import { createLinkLookup } from './redirect/lookup.ts';
 import { startRedirectServer } from './redirect/server.ts';
 import { WebhookDeliverer, type WebhookFetch } from './webhooks/deliverer.ts';
+import { EndpointRepo } from './webhooks/endpoints.ts';
 import { WebhookOutbox } from './webhooks/outbox.ts';
 import type { ResolveHost } from './webhooks/url.ts';
 
@@ -114,6 +115,10 @@ export function startApp(opts: AppOptions) {
         db,
         version: opts.version,
         links: new LinkRepo(db, cache),
+        webhooks: new EndpointRepo(db, outbox, {
+            allowPrivate: !config.isProd,
+            resolve: opts.resolveHost
+        }),
         stats: new Stats(db, { abuseMinScore: config.abuseMinScore }),
         schemas: linkSchemas(shortHost),
         authenticate: opts.authenticate ?? createAuthenticator(config.cfAccess),

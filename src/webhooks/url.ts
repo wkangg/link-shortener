@@ -1,6 +1,7 @@
 // Webhook URLs are fetched by the server, so they must not reach the server's own
 // network: loopback, private, link-local and CGNAT addresses are refused.
 import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 import { isPrivateIp } from '../shared/ip.ts';
 
@@ -44,11 +45,14 @@ export async function checkWebhookUrl(
     if (opts.allowPrivate) return;
     // IPv6 literals keep their brackets in `hostname`.
     const host = url.hostname.replace(/^\[(.*)\]$/, '$1');
-    let addresses: string[];
-    try {
-        addresses = await (opts.resolve ?? resolveHost)(host);
-    } catch {
-        throw new WebhookUrlError(`Could not resolve ${host}`);
+    // An IP address is its own answer; only names are resolved.
+    let addresses = [host];
+    if (!isIP(host)) {
+        try {
+            addresses = await (opts.resolve ?? resolveHost)(host);
+        } catch {
+            throw new WebhookUrlError(`Could not resolve ${host}`);
+        }
     }
     if (addresses.length === 0) throw new WebhookUrlError(`Could not resolve ${host}`);
     if (addresses.some(address => isPrivateIp(address))) {

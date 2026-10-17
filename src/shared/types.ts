@@ -246,3 +246,64 @@ export const DEFAULT_WEBHOOK_SKIP: WebhookSkipCategory[] = [
     'scraper',
     'abusive'
 ];
+
+/** The latest event an endpoint finished, for its status line. */
+export interface WebhookLastEvent {
+    status: 'delivered' | 'skipped' | 'failed';
+    /** Unix ms. */
+    at: number;
+    /** HTTP status of the last attempt. */
+    httpStatus: number | null;
+    error: string | null;
+}
+
+export interface WebhookEndpoint {
+    id: number;
+    kind: WebhookKind;
+    /** Discord URLs come back with the token hidden. */
+    url: string;
+    description: string | null;
+    enabled: boolean;
+    /** Only clicks on links with one of these tags; empty = every link. */
+    tags: string[];
+    skip: WebhookSkipCategory[];
+    /** Send the visitor's IP address and user agent. */
+    includeIp: boolean;
+    /** Why it was turned off automatically, if it was. */
+    disabledReason: string | null;
+    /** Start of the current run of failures (unix ms), or null. */
+    failingSince: number | null;
+    /** Events by status, over the last 7 days for finished ones. */
+    counts: { pending: number; delivered: number; skipped: number; failed: number };
+    lastEvent: WebhookLastEvent | null;
+    createdAt: number;
+    updatedAt: number;
+}
+
+/** Returned once, on create and on rotating the secret. */
+export interface WebhookSecretResponse {
+    /** whsec_… for standard endpoints. */
+    secret: string;
+}
+
+export interface WebhookEndpointCreated extends WebhookEndpoint {
+    /** The signing secret, shown only now; null for Discord. */
+    secret: string | null;
+}
+
+export interface WebhookEventRow {
+    id: number;
+    type: 'link.clicked' | 'webhook.test';
+    clickId: number | null;
+    /** The webhook-id header. */
+    eventId: string;
+    status: 'pending' | 'delivered' | 'skipped' | 'failed';
+    attempts: number;
+    httpStatus: number | null;
+    error: string | null;
+    /** Unix ms. */
+    createdAt: number;
+    /** Next attempt, for pending events. */
+    dueAt: number;
+    finishedAt: number | null;
+}
