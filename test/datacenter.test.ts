@@ -13,7 +13,10 @@ describe('isDatacenterHostname', () => {
             'something.1e100.net',
             'host.oraclecloud.com',
             'ns5011203.ip-51-222-254.net', // OVH dedicated
-            'ip42.ip-145-239-1.eu'
+            'ip42.ip-145-239-1.eu',
+            'm26001.contaboserver.net',
+            '7673-55312.bacloud.info',
+            'static-198-44-142-226.cust.tzulo.com'
         ]) {
             expect(isDatacenterHostname(host)).toBe(true);
         }

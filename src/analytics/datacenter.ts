@@ -40,6 +40,7 @@ const DATACENTER_SUFFIXES = [
     'online.net',
     'contabo.net', // Contabo
     'contabo.host',
+    'contaboserver.net',
     'leaseweb.com', // Leaseweb
     'leaseweb.net',
     'hostwinds.com',
@@ -55,6 +56,9 @@ const DATACENTER_SUFFIXES = [
     'datacamp.co.uk',
     'servers.com',
     'hostinger.com',
+    'bacloud.info', // Bacloud
+    'bacloud.com',
+    'tzulo.com', // tzulo (often behind VPNs)
     'cloudflare.com' // Cloudflare egress (WARP / proxies)
 ] as const;
 

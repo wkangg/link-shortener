@@ -61,7 +61,8 @@ const VPN_HOSTS: [RegExp, string][] = [
     [/expressvpn/i, 'ExpressVPN'],
     [/hostroyale/i, 'HostRoyale'],
     [/creanova/i, 'Creanova'],
-    [/private layer/i, 'Private Layer']
+    [/private layer/i, 'Private Layer'],
+    [/tzulo/i, 'tzulo']
 ];
 
 const UTC_ZONES = new Set([
