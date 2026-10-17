@@ -8,7 +8,13 @@ import type {
     SuggestResponse,
     SummaryResponse,
     TimeseriesResponse,
-    TopResponse
+    TopResponse,
+    WebhookEndpoint,
+    WebhookEndpointCreated,
+    WebhookEventRow,
+    WebhookKind,
+    WebhookSecretResponse,
+    WebhookSkipCategory
 } from '../../shared/types.ts';
 
 export class ApiRequestError extends Error {
@@ -48,6 +54,16 @@ export interface LinkInput {
     trackDevice?: boolean;
 }
 
+export interface WebhookInput {
+    url: string;
+    kind?: WebhookKind;
+    description?: string | null;
+    enabled?: boolean;
+    tags?: string[];
+    skip?: WebhookSkipCategory[];
+    includeIp?: boolean;
+}
+
 export const api = {
     config: () => getJson<ConfigResponse>('/api/config'),
     links: (params: URLSearchParams) => getJson<LinkListResponse>(`/api/links?${params}`),
@@ -63,7 +79,19 @@ export const api = {
     top: (params: URLSearchParams) => getJson<TopResponse>(`/api/stats/top?${params}`),
     suggest: (params: URLSearchParams) => getJson<SuggestResponse>(`/api/stats/suggest?${params}`),
     clicks: (params: URLSearchParams) =>
-        getJson<ClickHistoryResponse>(`/api/stats/clicks?${params}`)
+        getJson<ClickHistoryResponse>(`/api/stats/clicks?${params}`),
+    webhooks: () => getJson<WebhookEndpoint[]>('/api/webhooks'),
+    createWebhook: (input: WebhookInput) =>
+        request<WebhookEndpointCreated>('POST', '/api/webhooks', input),
+    updateWebhook: (id: number, input: Partial<Omit<WebhookInput, 'kind'>>) =>
+        request<WebhookEndpoint>('PATCH', `/api/webhooks/${id}`, input),
+    deleteWebhook: (id: number) => request<undefined>('DELETE', `/api/webhooks/${id}`),
+    rotateWebhookSecret: (id: number) =>
+        request<WebhookSecretResponse>('POST', `/api/webhooks/${id}/secret`),
+    testWebhook: (id: number) => request<WebhookEventRow>('POST', `/api/webhooks/${id}/test`),
+    webhookEvents: (id: number) => getJson<WebhookEventRow[]>(`/api/webhooks/${id}/events`),
+    retryWebhookEvent: (id: number) =>
+        request<WebhookEventRow>('POST', `/api/webhook-events/${id}/retry`)
 };
 
 /** Minutes to add to UTC to get local time. */

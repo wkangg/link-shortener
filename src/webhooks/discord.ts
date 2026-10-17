@@ -7,10 +7,6 @@ export const MAX_EMBEDS = 10;
 /** Messages to one Discord endpoint are at least this far apart. */
 export const DISCORD_INTERVAL_MS = 2000;
 
-const HOSTS = new Set(['discord.com', 'discordapp.com', 'ptb.discord.com', 'canary.discord.com']);
-// /api/webhooks/<id>/<token>, optionally with an API version.
-const PATH_RE = /^\/api(?:\/v\d+)?\/webhooks\/(\d+)\/([\w-]+)\/?$/;
-
 // Discord's field limits.
 const TITLE_MAX = 256;
 const FIELD_MAX = 1024;
@@ -19,20 +15,6 @@ const FOOTER_MAX = 2048;
 // Discord blurple (#5865F2) and amber (#F0B232) for flagged clicks.
 const COLOR = 5_793_266;
 const COLOR_FLAGGED = 15_774_258;
-
-/** True for a Discord webhook URL (https://discord.com/api/webhooks/<id>/<token>). */
-export function isDiscordWebhookUrl(raw: string): boolean {
-    if (!URL.canParse(raw)) return false;
-    const url = new URL(raw);
-    return url.protocol === 'https:' && HOSTS.has(url.hostname) && PATH_RE.test(url.pathname);
-}
-
-/** The URL with its token hidden, safe to show and return from the API. */
-export function maskDiscordUrl(raw: string): string {
-    const url = new URL(raw);
-    const match = PATH_RE.exec(url.pathname);
-    return match ? `${url.origin}/api/webhooks/${match[1]}/••••` : raw;
-}
 
 export interface DiscordEmbed {
     title?: string;

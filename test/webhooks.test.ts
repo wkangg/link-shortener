@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { ClickBuffer } from '../src/analytics/clicks.ts';
 import { LinkRepo } from '../src/dashboard/links.ts';
 import { openDatabase } from '../src/db/client.ts';
+import { isDiscordWebhookUrl, maskDiscordUrl } from '../src/shared/discord.ts';
 import {
     DEFAULT_WEBHOOK_SKIP,
     type RawClick,
@@ -20,9 +21,7 @@ import {
     clicksMessage,
     DISCORD_INTERVAL_MS,
     type DiscordMessage,
-    discordWaitMs,
-    isDiscordWebhookUrl,
-    maskDiscordUrl
+    discordWaitMs
 } from '../src/webhooks/discord.ts';
 import { SETTLE_DELAY_MS, WebhookOutbox } from '../src/webhooks/outbox.ts';
 import {

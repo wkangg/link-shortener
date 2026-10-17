@@ -2,6 +2,7 @@
 import type { Database } from 'bun:sqlite';
 
 import type { CreateWebhookInput, UpdateWebhookInput } from '../dashboard/schemas.ts';
+import { isDiscordWebhookUrl, maskDiscordUrl } from '../shared/discord.ts';
 import {
     DEFAULT_WEBHOOK_SKIP,
     type WebhookEndpoint,
@@ -12,7 +13,6 @@ import {
     type WebhookSkipCategory
 } from '../shared/types.ts';
 import { KEEP_FINISHED_MS, skipPending } from './deliverer.ts';
-import { isDiscordWebhookUrl, maskDiscordUrl } from './discord.ts';
 import type { WebhookOutbox } from './outbox.ts';
 import { generateSecret } from './sign.ts';
 import { checkWebhookUrl, type ResolveHost, WebhookUrlError } from './url.ts';
