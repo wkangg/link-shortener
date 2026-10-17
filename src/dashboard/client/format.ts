@@ -59,3 +59,29 @@ export function countryLabel(code: string): string {
     }
     return `${flag} ${name}`;
 }
+
+/**
+ * A readable GPU name from a WebGL renderer string, e.g.
+ * "ANGLE (Intel, Intel(R) Arc(TM) 140V GPU (0x000064A0) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+ * -> "Intel Arc 140V GPU". Unrecognised strings come back tidied but otherwise whole.
+ */
+export function gpuName(renderer: string): string {
+    // ANGLE wraps "vendor, renderer, backend"; the renderer is the useful part.
+    const angle = /^ANGLE \((.*)\)$/.exec(renderer)?.[1]?.split(', ');
+    const name = (angle?.[1] ?? renderer)
+        .replace(/^ANGLE \w+ Renderer: /, '')
+        .replaceAll(/\s*\((R|TM)\)/gi, '')
+        .replace(/\s*\(0x[\da-f]+\)/i, '')
+        .replace(/\s+(Direct3D|OpenGL|Vulkan|Metal).*$/i, '')
+        .replace(/\/PCIe\/SSE2$/, '')
+        .replaceAll(/\s+/g, ' ')
+        .trim();
+    return name || renderer;
+}
+
+/** "1440×900 @2x" from a reported "1440x900@2"; "@1x" is left off. */
+export function screenLabel(screen: string): string {
+    const m = /^(\d+)x(\d+)@([\d.]+)$/.exec(screen);
+    if (!m) return screen;
+    return `${m[1]}×${m[2]}${m[3] === '1' ? '' : ` @${m[3]}x`}`;
+}
