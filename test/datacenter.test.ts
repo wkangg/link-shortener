@@ -11,7 +11,9 @@ describe('isDatacenterHostname', () => {
             '95.179.128.1.vultrusercontent.com',
             'li1234-5.members.linode.com',
             'something.1e100.net',
-            'host.oraclecloud.com'
+            'host.oraclecloud.com',
+            'ns5011203.ip-51-222-254.net', // OVH dedicated
+            'ip42.ip-145-239-1.eu'
         ]) {
             expect(isDatacenterHostname(host)).toBe(true);
         }

@@ -63,10 +63,15 @@ const SUFFIX_RE = new RegExp(
     'i'
 );
 
+// OVH (and its Kimsufi / So you Start brands) names dedicated servers after the
+// /24 they sit in rather than an OVH domain, e.g. ns5011203.ip-51-222-254.net.
+const OVH_RE = /(?:^|\.)ip-\d{1,3}-\d{1,3}-\d{1,3}\.(?:net|eu|us)$/i;
+
 /** True when the reverse-DNS hostname belongs to a hosting/datacenter provider. */
 export function isDatacenterHostname(hostname?: string | null): boolean {
     if (!hostname) return false;
-    return SUFFIX_RE.test(hostname.replace(/\.$/, ''));
+    const host = hostname.replace(/\.$/, '');
+    return SUFFIX_RE.test(host) || OVH_RE.test(host);
 }
 
 /**
