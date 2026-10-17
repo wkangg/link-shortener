@@ -231,3 +231,18 @@ export interface ClickSink {
     /** Browser-side signals for the click with this token (raw, unvalidated JSON body). */
     pushSignals(token: string, body: string, ts: number): void;
 }
+
+export type WebhookKind = 'standard' | 'discord';
+
+/** Click categories a webhook endpoint can choose not to receive. */
+export const WEBHOOK_SKIP_CATEGORIES = ['bot', 'datacenter', 'scraper', 'abusive', 'vpn'] as const;
+
+export type WebhookSkipCategory = (typeof WEBHOOK_SKIP_CATEGORIES)[number];
+
+/** What a new endpoint skips: the traffic the dashboard hides by default. */
+export const DEFAULT_WEBHOOK_SKIP: WebhookSkipCategory[] = [
+    'bot',
+    'datacenter',
+    'scraper',
+    'abusive'
+];
