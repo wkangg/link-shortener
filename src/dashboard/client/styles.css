@@ -833,6 +833,25 @@ a.slug:hover {
 .search-box input {
     font-family: var(--mono);
     font-size: 0.85rem;
+    /* Room for the result count, so typed text and the clear button don't run under it. */
+    padding-right: calc(var(--count-ch, 0) * 1ch + 1rem);
+}
+
+.search-count {
+    position: absolute;
+    top: 50%;
+    right: 0.65rem;
+    transform: translateY(-50%);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    white-space: nowrap;
+    pointer-events: none;
+    transition: opacity 0.15s;
+}
+
+.search-count[data-stale='true'] {
+    opacity: 0.5;
 }
 
 .suggestions {

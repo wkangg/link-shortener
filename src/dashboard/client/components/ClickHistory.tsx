@@ -294,6 +294,10 @@ export function ClickHistory({
         setPaging({ base, page: Math.min(Math.max(next, 0), pages - 1) });
     const first = page * size + 1;
     const last = page * size + clicks.length;
+    const count = data && {
+        label: `${formatCount(total)} ${search ? (total === 1 ? 'result' : 'results') : total === 1 ? 'click' : 'clicks'}`,
+        stale: loading
+    };
     const changeSize = (next: number) => {
         // Stay on the page that contains the first row currently shown.
         setPaging({ base, page: Math.floor((page * size) / next) });
@@ -314,7 +318,13 @@ export function ClickHistory({
                     onSearch(text);
                 }}
             >
-                <SearchBox value={text} onChange={onText} onCommit={onSearch} params={params} />
+                <SearchBox
+                    value={text}
+                    onChange={onText}
+                    onCommit={onSearch}
+                    params={params}
+                    count={count}
+                />
                 <button
                     type="button"
                     className="text-button"

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
 import { SEARCH_FIELDS, SEARCH_FLAGS } from '../../../shared/search.ts';
 import { api } from '../api.ts';
@@ -50,10 +50,12 @@ interface SearchBoxProps {
     onCommit: (value: string) => void;
     /** Stats query params, so value suggestions match the range and filters. */
     params: URLSearchParams;
+    /** What the applied search found, shown at the end of the input; omitted until known. */
+    count?: { label: string; stale: boolean };
 }
 
 /** The click search input, with suggestions for field names, flags and common values. */
-export function SearchBox({ value, onChange, onCommit, params }: SearchBoxProps) {
+export function SearchBox({ value, onChange, onCommit, params, count }: SearchBoxProps) {
     const listId = useId();
     const input = useRef<HTMLInputElement>(null);
     const [caret, setCaret] = useState(0);
@@ -135,7 +137,10 @@ export function SearchBox({ value, onChange, onCommit, params }: SearchBoxProps)
     };
 
     return (
-        <div className="search-box">
+        <div
+            className="search-box"
+            style={count ? ({ '--count-ch': count.label.length } as CSSProperties) : undefined}
+        >
             <input
                 ref={input}
                 type="search"
@@ -180,6 +185,11 @@ export function SearchBox({ value, onChange, onCommit, params }: SearchBoxProps)
                     }
                 }}
             />
+            {count && (
+                <span className="search-count" role="status" data-stale={count.stale}>
+                    {count.label}
+                </span>
+            )}
             {shown && (
                 <ul className="suggestions" id={listId} role="listbox" aria-label="Suggestions">
                     {suggestions.map((s, i) => (
