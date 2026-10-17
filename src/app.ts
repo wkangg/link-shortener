@@ -16,6 +16,9 @@ import { startDashboardServer } from './dashboard/server.ts';
 import { LinkCache } from './redirect/cache.ts';
 import { createLinkLookup } from './redirect/lookup.ts';
 import { startRedirectServer } from './redirect/server.ts';
+import { WebhookDeliverer, type WebhookFetch } from './webhooks/deliverer.ts';
+import { WebhookOutbox } from './webhooks/outbox.ts';
+import type { ResolveHost } from './webhooks/url.ts';
 
 export interface AppOptions {
     config: Config;
@@ -31,6 +34,12 @@ export interface AppOptions {
     checkIp?: CheckIp | null;
     /** Downloads the VPN / relay lists; null uses only the stored copies (tests). */
     fetchText?: FetchText | null;
+    /** Sends webhooks (tests pass a fake). */
+    webhookFetch?: WebhookFetch;
+    /** Resolves webhook hostnames for the private-network check (tests pass a fake). */
+    resolveHost?: ResolveHost;
+    /** Webhook outbox poll interval (tests drive it by hand). */
+    webhookIntervalMs?: number;
 }
 
 /** Reputation backfill runs at startup and then this often. */
@@ -67,13 +76,26 @@ export function startApp(opts: AppOptions) {
         : null;
     backfill?.unref();
 
+    const outbox = new WebhookOutbox(db);
+    const webhooks = new WebhookDeliverer(db, {
+        shortOrigin: config.shortOrigin,
+        abuseMinScore: config.abuseMinScore,
+        allowPrivate: !config.isProd,
+        fetch: opts.webhookFetch,
+        resolve: opts.resolveHost,
+        intervalMs: opts.webhookIntervalMs,
+        onDisable: () => outbox.refresh()
+    });
+    webhooks.start();
+
     const clicks = new ClickBuffer(db, {
         shortHost,
         salt: config.visitorSalt,
         intervalMs: opts.flushIntervalMs ?? 1000,
         reverseDns: opts.reverseDns === undefined ? createReverseDns() : opts.reverseDns,
         reputation,
-        classifier
+        classifier,
+        webhooks: outbox
     });
     clicks.start();
 
@@ -107,12 +129,15 @@ export function startApp(opts: AppOptions) {
         clicks,
         reputation,
         vpnLists,
+        outbox,
+        webhooks,
         async stop() {
             await Promise.all([short.stop(), dash.stop()]);
             if (backfill) clearInterval(backfill);
             reputation?.stop();
             vpnLists.stop();
             clicks.stop();
+            await webhooks.stop();
         }
     };
 }

@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 import type { ClickSink, RawClick } from '../shared/types.ts';
+import type { WebhookOutbox } from '../webhooks/outbox.ts';
 import { refineApple } from './apple.ts';
 import { ClickClassifier, SIGNALS_WINDOW_MS } from './classify.ts';
 import { isDatacenterHostname } from './datacenter.ts';
@@ -94,6 +95,8 @@ export interface ClickBufferOptions extends EnrichOptions {
     reputation?: ClickAnnotator | null;
     /** Sets `vpn` and `scraper` as a click's facts arrive. */
     classifier?: ClickClassifier;
+    /** Queues webhook events for new clicks, in the same transaction. Off when null. */
+    webhooks?: WebhookOutbox | null;
 }
 
 /**
@@ -126,6 +129,7 @@ export class ClickBuffer implements ClickSink {
             maxBuffered: 100_000,
             reverseDns: null,
             reputation: null,
+            webhooks: null,
             ...opts
         };
         this.#classifier = opts.classifier ?? new ClickClassifier(db);
@@ -213,7 +217,10 @@ export class ClickBuffer implements ClickSink {
                 for (const click of batch) {
                     const row = enrichClick(click, this.#opts);
                     const id = this.#insert.get(...COLUMNS.map(column => row[column]))?.id;
-                    if (id !== undefined) touched.push(id);
+                    if (id !== undefined) {
+                        touched.push(id);
+                        this.#opts.webhooks?.enqueue(id, row.link_id, row.is_bot, now);
+                    }
                     if (id !== undefined && row.ip) {
                         inserted.push({ id, ip: row.ip });
                         this.#opts.reputation?.annotate(id, row.ip);

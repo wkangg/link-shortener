@@ -1,15 +1,30 @@
 import { describe, expect, test } from 'bun:test';
 
+import { ClickBuffer } from '../src/analytics/clicks.ts';
 import { LinkRepo } from '../src/dashboard/links.ts';
 import { openDatabase } from '../src/db/client.ts';
-import { DEFAULT_WEBHOOK_SKIP, type WebhookSkipCategory } from '../src/shared/types.ts';
+import {
+    DEFAULT_WEBHOOK_SKIP,
+    type RawClick,
+    type WebhookSkipCategory
+} from '../src/shared/types.ts';
+import {
+    AUTO_DISABLE_AFTER_MS,
+    KEEP_FINISHED_MS,
+    RETRY_DELAYS_MS,
+    WebhookDeliverer,
+    type WebhookFetch
+} from '../src/webhooks/deliverer.ts';
+import { SETTLE_DELAY_MS, WebhookOutbox } from '../src/webhooks/outbox.ts';
 import {
     type ClickSnapshot,
     createClickReader,
+    type LinkClickedEvent,
     linkClickedEvent,
     skipReason
 } from '../src/webhooks/payload.ts';
 import { generateSecret, parseSecret, sign, signedHeaders } from '../src/webhooks/sign.ts';
+import type { ResolveHost } from '../src/webhooks/url.ts';
 
 const SHORT = 'https://s.example';
 
@@ -162,5 +177,384 @@ describe('skip rules', () => {
         expect(reason({ vpn: 'Tor' }, ['vpn'])).toBe('vpn');
         expect(reason({ is_datacenter: 1, vpn: 'M247' }, ['vpn'])).toBe('vpn');
         expect(reason({ is_datacenter: 1 }, ['bot'])).toBeNull();
+    });
+});
+
+const SAFARI =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1';
+
+function raw(linkId: number, extra: Partial<RawClick> = {}): RawClick {
+    return {
+        linkId,
+        ts: Date.now(),
+        url: 'https://example.com',
+        ip: '203.0.113.5',
+        ua: SAFARI,
+        referrer: '',
+        country: 'CA',
+        region: 'Ontario',
+        city: 'Toronto',
+        qr: false,
+        query: '',
+        language: 'en-CA',
+        timezone: 'America/Toronto',
+        latitude: '',
+        longitude: '',
+        token: null,
+        ...extra
+    };
+}
+
+interface EndpointFields {
+    kind?: 'standard' | 'discord';
+    url?: string;
+    secret?: string | null;
+    tags?: string[];
+    skip?: WebhookSkipCategory[];
+    includeIp?: boolean;
+    enabled?: boolean;
+}
+
+interface EventRow {
+    id: number;
+    endpoint_id: number;
+    click_id: number | null;
+    event_id: string;
+    status: string;
+    due_at: number;
+    attempts: number;
+    last_status: number | null;
+    last_error: string | null;
+}
+
+type Reply = number | Error | Response;
+
+/** A database with links, the outbox and a deliverer on a fake clock and a fake fetch. */
+function pipeline(
+    opts: { allowPrivate?: boolean; resolve?: ResolveHost; maxPending?: number } = {}
+) {
+    const { db, links } = setup();
+    const clock = { now: 1_000_000 };
+    const requests: { url: string; headers: Record<string, string>; body: string }[] = [];
+    const replies: Reply[] = [];
+    const outbox = new WebhookOutbox(db);
+    let disabled = 0;
+    const fakeFetch: WebhookFetch = (url, init) => {
+        requests.push({
+            url,
+            headers: init.headers as Record<string, string>,
+            body: init.body as string
+        });
+        const reply = replies.shift() ?? 200;
+        if (reply instanceof Error) return Promise.reject(reply);
+        return Promise.resolve(
+            reply instanceof Response ? reply : new Response('ok', { status: reply })
+        );
+    };
+    const deliverer = new WebhookDeliverer(db, {
+        shortOrigin: SHORT,
+        abuseMinScore: 25,
+        allowPrivate: opts.allowPrivate ?? true,
+        resolve: opts.resolve,
+        maxPending: opts.maxPending,
+        now: () => clock.now,
+        onDisable: () => {
+            disabled++;
+            outbox.refresh();
+        },
+        fetch: fakeFetch
+    });
+    const buffer = new ClickBuffer(db, {
+        shortHost: 's.example',
+        salt: 'test-salt-test-salt',
+        webhooks: outbox
+    });
+    const addEndpoint = (fields: EndpointFields = {}) => {
+        const id = db
+            .query<{ id: number }, (string | number | null)[]>(
+                `INSERT INTO webhook_endpoints (kind, url, secret, tags, skip, include_ip, enabled, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0) RETURNING id`
+            )
+            .get(
+                fields.kind ?? 'standard',
+                fields.url ?? 'https://hooks.example/in',
+                fields.secret === undefined ? generateSecret() : fields.secret,
+                JSON.stringify(fields.tags ?? []),
+                JSON.stringify(fields.skip ?? DEFAULT_WEBHOOK_SKIP),
+                fields.includeIp ? 1 : 0,
+                fields.enabled === false ? 0 : 1
+            )?.id as number;
+        outbox.refresh();
+        return id;
+    };
+    const events = () => db.query<EventRow, []>('SELECT * FROM webhook_events ORDER BY id').all();
+    const endpoint = (id: number) =>
+        db
+            .query<
+                { enabled: number; disabled_reason: string | null; failing_since: number | null },
+                [number]
+            >('SELECT enabled, disabled_reason, failing_since FROM webhook_endpoints WHERE id = ?')
+            .get(id);
+    /** Records clicks and flushes them, as the redirect server would. */
+    const click = (...clicks: RawClick[]) => {
+        for (const c of clicks) buffer.push(c);
+        buffer.flush();
+    };
+    return {
+        db,
+        links,
+        clock,
+        requests,
+        replies,
+        outbox,
+        deliverer,
+        fakeFetch,
+        addEndpoint,
+        events,
+        endpoint,
+        click,
+        disabled: () => disabled
+    };
+}
+
+describe('outbox', () => {
+    test('nothing is queued without an enabled endpoint', () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.click(raw(link.id));
+        p.addEndpoint({ enabled: false });
+        p.click(raw(link.id));
+        expect(p.outbox.active).toBe(false);
+        expect(p.events()).toEqual([]);
+    });
+
+    test('one event per endpoint per click, bots dropped where skipped, tags filtered', () => {
+        const p = pipeline();
+        const tagged = p.links.create({ url: 'https://example.com', tags: ['dev'] });
+        const plain = p.links.create({ url: 'https://example.org' });
+        const all = p.addEndpoint();
+        const dev = p.addEndpoint({ tags: ['dev', 'docs'] });
+        const everything = p.addEndpoint({ skip: [] });
+
+        p.click(raw(tagged.id), raw(plain.id), raw(plain.id, { ua: 'Googlebot/2.1' }));
+        const count = (id: number) => p.events().filter(e => e.endpoint_id === id).length;
+        expect(count(all)).toBe(2);
+        expect(count(dev)).toBe(1);
+        expect(count(everything)).toBe(3);
+        expect(new Set(p.events().map(e => e.event_id)).size).toBe(6);
+        expect(p.events().every(e => /^evt_[\da-f]{24}$/.test(e.event_id))).toBe(true);
+    });
+
+    test('endpoints that skip late verdicts wait for them; others are due at once', () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        const settled = p.addEndpoint();
+        const quick = p.addEndpoint({ skip: ['bot', 'vpn'] });
+        const before = Date.now();
+        p.click(raw(link.id));
+        const due = (id: number) => p.events().find(e => e.endpoint_id === id)?.due_at ?? 0;
+        expect(due(settled)).toBeGreaterThanOrEqual(before + SETTLE_DELAY_MS);
+        expect(due(quick)).toBeLessThan(before + SETTLE_DELAY_MS);
+    });
+});
+
+describe('delivery', () => {
+    test('a due event is sent once, signed, and marked delivered', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com', slug: 'gh' });
+        const secret = generateSecret();
+        p.addEndpoint({ secret, skip: ['bot'] });
+        p.click(raw(link.id));
+        const [queued] = p.events();
+        if (!queued) throw new Error('nothing queued');
+
+        p.clock.now = queued.due_at - 1;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+
+        p.clock.now = queued.due_at;
+        await p.deliverer.tick();
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
+        const [req] = p.requests;
+        if (!req) throw new Error('no request');
+        expect(req.url).toBe('https://hooks.example/in');
+        expect(req.headers['webhook-id']).toBe(queued.event_id);
+        const ts = Number(req.headers['webhook-timestamp']);
+        expect(ts).toBe(Math.floor(queued.due_at / 1000));
+        expect(req.headers['webhook-signature']).toBe(sign(secret, queued.event_id, ts, req.body));
+        const body = JSON.parse(req.body) as LinkClickedEvent;
+        expect(body.type).toBe('link.clicked');
+        expect(body.data.link).toMatchObject({ slug: 'gh', shortUrl: 'https://s.example/gh' });
+        expect(body.data.click).toMatchObject({ country: 'CA', browser: 'Safari', os: 'iOS' });
+        expect(body.data.click).not.toHaveProperty('ip');
+        expect(p.events()[0]).toMatchObject({ status: 'delivered', attempts: 1, last_status: 200 });
+    });
+
+    test('IP and user agent are sent only to endpoints that ask for them', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [], includeIp: true });
+        p.click(raw(link.id));
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        const body = JSON.parse(p.requests[0]?.body ?? '{}') as LinkClickedEvent;
+        expect(body.data.click).toMatchObject({ ip: '203.0.113.5', userAgent: SAFARI });
+    });
+
+    test('verdicts that land after the click are applied at send time', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint();
+        p.click(raw(link.id), raw(link.id, { ip: '198.51.100.7' }));
+        p.db.query("UPDATE clicks SET is_datacenter = 1 WHERE ip = '198.51.100.7'").run();
+        p.clock.now = Date.now() + SETTLE_DELAY_MS;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
+        expect(p.events().map(e => [e.status, e.last_error])).toEqual([
+            ['delivered', null],
+            ['skipped', 'Skipped: datacenter']
+        ]);
+    });
+
+    test('events for a deleted link are skipped', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [] });
+        p.click(raw(link.id));
+        p.links.delete(link.id);
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Click was deleted' });
+    });
+
+    test('failures retry with backoff, then give up', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        const endpoint = p.addEndpoint({ skip: [] });
+        p.click(raw(link.id));
+        p.clock.now = Date.now() + 1;
+        p.replies.push(500, new Error('connect ECONNREFUSED'));
+
+        await p.deliverer.tick();
+        expect(p.events()[0]).toMatchObject({
+            status: 'pending',
+            attempts: 1,
+            last_status: 500,
+            last_error: 'HTTP 500',
+            due_at: p.clock.now + (RETRY_DELAYS_MS[0] ?? 0)
+        });
+        expect(p.endpoint(endpoint)?.failing_since).toBe(p.clock.now);
+
+        p.clock.now += RETRY_DELAYS_MS[0] ?? 0;
+        await p.deliverer.tick();
+        expect(p.events()[0]).toMatchObject({
+            attempts: 2,
+            last_status: null,
+            last_error: 'connect ECONNREFUSED'
+        });
+
+        // Succeeds on the third try, which ends the failure streak.
+        p.clock.now += RETRY_DELAYS_MS[1] ?? 0;
+        await p.deliverer.tick();
+        expect(p.events()[0]).toMatchObject({ status: 'delivered', attempts: 3 });
+        expect(p.endpoint(endpoint)?.failing_since).toBeNull();
+
+        // A second click that never gets through.
+        p.click(raw(link.id));
+        for (let i = 0; i <= RETRY_DELAYS_MS.length; i++) {
+            p.replies.push(503);
+            p.clock.now += 43_200_000;
+            await p.deliverer.tick();
+        }
+        expect(p.events()[1]).toMatchObject({
+            status: 'failed',
+            attempts: RETRY_DELAYS_MS.length + 1,
+            last_status: 503
+        });
+    });
+
+    test('an endpoint failing for 3 days is turned off and its queue skipped', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        const endpoint = p.addEndpoint({ skip: [] });
+        p.click(raw(link.id));
+        p.click(raw(link.id));
+        p.clock.now = Date.now() + 1;
+        p.db
+            .query('UPDATE webhook_endpoints SET failing_since = ? WHERE id = ?')
+            .run(p.clock.now - AUTO_DISABLE_AFTER_MS, endpoint);
+        p.replies.push(500, 500);
+        await p.deliverer.tick();
+        expect(p.disabled()).toBe(1);
+        expect(p.outbox.active).toBe(false);
+        expect(p.endpoint(endpoint)).toMatchObject({
+            enabled: 0,
+            disabled_reason: 'Failing for 3 days'
+        });
+        expect(p.events().some(e => e.status === 'pending')).toBe(false);
+        // Clicks after that queue nothing.
+        p.click(raw(link.id));
+        expect(p.events()).toHaveLength(2);
+    });
+
+    test('URLs on private networks are refused unless allowed', async () => {
+        const p = pipeline({ allowPrivate: false, resolve: () => Promise.resolve(['10.0.0.8']) });
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [], url: 'https://internal.example/hook' });
+        p.click(raw(link.id));
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()[0]).toMatchObject({
+            status: 'pending',
+            last_error: 'internal.example points at a private network address'
+        });
+    });
+
+    test('at most `concurrency` requests are in flight', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [] });
+        p.click(...Array.from({ length: 5 }, () => raw(link.id)));
+        const release: (() => void)[] = [];
+        const deliverer = new WebhookDeliverer(p.db, {
+            shortOrigin: SHORT,
+            abuseMinScore: 25,
+            allowPrivate: true,
+            concurrency: 2,
+            now: () => Date.now() + 1,
+            fetch: () =>
+                new Promise(resolve => {
+                    release.push(() => resolve(new Response(null, { status: 204 })));
+                })
+        });
+        const first = deliverer.tick();
+        await Bun.sleep(0);
+        expect(deliverer.stats.inFlight).toBe(2);
+        // A tick while full starts nothing.
+        await deliverer.tick();
+        expect(release).toHaveLength(2);
+        for (const r of release.splice(0)) r();
+        await first;
+        await deliverer.stop();
+        expect(deliverer.stats.sent).toBe(2);
+    });
+
+    test('maintenance prunes old finished events and caps the pending ones', () => {
+        const p = pipeline({ maxPending: 2 });
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [] });
+        p.click(raw(link.id), raw(link.id), raw(link.id), raw(link.id));
+        p.db
+            .query("UPDATE webhook_events SET status = 'delivered', finished_at = 0 WHERE id = 1")
+            .run();
+        p.deliverer.maintain(KEEP_FINISHED_MS + 1);
+        expect(p.events().map(e => [e.id, e.status])).toEqual([
+            [2, 'failed'],
+            [3, 'pending'],
+            [4, 'pending']
+        ]);
     });
 });
