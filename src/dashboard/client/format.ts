@@ -15,6 +15,25 @@ const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 export const formatDateTime = (ms: number) => dateTime.format(ms);
 export const formatDate = (ms: number) => date.format(ms);
 
+const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+const RELATIVE_UNITS = [
+    ['year', 365 * 24 * 3_600_000],
+    ['month', 30 * 24 * 3_600_000],
+    ['week', 7 * 24 * 3_600_000],
+    ['day', 24 * 3_600_000],
+    ['hour', 3_600_000],
+    ['minute', 60_000]
+] as const;
+
+/** "3 minutes ago", "5 hours ago", "yesterday"; "just now" under a minute. */
+export function formatRelative(ms: number, now = Date.now()): string {
+    const diff = ms - now;
+    for (const [unit, size] of RELATIVE_UNITS) {
+        if (Math.abs(diff) >= size) return relative.format(Math.trunc(diff / size), unit);
+    }
+    return 'just now';
+}
+
 /** "s.example" from "https://s.example". */
 export const hostOf = (origin: string) => origin.replace(/^https?:\/\//, '');
 

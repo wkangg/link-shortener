@@ -1,9 +1,9 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import type { ClickHistoryRow } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { useConfig } from '../config.tsx';
-import { countryLabel, formatCount, formatDateTime } from '../format.ts';
+import { countryLabel, formatCount, formatDateTime, formatRelative } from '../format.ts';
 import { useApi } from '../useApi.ts';
 import { SearchBox } from './SearchBox.tsx';
 
@@ -264,6 +264,13 @@ export function ClickHistory({
 }: ClickHistoryProps) {
     const [showHelp, setShowHelp] = useState(false);
 
+    // Re-render each minute so "3 minutes ago" doesn't go stale.
+    const [now, setNow] = useState(Date.now);
+    useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(id);
+    }, []);
+
     // Back to the first page whenever the range, filters, toggles or search change.
     const base = String(params);
     const [paging, setPaging] = useState({ base, page: 0 });
@@ -384,6 +391,9 @@ export function ClickHistory({
                                 <tr key={c.id}>
                                     <td className="nowrap" title={new Date(c.ts).toISOString()}>
                                         {formatDateTime(c.ts)}
+                                        <div className="history-ago">
+                                            {formatRelative(c.ts, now)}
+                                        </div>
                                     </td>
                                     {showLink && (
                                         <td className="mono">

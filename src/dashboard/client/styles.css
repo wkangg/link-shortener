@@ -937,6 +937,11 @@ a.slug:hover {
     white-space: nowrap;
 }
 
+.history-ago {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
 .history-ua {
     min-width: 14rem;
     max-width: 28rem;
