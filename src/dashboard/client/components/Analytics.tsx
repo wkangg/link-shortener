@@ -345,11 +345,21 @@ export function Analytics({ linkId }: AnalyticsProps) {
 function Total({ label, value, previous }: { label: string; value?: number; previous?: number }) {
     const delta =
         value === undefined || previous === undefined ? null : formatDelta(value, previous);
+    const trend =
+        value === undefined || previous === undefined || delta === 'no change'
+            ? undefined
+            : value > previous
+              ? 'up'
+              : 'down';
     return (
         <div className="total">
             <span className="total-label">{label}</span>
             <span className="total-value">{value === undefined ? '–' : formatCount(value)}</span>
-            {delta && <span className="total-delta">{delta} vs previous period</span>}
+            {delta && (
+                <span className="total-delta">
+                    <span className={trend}>{delta}</span> vs previous period
+                </span>
+            )}
         </div>
     );
 }
