@@ -459,6 +459,10 @@ describe('endpoint URL checks in production', () => {
         expect(await refusal(repo.create({ url: 'http://[::1]/hook' }))).toBe(
             '::1 points at a private network address'
         );
+        // URLs write IPv4-mapped addresses in hex: this one is 127.0.0.1.
+        expect(await refusal(repo.create({ url: 'http://[::ffff:127.0.0.1]/hook' }))).toBe(
+            '::ffff:7f00:1 points at a private network address'
+        );
         const ok = await repo.create({ url: 'https://hooks.example/in' });
         expect(await refusal(repo.update(ok.id, { url: 'https://internal.example/x' }))).toBe(
             'internal.example points at a private network address'
