@@ -41,6 +41,17 @@ export interface LinkWithStats extends Link {
     visitors: number;
     /** Clicks per day for the last 7 days, oldest first. */
     spark: number[];
+    /** Webhooks that get this link's clicks: for every link, chosen for it, or by tag. */
+    webhooks: LinkWebhookRef[];
+}
+
+export interface LinkWebhookRef {
+    id: number;
+    /** The description, or "Discord" / the URL's host. */
+    name: string;
+    enabled: boolean;
+    /** It's for every link, not chosen for this one. */
+    allLinks: boolean;
 }
 
 export interface LinkListResponse {
@@ -230,4 +241,84 @@ export interface ClickSink {
     push(click: RawClick): void;
     /** Browser-side signals for the click with this token (raw, unvalidated JSON body). */
     pushSignals(token: string, body: string, ts: number): void;
+}
+
+export type WebhookKind = 'standard' | 'discord';
+
+/** Click categories a webhook endpoint can choose not to receive. */
+export const WEBHOOK_SKIP_CATEGORIES = ['bot', 'datacenter', 'scraper', 'abusive', 'vpn'] as const;
+
+export type WebhookSkipCategory = (typeof WEBHOOK_SKIP_CATEGORIES)[number];
+
+/** What a new endpoint skips: the traffic the dashboard hides by default. */
+export const DEFAULT_WEBHOOK_SKIP: WebhookSkipCategory[] = [
+    'bot',
+    'datacenter',
+    'scraper',
+    'abusive'
+];
+
+/** The latest event an endpoint finished, for its status line. */
+export interface WebhookLastEvent {
+    status: 'delivered' | 'skipped' | 'failed';
+    /** Unix ms. */
+    at: number;
+    /** HTTP status of the last attempt. */
+    httpStatus: number | null;
+    error: string | null;
+}
+
+export interface WebhookEndpoint {
+    id: number;
+    kind: WebhookKind;
+    /** Discord URLs come back with the token hidden. */
+    url: string;
+    description: string | null;
+    enabled: boolean;
+    /** Clicks on every link; when false, only `links` and links tagged with one of `tags`. */
+    allLinks: boolean;
+    /** Links chosen for this endpoint (used when `allLinks` is false). */
+    links: { id: number; slug: string }[];
+    /** Links with one of these tags (used when `allLinks` is false). */
+    tags: string[];
+    skip: WebhookSkipCategory[];
+    /** Send the visitor's IP address and user agent. */
+    includeIp: boolean;
+    /** Why it was turned off automatically, if it was. */
+    disabledReason: string | null;
+    /** Start of the current run of failures (unix ms), or null. */
+    failingSince: number | null;
+    /** Events by status, over the last 7 days for finished ones. */
+    counts: { pending: number; delivered: number; skipped: number; failed: number };
+    lastEvent: WebhookLastEvent | null;
+    createdAt: number;
+    updatedAt: number;
+}
+
+/** Returned once, on create and on rotating the secret. */
+export interface WebhookSecretResponse {
+    /** whsec_… for standard endpoints. */
+    secret: string;
+}
+
+export interface WebhookEndpointCreated extends WebhookEndpoint {
+    /** The signing secret, shown only now; null for Discord. */
+    secret: string | null;
+}
+
+export interface WebhookEventRow {
+    id: number;
+    type: 'link.clicked' | 'webhook.test';
+    clickId: number | null;
+    /** The webhook-id header. */
+    eventId: string;
+    status: 'pending' | 'delivered' | 'skipped' | 'failed';
+    attempts: number;
+    httpStatus: number | null;
+    error: string | null;
+    /** Unix ms. */
+    createdAt: number;
+    /** Next attempt, for pending events. */
+    dueAt: number;
+    finishedAt: number | null;
 }

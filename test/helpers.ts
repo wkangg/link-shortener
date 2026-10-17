@@ -3,14 +3,16 @@ import { startApp } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
 import type { Identity } from '../src/dashboard/auth.ts';
 import { openDatabase } from '../src/db/client.ts';
+import type { WebhookFetch } from '../src/webhooks/deliverer.ts';
 
 export const DASH = 'https://dash.example';
 
 /**
  * Both servers on random ports, an in-memory database, and switchable auth.
- * IP reputation is off unless a `checkIp` stub is passed.
+ * IP reputation is off unless a `checkIp` stub is passed. Webhooks go to
+ * `webhookFetch` (204 by default) and only on `app.webhooks.tick()`.
  */
-export function testApp(opts: { checkIp?: CheckIp } = {}) {
+export function testApp(opts: { checkIp?: CheckIp; webhookFetch?: WebhookFetch } = {}) {
     const db = openDatabase(':memory:');
     const config = loadConfig({
         SHORT_PORT: '0',
@@ -28,7 +30,10 @@ export function testApp(opts: { checkIp?: CheckIp } = {}) {
         flushIntervalMs: 60_000,
         reverseDns: null,
         checkIp: opts.checkIp ?? null,
-        fetchText: null
+        fetchText: null,
+        webhookFetch:
+            opts.webhookFetch ?? (() => Promise.resolve(new Response(null, { status: 204 }))),
+        webhookIntervalMs: 3_600_000
     });
 
     const api = (path: string, init: RequestInit = {}) =>

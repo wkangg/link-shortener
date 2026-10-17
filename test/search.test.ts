@@ -92,6 +92,12 @@ describe('search', () => {
         expect(ips('is:mobile')).toEqual(['198.51.100.7']);
     });
 
+    test('a field with nothing after it yet filters nothing', () => {
+        expect(ips('ip:')).toEqual(ips(''));
+        expect(ips('-ip:= is:')).toEqual(ips(''));
+        expect(ips('isp:rogers has:')).toEqual(['198.51.100.7']);
+    });
+
     test('LIKE wildcards in the value are literal', () => {
         expect(ips('%')).toEqual([]);
         expect(ips('isp:_')).toEqual([]);

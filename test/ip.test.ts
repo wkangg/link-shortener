@@ -18,7 +18,9 @@ describe('isPrivateIp', () => {
         'fd12:3456::1',
         'fe80::1',
         '::ffff:192.168.8.170',
-        '::FFFF:127.0.0.1'
+        '::FFFF:127.0.0.1',
+        '::ffff:7f00:1',
+        '::ffff:a9fe:a9fe'
     ])('%s is private', ip => expect(isPrivateIp(ip)).toBe(true));
 
     test.each([
@@ -26,7 +28,8 @@ describe('isPrivateIp', () => {
         '172.32.0.1',
         '100.128.0.1',
         '2606:6d00:341:fb00:851e:876d:c657:96f3',
-        '::ffff:8.8.8.8'
+        '::ffff:8.8.8.8',
+        '::ffff:808:808'
     ])('%s is public', ip => expect(isPrivateIp(ip)).toBe(false));
 });
 

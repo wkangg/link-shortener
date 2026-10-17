@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 
 import { ROOT_SLUG, ROOT_SLUG_INPUT, SLUG_RE } from '../shared/slug.ts';
+import { WEBHOOK_SKIP_CATEGORIES } from '../shared/types.ts';
 
 const tag = z
     .string()
@@ -66,3 +67,53 @@ export function linkSchemas(shortHost: string) {
 export type LinkSchemas = ReturnType<typeof linkSchemas>;
 export type CreateLinkInput = z.infer<LinkSchemas['create']>;
 export type UpdateLinkInput = z.infer<LinkSchemas['update']>;
+
+const webhookFields = {
+    url: z.string().trim().min(1, 'Enter a URL').max(2048),
+    kind: z.enum(['standard', 'discord']),
+    description: z.string().trim().max(200).nullable(),
+    enabled: z.boolean(),
+    allLinks: z.boolean(),
+    links: z
+        .array(z.number().int().positive())
+        .max(1000)
+        .transform(ids => [...new Set(ids)]),
+    tags: z
+        .array(tag)
+        .max(20)
+        .transform(tags => [...new Set(tags)]),
+    skip: z
+        .array(z.enum(WEBHOOK_SKIP_CATEGORIES))
+        .max(WEBHOOK_SKIP_CATEGORIES.length)
+        .transform(skip => [...new Set(skip)]),
+    includeIp: z.boolean()
+};
+
+export const webhookSchemas = {
+    create: z.strictObject({
+        url: webhookFields.url,
+        // Missing: Discord when the URL is a Discord webhook, else standard.
+        kind: webhookFields.kind.optional(),
+        description: webhookFields.description.optional(),
+        enabled: webhookFields.enabled.optional(),
+        // Missing: every link, unless links or tags are given.
+        allLinks: webhookFields.allLinks.optional(),
+        links: webhookFields.links.optional(),
+        tags: webhookFields.tags.optional(),
+        skip: webhookFields.skip.optional(),
+        includeIp: webhookFields.includeIp.optional()
+    }),
+    update: z.strictObject({
+        url: webhookFields.url.optional(),
+        description: webhookFields.description.optional(),
+        enabled: webhookFields.enabled.optional(),
+        allLinks: webhookFields.allLinks.optional(),
+        links: webhookFields.links.optional(),
+        tags: webhookFields.tags.optional(),
+        skip: webhookFields.skip.optional(),
+        includeIp: webhookFields.includeIp.optional()
+    })
+};
+
+export type CreateWebhookInput = z.infer<typeof webhookSchemas.create>;
+export type UpdateWebhookInput = z.infer<typeof webhookSchemas.update>;

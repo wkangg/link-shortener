@@ -1,10 +1,13 @@
 import { useState } from 'react';
 
+import { LINK_SEARCH_FIELDS, LINK_SEARCH_HAS } from '../../../shared/search.ts';
 import type { LinkWithStats } from '../../../shared/types.ts';
 import { api, localTz } from '../api.ts';
 import { CreateBar } from '../components/CreateBar.tsx';
 import { LinkActions, useCopy } from '../components/LinkActions.tsx';
+import { SearchBox, type SearchSyntax } from '../components/SearchBox.tsx';
 import { Sparkline } from '../components/Sparkline.tsx';
+import { KIND_LABELS } from '../components/WebhookEditor.tsx';
 import { useConfig } from '../config.tsx';
 import { formatCount, formatDate, hostOf } from '../format.ts';
 import { linkClick, navigate, useLocation } from '../router.ts';
@@ -45,15 +48,9 @@ export function LinksPage() {
             />
 
             <div className="list-controls">
-                <label className="field-inline grow">
-                    <span className="visually-hidden">Search links</span>
-                    <input
-                        type="search"
-                        placeholder="Search by slug, destination or title"
-                        value={q}
-                        onChange={e => setQ(e.target.value)}
-                    />
-                </label>
+                <div className="field-inline grow">
+                    <SearchBox value={q} onChange={setQ} onCommit={setQ} syntax={LINK_SYNTAX} />
+                </div>
                 <label className="field-inline">
                     <span className="visually-hidden">Sort</span>
                     <select
@@ -127,6 +124,88 @@ export function LinksPage() {
     );
 }
 
+const LINK_VALUE_FIELDS = new Set(['slug', 'destination', 'url', 'title', 'tag', 'webhook']);
+
+/** Slugs, destinations or titles of links matching what's typed, each with a reminder of the link. */
+async function linkValues(field: string, text: string) {
+    const params = new URLSearchParams({ limit: '20' });
+    // Search that field only, so the suggestions contain what's typed.
+    if (text) params.set('q', `${field}:${text.includes(' ') ? `"${text}"` : text}`);
+    const { links } = await api.links(params);
+    const values = new Map<string, string>();
+    for (const link of links) {
+        const value = field === 'slug' ? link.slug : field === 'title' ? link.title : link.url;
+        if (!value || values.has(value)) continue;
+        values.set(value, field === 'slug' ? (link.title ?? link.url) : `/${link.slug}`);
+    }
+    return [...values].map(([value, hint]) => ({ value, hint }));
+}
+
+/** The links search: slug, destination and title, plus webhook and tracking filters. */
+const LINK_SYNTAX: SearchSyntax = {
+    label: 'Search links',
+    placeholder: 'Search links: slug, destination, title, tag:, webhook:, has:tracking, …',
+    fields: LINK_SEARCH_FIELDS,
+    flags: [],
+    has: LINK_SEARCH_HAS,
+    hasValues: field => LINK_VALUE_FIELDS.has(field),
+    loadValues: async (field, text) => {
+        const typed = text.toLowerCase();
+        if (field === 'tag') {
+            const tags = await api.tags();
+            return tags
+                .filter(t => t.tag.includes(typed.replace(/^#/, '')))
+                .map(t => ({
+                    value: t.tag,
+                    hint: `${t.count} ${t.count === 1 ? 'link' : 'links'}`
+                }));
+        }
+        if (field !== 'webhook') return linkValues(field, text);
+        // Webhook names, as the rows and the search know them.
+        const endpoints = await api.webhooks();
+        return endpoints
+            .map(e => ({
+                value: e.description ?? (e.kind === 'discord' ? 'Discord' : hostOf(e.url)),
+                hint: [
+                    KIND_LABELS[e.kind],
+                    e.allLinks ? 'every link' : null,
+                    e.enabled ? null : 'off'
+                ]
+                    .filter(Boolean)
+                    .join(', ')
+            }))
+            .filter(v => v.value.toLowerCase().includes(typed));
+    },
+    key: 'links'
+};
+
+/** "→ #clicks", "→ 2 webhooks" or "→ webhook off", naming them all on hover. */
+function WebhookMarker({ webhooks }: { webhooks: LinkWithStats['webhooks'] }) {
+    if (webhooks.length === 0) return null;
+    const on = webhooks.filter(w => w.enabled);
+    const title = `Sends clicks to: ${webhooks
+        .map(w => {
+            const notes = [w.allLinks ? 'every link' : null, w.enabled ? null : 'off'].filter(
+                Boolean
+            );
+            return notes.length > 0 ? `${w.name} (${notes.join(', ')})` : w.name;
+        })
+        .join(', ')}`;
+    const text =
+        on.length === 0
+            ? webhooks.length === 1
+                ? 'webhook off'
+                : 'webhooks off'
+            : on.length === 1
+              ? (on[0]?.name ?? 'webhook')
+              : `${on.length} webhooks`;
+    return (
+        <span className={on.length > 0 ? 'webhook-marker' : 'webhook-marker off'} title={title}>
+            → {text}
+        </span>
+    );
+}
+
 function LinkRow({
     link,
     host,
@@ -180,6 +259,7 @@ function LinkRow({
                     )}
                     {link.redirectType !== 302 && <span>{link.redirectType}</span>}
                     {link.trackDevice && <span title="Detailed device tracking">tracked</span>}
+                    <WebhookMarker webhooks={link.webhooks} />
                     {link.tags.map(t => (
                         <button key={t} type="button" className="tag" onClick={() => onTag(t)}>
                             {t}

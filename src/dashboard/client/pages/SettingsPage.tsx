@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import { useToast } from '../components/Toast.tsx';
+import { WebhooksSection } from '../components/WebhooksSection.tsx';
 import { useConfig } from '../config.tsx';
 import { hostOf } from '../format.ts';
 
@@ -67,6 +68,8 @@ export function SettingsPage() {
                     Copy command
                 </button>
             </section>
+
+            <WebhooksSection />
 
             <section>
                 <h2>Abusive and datacenter IPs</h2>

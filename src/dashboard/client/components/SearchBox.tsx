@@ -1,14 +1,57 @@
 import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
-import { SEARCH_FIELDS, SEARCH_FLAGS } from '../../../shared/search.ts';
+import { SEARCH_FIELDS, SEARCH_FLAGS, type SearchField } from '../../../shared/search.ts';
 import { api } from '../api.ts';
 import { formatCount } from '../format.ts';
 import { useApi } from '../useApi.ts';
 
 const SUGGEST_DELAY_MS = 150;
 const MAX_SUGGESTIONS = 12;
+
+/** What a search box searches: its fields, flags and where values come from. */
+export interface SearchSyntax {
+    /** The input's accessible name. */
+    label: string;
+    placeholder: string;
+    /** Listed when nothing is typed, and as the term is typed. */
+    fields: readonly SearchField[];
+    /** The options after `is:`. */
+    flags: readonly SearchField[];
+    /** The options after `has:`. */
+    has: readonly SearchField[];
+    /** Whether `field:` has value suggestions. */
+    hasValues: (field: string) => boolean;
+    /** Suggested values for `field:`, most useful first. */
+    loadValues: (field: string, text: string) => Promise<{ value: string; hint: string }[]>;
+    /** Changes whenever the values would (e.g. the date range); part of the cache key. */
+    key: string;
+}
+
 /** Fields without value suggestions: no single column, or not a column at all. */
 const NO_VALUES = new Set(['utm', 'is', 'has']);
+
+/** The click search: every recorded field, with values from the clicks in range. */
+export function clickSyntax(params: URLSearchParams): SearchSyntax {
+    return {
+        label: 'Search clicks',
+        placeholder: 'Search clicks: ip:, isp:, os:, ram:>=8, is:bot, …',
+        fields: SEARCH_FIELDS,
+        flags: SEARCH_FLAGS,
+        has: SEARCH_FIELDS.filter(f => !NO_VALUES.has(f.name)),
+        hasValues: field => !NO_VALUES.has(field),
+        loadValues: async (field, text) => {
+            const query = new URLSearchParams(params);
+            query.set('field', field);
+            query.set('text', text);
+            const res = await api.suggest(query);
+            return res.values.map(v => ({
+                value: v.value,
+                hint: `${formatCount(v.clicks)} ${v.clicks === 1 ? 'click' : 'clicks'}`
+            }));
+        },
+        key: params.toString()
+    };
+}
 
 interface Suggestion {
     /** Replaces the term being typed. */
@@ -48,14 +91,13 @@ interface SearchBoxProps {
     onChange: (value: string) => void;
     /** Run the search now (Enter, or a completed suggestion). */
     onCommit: (value: string) => void;
-    /** Stats query params, so value suggestions match the range and filters. */
-    params: URLSearchParams;
+    syntax: SearchSyntax;
     /** What the applied search found, shown at the end of the input; omitted until known. */
     count?: { label: string; stale: boolean };
 }
 
-/** The click search input, with suggestions for field names, flags and common values. */
-export function SearchBox({ value, onChange, onCommit, params, count }: SearchBoxProps) {
+/** A search input with suggestions for field names, flags and common values. */
+export function SearchBox({ value, onChange, onCommit, syntax, count }: SearchBoxProps) {
     const listId = useId();
     const input = useRef<HTMLInputElement>(null);
     const list = useRef<HTMLUListElement>(null);
@@ -68,36 +110,38 @@ export function SearchBox({ value, onChange, onCommit, params, count }: SearchBo
     const { negate, field, text } = parseTerm(term);
 
     // Values come from the API, a moment after typing stops.
-    const valueField = field !== null && !NO_VALUES.has(field) ? field : null;
+    const valueField =
+        field !== null && field !== 'is' && field !== 'has' && syntax.hasValues(field)
+            ? field
+            : null;
     const wanted = valueField === null ? null : `${valueField}|${text}`;
     const [asked, setAsked] = useState<string | null>(null);
     useEffect(() => {
         const timer = setTimeout(() => setAsked(wanted), SUGGEST_DELAY_MS);
         return () => clearTimeout(timer);
     }, [wanted]);
-    const query = new URLSearchParams(params);
-    if (asked !== null) {
-        const bar = asked.indexOf('|');
-        query.set('field', asked.slice(0, bar));
-        query.set('text', asked.slice(bar + 1));
-    }
-    const values = useApi(open && asked !== null ? `suggest|${query}` : null, () =>
-        api.suggest(query)
+    const bar = asked?.indexOf('|') ?? -1;
+    const askedField = asked?.slice(0, bar) ?? '';
+    const values = useApi(open && asked !== null ? `suggest|${syntax.key}|${asked}` : null, () =>
+        syntax
+            .loadValues(askedField, asked?.slice(bar + 1) ?? '')
+            .then(list => ({ field: askedField, values: list }))
     );
 
     let suggestions: Suggestion[] = [];
     if (field === null) {
         // Nothing typed yet lists every field, so they can be browsed.
         const typed = text.toLowerCase();
-        suggestions = SEARCH_FIELDS.filter(f => f.name.startsWith(typed)).map(f => ({
-            insert: `${negate}${f.name}:`,
-            label: `${f.name}:`,
-            hint: f.hint,
-            partial: true
-        }));
+        suggestions = syntax.fields
+            .filter(f => f.name.startsWith(typed))
+            .map(f => ({
+                insert: `${negate}${f.name}:`,
+                label: `${f.name}:`,
+                hint: f.hint,
+                partial: true
+            }));
     } else if (field === 'is' || field === 'has') {
-        const options =
-            field === 'is' ? SEARCH_FLAGS : SEARCH_FIELDS.filter(f => !NO_VALUES.has(f.name));
+        const options = field === 'is' ? syntax.flags : syntax.has;
         suggestions = options
             .filter(f => f.name.startsWith(text.toLowerCase()) && f.name !== text.toLowerCase())
             .map(f => ({ insert: `${negate}${field}:${f.name} `, label: f.name, hint: f.hint }));
@@ -108,7 +152,7 @@ export function SearchBox({ value, onChange, onCommit, params, count }: SearchBo
             .map(v => ({
                 insert: `${negate}${field}:=${quoted(v.value)} `,
                 label: v.value,
-                hint: `${formatCount(v.clicks)} ${v.clicks === 1 ? 'click' : 'clicks'}`
+                hint: v.hint
             }));
     }
     const shown = open && suggestions.length > 0;
@@ -151,13 +195,13 @@ export function SearchBox({ value, onChange, onCommit, params, count }: SearchBo
                 ref={input}
                 type="search"
                 role="combobox"
-                aria-label="Search clicks"
+                aria-label={syntax.label}
                 aria-expanded={shown}
                 aria-controls={listId}
                 aria-autocomplete="list"
                 aria-activedescendant={highlighted >= 0 ? `${listId}-${highlighted}` : undefined}
                 value={value}
-                placeholder="Search clicks: ip:, isp:, os:, ram:>=8, is:bot, …"
+                placeholder={syntax.placeholder}
                 spellCheck={false}
                 autoCapitalize="off"
                 autoComplete="off"

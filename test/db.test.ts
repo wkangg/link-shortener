@@ -84,7 +84,7 @@ describe('database', () => {
         insert.run(5, 'x'.repeat(64), 'https://e.com');
         insert.run(6, 'X'.repeat(64), 'https://f.com');
 
-        expect(migrate(db, MIGRATIONS_DIR)).toEqual(['0002_case_insensitive_slugs.sql']);
+        expect(migrate(db, MIGRATIONS_DIR)).toContain('0002_case_insensitive_slugs.sql');
         const slugs = db
             .query<{ slug: string }, []>('SELECT slug FROM links ORDER BY id')
             .all()

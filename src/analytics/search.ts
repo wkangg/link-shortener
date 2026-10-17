@@ -232,9 +232,6 @@ function termCondition(
         if (!columns) throw new BadQueryError(`Unknown field has:${term.value}`);
         return { sql: `(${columns.map(c => present(c)).join(' OR ')})`, params: [] };
     }
-    if (term.value === '' || term.value === '=') {
-        throw new BadQueryError(`${term.field}: needs a value`);
-    }
     const exact = term.value.startsWith('=') ? term.value.slice(1) : null;
     if (name === 'link') {
         // The root link's slug is empty; it's shown as "/".
@@ -248,11 +245,19 @@ function termCondition(
     throw new BadQueryError(`Unknown search field: ${term.field}`);
 }
 
+/**
+ * A field with nothing after it yet (`ip:`, `ip:=`), so the history filters as you type.
+ * (The tokenizer reads a bare `ip:` as text.)
+ */
+function isUnfinished(term: Term): boolean {
+    return term.field ? term.value.replace(/^=/, '') === '' : /^[a-z_]+:=?$/i.test(term.value);
+}
+
 /** Compiles a search into one SQL condition over `clicks c`. */
 export function compileSearch(q: string, abuseMinScore: number): CompiledSearch {
     const overrides = new Set<SearchOverride>();
     if (q.length > MAX_LENGTH) throw new BadQueryError('Search is too long');
-    const terms = tokenize(q);
+    const terms = tokenize(q).filter(term => !isUnfinished(term));
     if (terms.length > MAX_TERMS)
         throw new BadQueryError(`Search has too many terms (max ${MAX_TERMS})`);
     if (terms.length === 0) return { condition: null, overrides };

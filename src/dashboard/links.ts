@@ -1,7 +1,15 @@
 import type { Database } from 'bun:sqlite';
 
+import { BadQueryError } from '../analytics/errors.ts';
+import { likePattern, tokenize } from '../analytics/search.ts';
 import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
-import type { Link, LinkListResponse, LinkWithStats, RedirectType } from '../shared/types.ts';
+import type {
+    Link,
+    LinkListResponse,
+    LinkWebhookRef,
+    LinkWithStats,
+    RedirectType
+} from '../shared/types.ts';
 import type { CreateLinkInput, UpdateLinkInput } from './schemas.ts';
 
 interface LinkRow {
@@ -74,11 +82,9 @@ export class LinkRepo {
         const where: string[] = ['l.archived = ?'];
         const params: (string | number)[] = [opts.archived ? 1 : 0];
         if (opts.q) {
-            const like = `%${opts.q.replaceAll(/[%_\\]/g, String.raw`\$&`)}%`;
-            where.push(
-                String.raw`(l.slug LIKE ? ESCAPE '\' OR l.url LIKE ? ESCAPE '\' OR l.title LIKE ? ESCAPE '\')`
-            );
-            params.push(like, like, like);
+            const search = compileLinkSearch(opts.q);
+            where.push(...search.where);
+            params.push(...search.params);
         }
         if (opts.tag) {
             where.push('EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id AND t.tag = ?)');
@@ -108,11 +114,13 @@ export class LinkRepo {
         const ids = rows.map(r => r.id);
         const tags = this.#tagsFor(ids);
         const sparks = this.#sparklines(ids, opts.tz ?? 0);
+        const webhooks = this.#webhooksFor(ids);
         const links: LinkWithStats[] = rows.map(row => ({
             ...toLink(row, tags.get(row.id) ?? []),
             clicks: row.clicks,
             visitors: row.visitors,
-            spark: sparks.get(row.id) ?? Array.from({ length: SPARK_DAYS }, () => 0)
+            spark: sparks.get(row.id) ?? Array.from({ length: SPARK_DAYS }, () => 0),
+            webhooks: webhooks.get(row.id) ?? []
         }));
         return { links, total };
     }
@@ -235,6 +243,54 @@ export class LinkRepo {
         return out;
     }
 
+    /** The webhooks that get each link's clicks: for every link, chosen for it, or by tag. */
+    #webhooksFor(ids: number[]): Map<number, LinkWebhookRef[]> {
+        const out = new Map<number, LinkWebhookRef[]>();
+        if (ids.length === 0) return out;
+        const rows = this.#db
+            .query<
+                {
+                    link_id: number;
+                    id: number;
+                    kind: string;
+                    url: string;
+                    description: string | null;
+                    enabled: number;
+                    all_links: number;
+                },
+                number[]
+            >(
+                `SELECT DISTINCT m.link_id, e.id, e.kind, e.url, e.description, e.enabled, e.all_links
+                 FROM (
+                     SELECT l.id AS link_id, e.id AS endpoint_id FROM links l
+                     JOIN webhook_endpoints e ON e.all_links = 1
+                     WHERE l.id IN (${placeholders(ids)})
+                     UNION
+                     SELECT link_id, endpoint_id FROM webhook_endpoint_links
+                     WHERE link_id IN (${placeholders(ids)})
+                     UNION
+                     SELECT t.link_id, e.id FROM link_tags t
+                     JOIN webhook_endpoints e ON e.all_links = 0
+                     JOIN json_each(e.tags) j ON j.value = t.tag
+                     WHERE t.link_id IN (${placeholders(ids)})
+                 ) m JOIN webhook_endpoints e ON e.id = m.endpoint_id
+                 ORDER BY m.link_id, e.id`
+            )
+            .all(...ids, ...ids, ...ids);
+        for (const row of rows) {
+            const ref: LinkWebhookRef = {
+                id: row.id,
+                name: row.description ?? (row.kind === 'discord' ? 'Discord' : hostOf(row.url)),
+                enabled: row.enabled === 1,
+                allLinks: row.all_links === 1
+            };
+            const list = out.get(row.link_id);
+            if (list) list.push(ref);
+            else out.set(row.link_id, [ref]);
+        }
+        return out;
+    }
+
     #sparklines(ids: number[], tz: number): Map<number, number[]> {
         const out = new Map<number, number[]>();
         if (ids.length === 0) return out;
@@ -261,6 +317,94 @@ export class LinkRepo {
     }
 }
 
+/** Webhooks that get link `l`'s clicks: for every link, chosen for it, or by tag. */
+const LINK_WEBHOOKS = `SELECT 1 FROM webhook_endpoints e WHERE (e.all_links = 1
+    OR EXISTS (SELECT 1 FROM webhook_endpoint_links el WHERE el.endpoint_id = e.id AND el.link_id = l.id)
+    OR EXISTS (SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
+               WHERE t.link_id = l.id))`;
+
+const LIKE = String.raw`LIKE ? ESCAPE '\'`;
+
+/** Link columns a field searches; `title` may be NULL. */
+const LINK_COLUMNS: Record<string, string> = {
+    slug: 'l.slug',
+    destination: 'l.url',
+    url: 'l.url',
+    title: "COALESCE(l.title, '')"
+};
+
+/**
+ * The links search: words match the slug, destination or title;
+ * `slug:`, `destination:` (or `url:`), `title:` and `tag:` match one of them
+ * (`:=` for the whole value); `has:webhook`, `has:tag`, `has:tracking` and
+ * `webhook:<name>` filter. Terms are AND-ed; a
+ * leading `-` negates one; "quoted phrases" stay together.
+ */
+export function compileLinkSearch(q: string): { where: string[]; params: string[] } {
+    const where: string[] = [];
+    const params: string[] = [];
+    for (const term of tokenize(q).slice(0, 32)) {
+        const value = term.value.replace(/^=/, '');
+        // `has:` with nothing after it yet: the list filters as you type. (The
+        // tokenizer reads a bare `is:` as text.)
+        if (term.field ? value === '' : /^[a-z_]+:$/i.test(value)) continue;
+        let sql: string;
+        switch (term.field ?? '') {
+            case 'has':
+                if (/^webhooks?$/i.test(value)) sql = `EXISTS (${LINK_WEBHOOKS})`;
+                else if (/^tags?$/i.test(value)) {
+                    sql = 'EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id)';
+                } else if (value.toLowerCase() === 'tracking') sql = 'l.track_device = 1';
+                else {
+                    throw new BadQueryError(
+                        `Unknown has:${value}. Try has:webhook, has:tag or has:tracking.`
+                    );
+                }
+                break;
+            case 'tag': {
+                // Tags are stored lowercase, without the #.
+                const tag = value.replace(/^#/, '').toLowerCase();
+                const exact = term.value.startsWith('=');
+                sql = `EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id AND t.tag ${
+                    exact ? '= ?' : LIKE
+                })`;
+                params.push(exact ? tag : likePattern(tag));
+                break;
+            }
+            case 'webhook': {
+                // The name the dashboard shows: the description, "Discord", or the URL.
+                sql = `EXISTS (${LINK_WEBHOOKS} AND (e.description ${LIKE}
+                    OR (e.kind = 'discord' AND 'Discord' ${LIKE})
+                    OR (e.kind = 'standard' AND e.url ${LIKE})))`;
+                const pattern = likePattern(value);
+                params.push(pattern, pattern, pattern);
+                break;
+            }
+            case 'slug':
+            case 'destination':
+            case 'url':
+            case 'title': {
+                const column = LINK_COLUMNS[term.field ?? ''] ?? 'l.slug';
+                const exact = term.value.startsWith('=');
+                sql = exact
+                    ? `${column} = ?${column === 'l.url' ? '' : ' COLLATE NOCASE'}`
+                    : `${column} ${LIKE}`;
+                params.push(exact ? value : likePattern(value));
+                break;
+            }
+            default: {
+                // Plain words, and anything that isn't one of the fields above.
+                const text = term.field ? `${term.field}:${term.value}` : value;
+                sql = `(l.slug ${LIKE} OR l.url ${LIKE} OR l.title ${LIKE})`;
+                const pattern = likePattern(text);
+                params.push(pattern, pattern, pattern);
+            }
+        }
+        where.push(term.negate ? `NOT ${sql}` : sql);
+    }
+    return { where, params };
+}
+
 function toLink(row: LinkRow, tags: string[]): Link {
     return {
         id: row.id,
@@ -275,6 +419,10 @@ function toLink(row: LinkRow, tags: string[]): Link {
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
+}
+
+function hostOf(url: string): string {
+    return URL.canParse(url) ? new URL(url).host : url;
 }
 
 function placeholders(values: unknown[]): string {

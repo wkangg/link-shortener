@@ -12,7 +12,7 @@ One process, one SQLite file, no external services required.
 [![SQLite](https://img.shields.io/badge/database-SQLite-003b57?logo=sqlite&logoColor=white)](https://sqlite.org)
 [![Docker](https://img.shields.io/badge/deploy-Docker-2496ed?logo=docker&logoColor=white)](./Dockerfile)
 
-[Features](#features) · [Quick start](#quick-start) · [Configuration](#configuration) · [Deployment](#deployment) · [Architecture](#architecture) · [Development](#development)
+[Features](#features) · [Quick start](#quick-start) · [Configuration](#configuration) · [Deployment](#deployment) · [Webhooks](#webhooks) · [Architecture](#architecture) · [Development](#development)
 
 </div>
 
@@ -71,6 +71,10 @@ When a link has tracking turned on, visitors see a short page instead of a bare 
 ### 🔳 QR codes
 
 Every link has a QR code, as PNG or SVG with custom colors and error correction. Scans are tracked as their own source.
+
+### 🪝 Webhooks
+
+Send clicks as they happen to a Discord channel (paste the webhook URL) or to any URL as signed JSON. A webhook can be for every link or only the links you choose, so each short link can have its own. Failed deliveries are retried for about a day. See [Webhooks](#webhooks).
 
 ### 🌐 Two domains
 
@@ -162,6 +166,98 @@ The app is designed to sit behind Cloudflare:
 
 ---
 
+## Webhooks
+
+Add endpoints under **Settings → Webhooks**, or from a link's page with **Webhooks → Add a webhook for this link**.
+
+- **Which links:** each endpoint gets clicks on **every link**, or **only the links you choose**: specific links, any link with certain tags, or both. To pick which webhooks a link sends to, open the link's page and click **Webhooks**. That shows a switch for each endpoint that isn't for every link.
+- **Which traffic:** each endpoint can leave out bots, datacenter IPs, scrapers, abusive IPs and VPNs. The first four are left out by default, the same as on the dashboard.
+
+**Send test** checks the connection, and **Delivery log** shows what was sent and lets you send failed events again.
+
+### Discord
+
+1. In Discord, open the channel's settings and go to **Integrations → Webhooks → New Webhook**. Copy its URL.
+2. Paste the URL into **Add webhook**. It's recognized as Discord automatically.
+
+Each click becomes an embed with location, source, device, UTM tags and any traffic flags. Clicks that arrive together are batched into one message (10 embeds at most, with a summary for the rest), and Discord's rate limits are respected. If the webhook is deleted in Discord, the endpoint turns itself off.
+
+### Any other URL
+
+Every other endpoint gets a `POST` with a JSON body, signed with [Standard Webhooks](https://www.standardwebhooks.com/). Its signing secret (`whsec_…`) is shown once, when you add it. Each request carries `webhook-id`, `webhook-timestamp` and `webhook-signature` headers. Verify them against the **raw** body before parsing it:
+
+```ts
+import { Webhook } from 'standardwebhooks';
+
+const wh = new Webhook(process.env.WEBHOOK_SECRET); // whsec_...
+const event = wh.verify(rawBody, {
+    'webhook-id': req.headers['webhook-id'],
+    'webhook-timestamp': req.headers['webhook-timestamp'],
+    'webhook-signature': req.headers['webhook-signature']
+});
+```
+
+A `link.clicked` event looks like this:
+
+```json
+{
+    "type": "link.clicked",
+    "timestamp": "2026-10-17T12:00:10.000Z",
+    "data": {
+        "link": {
+            "id": 12,
+            "slug": "GitHub",
+            "shortUrl": "https://s.example/GitHub",
+            "url": "https://github.com/example",
+            "title": null,
+            "tags": ["dev"]
+        },
+        "click": {
+            "id": 98123,
+            "ts": "2026-10-17T12:00:00.000Z",
+            "country": "CA",
+            "region": "Ontario",
+            "city": "Toronto",
+            "source": "X",
+            "referrerHost": "t.co",
+            "qr": false,
+            "device": "mobile",
+            "browser": "Safari",
+            "os": "iOS",
+            "osVersion": "18.6",
+            "language": "en-CA",
+            "utm": {
+                "source": null,
+                "medium": null,
+                "campaign": "oct",
+                "term": null,
+                "content": null
+            },
+            "visitor": "3f9c…",
+            "flags": {
+                "bot": null,
+                "datacenter": false,
+                "vpn": null,
+                "scraper": null,
+                "abuseScore": null
+            }
+        }
+    }
+}
+```
+
+`visitor` is the salted visitor hash: the same value means the same visitor. `abuseScore` is `null` until the IP has been checked. The IP address and user agent (`ip`, `userAgent`) are included only for endpoints with **Include IP address and user agent** turned on. **Send test** sends a `webhook.test` event.
+
+### Delivery
+
+- **At least once.** An event is stored in the same transaction as its click, so it survives restarts. Use `webhook-id` to drop duplicates.
+- **A short delay.** Endpoints that leave out datacenter, scraper or abusive traffic get each click about 10 s late, because those verdicts arrive after the click. Other endpoints get it within about a second.
+- **Retries.** A non-2xx response or a timeout (10 s) is retried after 1 min, 5 min, 30 min, 2 h, 6 h and 12 h. After that the event is marked failed. An endpoint that has failed for 3 days straight is turned off.
+- **Private networks are refused.** In production, URLs that resolve to loopback, private or link-local addresses are rejected when saved and again before every send.
+- The delivery log keeps finished events for 7 days.
+
+---
+
 ## Architecture
 
 ```text
@@ -179,6 +275,7 @@ The app is designed to sit behind Cloudflare:
 | [`src/redirect`](./src/redirect)   | Slug lookup (LRU cache, then one prepared statement), the device-tracking page and click capture. `HEAD` requests redirect without counting; expired links return `410`.                                |
 | [`src/analytics`](./src/analytics) | Once a second, enriches queued clicks (UA parsing, bot, VPN and datacenter detection, referrer → source, UTM tags, visitor hash) and writes them in one transaction. Also stats, search and reputation. |
 | [`src/dashboard`](./src/dashboard) | JSON API on `Bun.serve` routes, Cloudflare Access auth and a React SPA. Editing a link clears its cache entry immediately.                                                                              |
+| [`src/webhooks`](./src/webhooks)   | Webhook endpoints, the outbox written with each click batch, and the deliverer: signed JSON, Discord embeds, retries and rate limits.                                                                   |
 | [`src/db`](./src/db)               | SQLite client and numbered SQL migrations                                                                                                                                                               |
 
 A few more behaviors worth knowing:
@@ -197,7 +294,8 @@ This is an analytics tool, and it records a lot about each click. Know what's st
 - **Unique visitors** are counted with a hash of your `VISITOR_SALT`, the IP and the user agent. The same IP and browser count as one visitor across any date range.
 - **Location** comes from Cloudflare's headers. There's no GeoIP database.
 - **Device signals and fingerprints** are collected only on links with detailed tracking turned on. A fingerprint is a coarse hash of browser properties, not an identifier for a person.
-- Every click lives in one SQLite file you control. No data goes to third parties, except IP lookups to AbuseIPDB when you configure a key.
+- Every click lives in one SQLite file you control. No data goes to third parties, except IP lookups to AbuseIPDB when you configure a key, and the webhooks you add yourself.
+- **Webhooks** send coarse location, device, source and the visitor hash by default. IP addresses and user agents go only to endpoints you turn that on for.
 
 You're responsible for meeting the privacy laws that apply to you (GDPR and similar) when you collect this data.
 

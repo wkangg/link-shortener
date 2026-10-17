@@ -5,15 +5,24 @@ import { z } from 'zod/v4';
 
 import { BadQueryError, Stats } from '../analytics/stats.ts';
 import { pingDatabase } from '../db/client.ts';
-import type { ApiError, ConfigResponse, HealthResponse, StatsQuery } from '../shared/types.ts';
+import type {
+    ApiError,
+    ConfigResponse,
+    HealthResponse,
+    StatsQuery,
+    WebhookSecretResponse
+} from '../shared/types.ts';
+import { type EndpointRepo, WebhookRequestError } from '../webhooks/endpoints.ts';
+import { WebhookUrlError } from '../webhooks/url.ts';
 import type { Authenticate } from './auth.ts';
 import { type LinkRepo, type ListOptions, SlugTakenError } from './links.ts';
-import type { LinkSchemas } from './schemas.ts';
+import { type LinkSchemas, webhookSchemas } from './schemas.ts';
 
 export interface ApiDeps {
     db: Database;
     version: string;
     links: LinkRepo;
+    webhooks: EndpointRepo;
     stats: Stats;
     schemas: LinkSchemas;
     authenticate: Authenticate;
@@ -126,7 +135,7 @@ export function parseListQuery(req: Request): ListOptions {
 
 /** /api/* routes for Bun.serve's `routes` table. Everything except health needs auth. */
 export function apiRoutes(deps: ApiDeps) {
-    const { links, stats, schemas } = deps;
+    const { links, webhooks, stats, schemas } = deps;
 
     function guard<Path extends string>(handler: Handler<Path>): Handler<Path> {
         return async req => {
@@ -141,6 +150,12 @@ export function apiRoutes(deps: ApiDeps) {
             } catch (error_) {
                 if (error_ instanceof BadQueryError) return error(error_.message, 400);
                 if (error_ instanceof SlugTakenError) return error(error_.message, 409);
+                if (error_ instanceof WebhookUrlError) {
+                    return error(error_.message, 400, [{ path: 'url', message: error_.message }]);
+                }
+                if (error_ instanceof WebhookRequestError) {
+                    return error(error_.message, error_.status);
+                }
                 throw error_;
             }
         };
@@ -256,6 +271,89 @@ export function apiRoutes(deps: ApiDeps) {
                         'Cache-Control': 'no-store'
                     }
                 });
+            })
+        },
+
+        '/api/webhooks': {
+            GET: guard(() => json(webhooks.list())),
+            POST: guard(async req => {
+                const parsed = webhookSchemas.create.safeParse(await readJson(req));
+                if (!parsed.success) return error('Invalid webhook', 400, zodIssues(parsed.error));
+                return json(await webhooks.create(parsed.data), 201);
+            })
+        },
+
+        '/api/webhooks/:id': {
+            GET: guard<'/api/webhooks/:id'>(req => {
+                const id = parseId(req.params.id);
+                const endpoint = id === null ? null : webhooks.get(id);
+                return endpoint ? json(endpoint) : error('Webhook not found', 404);
+            }),
+            PATCH: guard<'/api/webhooks/:id'>(async req => {
+                const id = parseId(req.params.id);
+                if (id === null) return error('Webhook not found', 404);
+                const parsed = webhookSchemas.update.safeParse(await readJson(req));
+                if (!parsed.success) return error('Invalid webhook', 400, zodIssues(parsed.error));
+                const endpoint = await webhooks.update(id, parsed.data);
+                return endpoint ? json(endpoint) : error('Webhook not found', 404);
+            }),
+            DELETE: guard<'/api/webhooks/:id'>(req => {
+                const id = parseId(req.params.id);
+                return id !== null && webhooks.delete(id)
+                    ? new Response(null, { status: 204 })
+                    : error('Webhook not found', 404);
+            })
+        },
+
+        '/api/webhooks/:id/links/:linkId': {
+            PUT: guard<'/api/webhooks/:id/links/:linkId'>(req => {
+                const id = parseId(req.params.id);
+                const linkId = parseId(req.params.linkId);
+                const endpoint =
+                    id === null || linkId === null ? null : webhooks.setLink(id, linkId, true);
+                return endpoint ? json(endpoint) : error('Webhook not found', 404);
+            }),
+            DELETE: guard<'/api/webhooks/:id/links/:linkId'>(req => {
+                const id = parseId(req.params.id);
+                const linkId = parseId(req.params.linkId);
+                const endpoint =
+                    id === null || linkId === null ? null : webhooks.setLink(id, linkId, false);
+                return endpoint ? json(endpoint) : error('Webhook not found', 404);
+            })
+        },
+
+        '/api/webhooks/:id/secret': {
+            POST: guard<'/api/webhooks/:id/secret'>(req => {
+                const id = parseId(req.params.id);
+                const secret = id === null ? null : webhooks.rotateSecret(id);
+                if (secret === null) return error('Webhook not found', 404);
+                const body: WebhookSecretResponse = { secret };
+                return json(body);
+            })
+        },
+
+        '/api/webhooks/:id/test': {
+            POST: guard<'/api/webhooks/:id/test'>(req => {
+                const id = parseId(req.params.id);
+                const event = id === null ? null : webhooks.sendTest(id);
+                return event ? json(event, 202) : error('Webhook not found', 404);
+            })
+        },
+
+        '/api/webhooks/:id/events': {
+            GET: guard<'/api/webhooks/:id/events'>(req => {
+                const id = parseId(req.params.id);
+                const limit = numberParam(new URL(req.url).searchParams, 'limit', 50);
+                const events = id === null ? null : webhooks.events(id, limit);
+                return events ? json(events) : error('Webhook not found', 404);
+            })
+        },
+
+        '/api/webhook-events/:id/retry': {
+            POST: guard<'/api/webhook-events/:id/retry'>(req => {
+                const id = parseId(req.params.id);
+                const event = id === null ? null : webhooks.retry(id);
+                return event ? json(event) : error('Event not found', 404);
             })
         },
 
