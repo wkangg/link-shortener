@@ -149,6 +149,8 @@ export interface ClickHistoryRow {
     device: string | null;
     browser: string | null;
     os: string | null;
+    /** e.g. "18.6"; iOS only for now. */
+    osVersion: string | null;
     bot: boolean;
     botName: string | null;
     /** 1 when the IP belongs to a hosting/datacenter provider. */

@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { migrate } from './migrate.ts';
-import { repairGeoEncoding } from './repair.ts';
+import { backfillAppleDetails, repairGeoEncoding } from './repair.ts';
 
 export const MIGRATIONS_DIR = path.join(import.meta.dir, 'migrations');
 
@@ -30,6 +30,9 @@ export function openDatabase(file: string, opts: { log?: boolean } = {}): Databa
     const repaired = repairGeoEncoding(db);
     if (opts.log && repaired > 0)
         console.log(`[db] fixed city/region encoding on ${repaired} clicks`);
+    const apple = backfillAppleDetails(db);
+    if (opts.log && apple > 0)
+        console.log(`[db] filled in iOS version and model on ${apple} clicks`);
 
     return db;
 }

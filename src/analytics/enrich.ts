@@ -18,6 +18,7 @@ export interface ClickRow {
     device: string | null;
     browser: string | null;
     os: string | null;
+    os_version: string | null;
     is_bot: 0 | 1;
     visitor_hash: string | null;
     utm_source: string | null;
@@ -130,6 +131,7 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         device: ua.device,
         browser: ua.browser,
         os: ua.os,
+        os_version: ua.osVersion,
         is_bot: ua.isBot ? 1 : 0,
         visitor_hash: visitorHash(click, opts.salt),
         ...utm,

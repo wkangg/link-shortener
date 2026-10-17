@@ -42,7 +42,7 @@ const TEXT_FIELDS: Record<string, readonly string[]> = {
     city: ['c.city'],
     referrer: ['c.referrer', 'c.referrer_host'],
     source: ['c.source'],
-    os: ['c.os'],
+    os: ['c.os', 'c.os_version'],
     browser: ['c.browser'],
     device: ['c.device', 'c.device_model'],
     model: ['c.device_model'],

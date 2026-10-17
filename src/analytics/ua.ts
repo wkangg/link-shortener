@@ -1,14 +1,18 @@
 import Bowser from 'bowser';
 import { isbot, isbotMatch } from 'isbot';
 
+import { iosVersion, modelFromHardwareId } from './apple.ts';
+
 export interface UaInfo {
     browser: string | null;
     os: string | null;
+    /** Only for iOS for now, e.g. "18.6" (see analytics/apple.ts). */
+    osVersion: string | null;
     device: 'desktop' | 'mobile' | 'tablet' | 'tv' | null;
     isBot: boolean;
     /** Crawler name (e.g. "Googlebot", "curl") when `isBot`. */
     botName: string | null;
-    /** Vendor and model, e.g. "Apple iPhone" or "Pixel 8". */
+    /** Vendor and model, e.g. "Apple iPhone", "Apple iPhone 15 Pro" or "Pixel 8". */
     model: string | null;
 }
 
@@ -26,7 +30,15 @@ export function parseUserAgent(ua: string): UaInfo {
 
     let info: UaInfo;
     if (ua === '') {
-        info = { browser: null, os: null, device: null, isBot: false, botName: null, model: null };
+        info = {
+            browser: null,
+            os: null,
+            osVersion: null,
+            device: null,
+            isBot: false,
+            botName: null,
+            model: null
+        };
     } else {
         const parsed = Bowser.parse(ua);
         const type = parsed.platform.type;
@@ -35,6 +47,7 @@ export function parseUserAgent(ua: string): UaInfo {
             // Bowser reports unrecognized browsers as an empty name rather than undefined.
             browser: parsed.browser.name || null,
             os: parsed.os.name || null,
+            osVersion: parsed.os.name === 'iOS' ? iosVersion(ua) : null,
             device:
                 type === 'desktop' || type === 'mobile' || type === 'tablet' || type === 'tv'
                     ? type
@@ -58,6 +71,10 @@ function botName(ua: string, known: string | undefined): string | null {
 }
 
 function deviceModel(ua: string, platform: { vendor?: string; model?: string }): string | null {
+    if (platform.vendor === 'Apple') {
+        const exact = modelFromHardwareId(ua);
+        if (exact) return exact;
+    }
     const model = platform.model ?? ANDROID_MODEL_RE.exec(ua)?.[1]?.trim();
     if (model === 'K') return platform.vendor ?? null;
     const full = [platform.vendor, model].filter(Boolean).join(' ');

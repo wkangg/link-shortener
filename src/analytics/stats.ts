@@ -303,7 +303,7 @@ export class Stats {
             .query<Omit<ClickHistoryRow, Flags> & Record<Flags, number | null>, Param[]>(
                 `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
-                        c.device, c.browser, c.os, c.is_bot AS bot, c.bot_name AS botName,
+                        c.device, c.browser, c.os, c.os_version AS osVersion, c.is_bot AS bot, c.bot_name AS botName,
                         c.is_datacenter AS isDatacenter, c.vpn, c.scraper, c.fingerprint,
                         c.abuse_score AS abuseScore, c.isp,
                         c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
@@ -371,6 +371,7 @@ export class Stats {
             'device',
             'browser',
             'os',
+            'os_version',
             'bot',
             'datacenter',
             'vpn',
@@ -408,7 +409,7 @@ export class Stats {
         const rows = this.#db
             .query<Record<string, string | number | null>, Param[]>(
                 `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
-                        c.device, c.browser, c.os, c.is_bot, c.is_datacenter, c.vpn, c.scraper, c.fingerprint, c.abuse_score, c.isp, c.utm_source, c.utm_medium,
+                        c.device, c.browser, c.os, c.os_version, c.is_bot, c.is_datacenter, c.vpn, c.scraper, c.fingerprint, c.abuse_score, c.isp, c.utm_source, c.utm_medium,
                         c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
                         c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
                         c.orientation, c.battery, c.charging, c.connection, c.gpu, c.incognito,

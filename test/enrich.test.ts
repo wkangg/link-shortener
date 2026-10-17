@@ -179,6 +179,7 @@ describe('user agents', () => {
         expect(parseUserAgent(IPHONE)).toEqual({
             browser: 'Safari',
             os: 'iOS',
+            osVersion: '17.0',
             device: 'mobile',
             isBot: false,
             botName: null,

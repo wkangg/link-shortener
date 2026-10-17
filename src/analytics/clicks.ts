@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 import type { ClickSink, RawClick } from '../shared/types.ts';
+import { refineApple } from './apple.ts';
 import { ClickClassifier, SIGNALS_WINDOW_MS } from './classify.ts';
 import { isDatacenterHostname } from './datacenter.ts';
 import {
@@ -25,6 +26,7 @@ const COLUMNS = [
     'device',
     'browser',
     'os',
+    'os_version',
     'is_bot',
     'visitor_hash',
     'utm_source',
@@ -131,18 +133,29 @@ export class ClickBuffer implements ClickSink {
             `INSERT INTO clicks (${COLUMNS.join(', ')}) VALUES (${COLUMNS.map(() => '?').join(', ')}) RETURNING id`
         );
         // The user agent and headers of the click a token belongs to, so its
-        // fingerprint can be recomputed with the browser signals folded in.
+        // fingerprint can be recomputed with the browser signals folded in (and
+        // its Apple model narrowed down by screen size).
         this.#rowForToken = db.query<
-            { id: number; ua: string | null; language: string | null; timezone: string | null },
+            {
+                id: number;
+                ua: string | null;
+                language: string | null;
+                timezone: string | null;
+                os: string | null;
+                model: string | null;
+            },
             [string, number]
         >(
-            'SELECT id, user_agent AS ua, language, timezone FROM clicks WHERE token = ? AND ts >= ? LIMIT 1'
+            `SELECT id, user_agent AS ua, language, timezone, os, device_model AS model
+             FROM clicks WHERE token = ? AND ts >= ? LIMIT 1`
         );
         // One use per token, and only shortly after the click.
         this.#applySignals = db.query(
             `UPDATE clicks SET ${SIGNAL_COLUMNS.map(c => `${c} = ?`).join(', ')},
                 timezone = COALESCE(?, timezone), language = COALESCE(?, language),
-                fingerprint = COALESCE(?, fingerprint), js = 1, token = NULL
+                fingerprint = COALESCE(?, fingerprint), os = COALESCE(?, os),
+                os_version = COALESCE(?, os_version), device = COALESCE(?, device),
+                device_model = COALESCE(?, device_model), js = 1, token = NULL
              WHERE token = ? AND ts >= ?`
         );
         this.#setHostname = db.query(
@@ -225,11 +238,21 @@ export class ClickBuffer implements ClickSink {
                               touchPoints: parsed.touch_points
                           })
                         : null;
+                    const apple = click
+                        ? refineApple(click, {
+                              screen: parsed.screen,
+                              touchPoints: parsed.touch_points
+                          })
+                        : null;
                     this.#applySignals.run(
                         ...SIGNAL_COLUMNS.map(column => parsed[column]),
                         parsed.timezone,
                         parsed.language,
                         fingerprint,
+                        apple?.os ?? null,
+                        apple?.osVersion ?? null,
+                        apple?.device ?? null,
+                        apple?.model ?? null,
                         s.token,
                         since
                     );

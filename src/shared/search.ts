@@ -15,7 +15,7 @@ export const SEARCH_FIELDS: readonly SearchField[] = [
     { name: 'link', hint: 'short link slug' },
     { name: 'source', hint: 'traffic source' },
     { name: 'referrer', hint: 'referring page' },
-    { name: 'os', hint: 'operating system' },
+    { name: 'os', hint: 'operating system or version, e.g. os:18.6' },
     { name: 'browser', hint: 'browser' },
     { name: 'device', hint: 'device type or model' },
     { name: 'model', hint: 'device model' },
