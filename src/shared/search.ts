@@ -1,5 +1,20 @@
 /** Search fields and flags, for the dashboard's autocomplete (analytics/search.ts compiles them). */
 
+/** The links search (dashboard/links.ts compiles it). */
+export const LINK_SEARCH_FIELDS: readonly SearchField[] = [
+    { name: 'webhook', hint: 'webhook name, e.g. webhook:discord' },
+    { name: 'is', hint: 'a flag, e.g. is:tracked' },
+    { name: 'has', hint: 'e.g. has:webhook' }
+];
+
+export const LINK_SEARCH_FLAGS: readonly SearchField[] = [
+    { name: 'tracked', hint: 'detailed device tracking is on' }
+];
+
+export const LINK_SEARCH_HAS: readonly SearchField[] = [
+    { name: 'webhook', hint: 'sends clicks to a webhook' }
+];
+
 export interface SearchField {
     name: string;
     hint: string;

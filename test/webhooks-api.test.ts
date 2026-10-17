@@ -300,6 +300,9 @@ describe('webhook endpoints API', () => {
         expect(await slugs('webhook:discord')).toEqual(['sb']);
         expect(await slugs('webhook:hooks.example')).toEqual(['sa']);
         expect(await slugs('is:tracked')).toEqual(['sa']);
+        // A field with nothing after it yet (typing) filters nothing.
+        expect(await slugs('is:')).toEqual(['sa', 'sb', 'sc']);
+        expect(await slugs('is:tracked webhook:')).toEqual(['sa']);
         expect(await slugs('-is:tracked has:webhook')).toEqual(['sb']);
         // A webhook for every link gives every link a webhook.
         const every = await create({ url: 'https://zap.example/every', description: 'Zapier' });

@@ -335,6 +335,9 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
     const params: string[] = [];
     for (const term of tokenize(q).slice(0, 32)) {
         const value = term.value.replace(/^=/, '');
+        // `is:` with nothing after it yet: the list filters as you type. (The
+        // tokenizer reads a bare `is:` as text.)
+        if (term.field ? value === '' : /^[a-z_]+:$/i.test(value)) continue;
         let sql: string;
         switch (term.field ?? '') {
             case 'has':

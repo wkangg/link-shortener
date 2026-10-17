@@ -13,7 +13,7 @@ import {
     screenLabel
 } from '../format.ts';
 import { useApi } from '../useApi.ts';
-import { SearchBox } from './SearchBox.tsx';
+import { clickSyntax, SearchBox } from './SearchBox.tsx';
 
 /** "All" still pages, just in very large pages, so a huge history can't freeze the tab. */
 const ALL = 10_000;
@@ -302,6 +302,7 @@ export function ClickHistory({
     const [size, setSize] = useState(savedSize);
     const requested = paging.base === base ? paging.page : 0;
 
+    const syntax = clickSyntax(params);
     const query = new URLSearchParams(params);
     query.set('limit', String(size));
     query.set('offset', String(requested * size));
@@ -347,7 +348,7 @@ export function ClickHistory({
                     value={text}
                     onChange={onText}
                     onCommit={onSearch}
-                    params={params}
+                    syntax={syntax}
                     count={count}
                 />
                 <button
