@@ -15,6 +15,15 @@ import {
     WebhookDeliverer,
     type WebhookFetch
 } from '../src/webhooks/deliverer.ts';
+import {
+    clickEmbed,
+    clicksMessage,
+    DISCORD_INTERVAL_MS,
+    type DiscordMessage,
+    discordWaitMs,
+    isDiscordWebhookUrl,
+    maskDiscordUrl
+} from '../src/webhooks/discord.ts';
 import { SETTLE_DELAY_MS, WebhookOutbox } from '../src/webhooks/outbox.ts';
 import {
     type ClickSnapshot,
@@ -27,6 +36,7 @@ import { generateSecret, parseSecret, sign, signedHeaders } from '../src/webhook
 import type { ResolveHost } from '../src/webhooks/url.ts';
 
 const SHORT = 'https://s.example';
+const DASH = 'https://dash.example';
 
 function setup() {
     const db = openDatabase(':memory:');
@@ -253,6 +263,7 @@ function pipeline(
     };
     const deliverer = new WebhookDeliverer(db, {
         shortOrigin: SHORT,
+        dashOrigin: DASH,
         abuseMinScore: 25,
         allowPrivate: opts.allowPrivate ?? true,
         resolve: opts.resolve,
@@ -521,6 +532,7 @@ describe('delivery', () => {
         const release: (() => void)[] = [];
         const deliverer = new WebhookDeliverer(p.db, {
             shortOrigin: SHORT,
+            dashOrigin: DASH,
             abuseMinScore: 25,
             allowPrivate: true,
             concurrency: 2,
@@ -555,6 +567,244 @@ describe('delivery', () => {
             [2, 'failed'],
             [3, 'pending'],
             [4, 'pending']
+        ]);
+    });
+});
+
+const DISCORD_URL = 'https://discord.com/api/webhooks/123456789/abc-DEF_ghi';
+
+function sampleEvent(overrides: Partial<LinkClickedEvent['data']['click']> = {}): LinkClickedEvent {
+    return {
+        type: 'link.clicked',
+        timestamp: '2026-10-17T12:00:00.000Z',
+        data: {
+            link: {
+                id: 12,
+                slug: 'gh',
+                shortUrl: 'https://s.example/gh',
+                url: 'https://github.com/wkangg',
+                title: null,
+                tags: []
+            },
+            click: {
+                id: 1,
+                ts: '2026-10-17T12:00:00.000Z',
+                country: 'CA',
+                region: 'Ontario',
+                city: 'Toronto',
+                source: 'X',
+                referrerHost: 't.co',
+                qr: false,
+                device: 'mobile',
+                browser: 'Safari',
+                os: 'iOS',
+                osVersion: '18.6',
+                language: 'en-CA',
+                utm: { source: null, medium: null, campaign: null, term: null, content: null },
+                visitor: 'abc',
+                flags: { bot: null, datacenter: false, vpn: null, scraper: null, abuseScore: null },
+                ...overrides
+            }
+        }
+    };
+}
+
+describe('discord formatting', () => {
+    test('recognizes and masks Discord webhook URLs', () => {
+        expect(isDiscordWebhookUrl(DISCORD_URL)).toBe(true);
+        expect(isDiscordWebhookUrl('https://discordapp.com/api/webhooks/1/x')).toBe(true);
+        expect(isDiscordWebhookUrl('https://canary.discord.com/api/v10/webhooks/1/x')).toBe(true);
+        expect(isDiscordWebhookUrl('http://discord.com/api/webhooks/1/x')).toBe(false);
+        expect(isDiscordWebhookUrl('https://discord.com/channels/1/2')).toBe(false);
+        expect(isDiscordWebhookUrl('https://evil.example/api/webhooks/1/x')).toBe(false);
+        expect(maskDiscordUrl(DISCORD_URL)).toBe('https://discord.com/api/webhooks/123456789/••••');
+    });
+
+    test('a click becomes one embed with only the fields it has', () => {
+        const embed = clickEmbed(sampleEvent(), DASH);
+        expect(embed).toMatchObject({
+            title: 'Click on s.example/gh',
+            url: 'https://dash.example/links/12',
+            timestamp: '2026-10-17T12:00:00.000Z',
+            footer: { text: '→ https://github.com/wkangg' }
+        });
+        expect(embed.fields?.map(f => [f.name, f.value])).toEqual([
+            ['Location', '🇨🇦 Toronto, Ontario, CA'],
+            ['Source', 'X · t.co'],
+            ['Device', 'Safari · iOS 18.6 · mobile']
+        ]);
+        expect(embed).not.toHaveProperty('description');
+    });
+
+    test('flags, UTM, QR and opted-in IP fields show up; visitor text is escaped', () => {
+        const embed = clickEmbed(
+            sampleEvent({
+                qr: true,
+                referrerHost: '@everyone',
+                utm: {
+                    source: 'news',
+                    medium: null,
+                    campaign: '[x](https://evil.example)',
+                    term: null,
+                    content: null
+                },
+                flags: { bot: null, datacenter: true, vpn: 'Tor', scraper: null, abuseScore: 80 },
+                ip: '203.0.113.5',
+                userAgent: '**bold**'
+            }),
+            DASH
+        );
+        const fields = Object.fromEntries((embed.fields ?? []).map(f => [f.name, f.value]));
+        // Escaped, so Discord shows them as text: no mention, no masked link. (The
+        // separator is interpolated: Bun mangles non-ASCII text inside String.raw.)
+        const dot = ' · ';
+        expect(fields.Source).toBe(String.raw`X${dot}\@everyone`);
+        expect(fields.UTM).toBe(
+            String.raw`campaign \[x\]\(https\://evil.example\)${dot}source news`
+        );
+        expect(fields.QR).toBe('Scanned');
+        expect(fields.Flags).toBe(String.raw`VPN\: Tor${dot}Datacenter${dot}Abuse 80`);
+        expect(fields.IP).toBe('`203.0.113.5`');
+        expect(fields['User agent']).toBe(String.raw`\*\*bold\*\*`);
+        expect(embed.color).not.toBe(clickEmbed(sampleEvent(), DASH).color);
+    });
+
+    test('up to 10 clicks get an embed each; more are summarized', () => {
+        const ten = clicksMessage(
+            Array.from({ length: 10 }, () => sampleEvent()),
+            DASH
+        );
+        expect(ten.embeds).toHaveLength(10);
+        expect(ten.allowed_mentions).toEqual({ parse: [] });
+
+        const many = clicksMessage(
+            Array.from({ length: 13 }, (_, i) => sampleEvent({ id: i })),
+            DASH
+        );
+        expect(many.embeds).toHaveLength(10);
+        expect(many.embeds[0]).toMatchObject({
+            title: '+4 more clicks',
+            description: 's.example/gh: 4'
+        });
+        // The newest nine are shown.
+        expect(many.embeds.slice(1).map(e => e.title)).toEqual(
+            Array.from({ length: 9 }, () => 'Click on s.example/gh')
+        );
+    });
+
+    test('rate-limit waits come from the 429 body or the bucket headers', async () => {
+        expect(await discordWaitMs(Response.json({ retry_after: 1.5 }, { status: 429 }))).toBe(
+            1500
+        );
+        expect(
+            await discordWaitMs(
+                new Response(null, { status: 429, headers: { 'retry-after': '3' } })
+            )
+        ).toBe(3000);
+        expect(
+            await discordWaitMs(
+                new Response(null, {
+                    status: 204,
+                    headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset-after': '0.8' }
+                })
+            )
+        ).toBe(800);
+        expect(await discordWaitMs(new Response(null, { status: 204 }))).toBeNull();
+    });
+});
+
+function discordPipeline() {
+    const p = pipeline();
+    const link = p.links.create({ url: 'https://example.com', slug: 'gh' });
+    const endpoint = p.addEndpoint({
+        kind: 'discord',
+        url: DISCORD_URL,
+        secret: null,
+        skip: []
+    });
+    p.clock.now = Date.now() + 1;
+    return { ...p, link, endpointId: endpoint };
+}
+
+const embedsOf = (body: string | undefined) => (JSON.parse(body ?? '{}') as DiscordMessage).embeds;
+
+describe('discord delivery', () => {
+    test('due clicks go out as one message of embeds', async () => {
+        const p = discordPipeline();
+        p.click(raw(p.link.id), raw(p.link.id), raw(p.link.id));
+        p.replies.push(204);
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
+        expect(p.requests[0]?.url).toBe(DISCORD_URL);
+        expect(p.requests[0]?.headers).toEqual({ 'Content-Type': 'application/json' });
+        expect(embedsOf(p.requests[0]?.body)).toHaveLength(3);
+        expect(p.events().map(e => e.status)).toEqual(['delivered', 'delivered', 'delivered']);
+    });
+
+    test('messages to one endpoint are at least 2 s apart', async () => {
+        const p = discordPipeline();
+        p.click(raw(p.link.id));
+        await p.deliverer.tick();
+        p.click(raw(p.link.id), raw(p.link.id));
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
+        p.clock.now += DISCORD_INTERVAL_MS;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(2);
+        expect(embedsOf(p.requests[1]?.body)).toHaveLength(2);
+    });
+
+    test('a 429 waits for retry_after and does not count as an attempt', async () => {
+        const p = discordPipeline();
+        p.click(raw(p.link.id));
+        p.replies.push(Response.json({ retry_after: 30 }, { status: 429 }));
+        await p.deliverer.tick();
+        expect(p.events()[0]).toMatchObject({ status: 'pending', attempts: 0 });
+        p.clock.now += 29_000;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
+        p.clock.now += 1000;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(2);
+        expect(p.events()[0]).toMatchObject({ status: 'delivered', attempts: 1 });
+    });
+
+    test('a deleted Discord webhook turns the endpoint off', async () => {
+        const p = discordPipeline();
+        p.click(raw(p.link.id), raw(p.link.id));
+        p.replies.push(404);
+        await p.deliverer.tick();
+        expect(p.endpoint(p.endpointId)).toMatchObject({
+            enabled: 0,
+            disabled_reason: 'Discord says this webhook no longer exists'
+        });
+        expect(p.events().map(e => e.status)).toEqual(['skipped', 'skipped']);
+        expect(p.outbox.active).toBe(false);
+    });
+
+    test('other failures retry like any endpoint', async () => {
+        const p = discordPipeline();
+        p.click(raw(p.link.id));
+        p.replies.push(502);
+        await p.deliverer.tick();
+        expect(p.events()[0]).toMatchObject({ status: 'pending', attempts: 1, last_status: 502 });
+    });
+
+    test('webhook.test events are sent as their own message', async () => {
+        const p = discordPipeline();
+        p.click(raw(p.link.id));
+        p.db
+            .query(
+                `INSERT INTO webhook_events (endpoint_id, type, event_id, due_at, created_at)
+             VALUES (?, 'webhook.test', 'evt_test', 0, 0)`
+            )
+            .run(p.endpointId);
+        await p.deliverer.tick();
+        expect(embedsOf(p.requests[0]?.body)[0]?.title).toBe('Webhook connected ✅');
+        expect(p.events().map(e => [e.event_id === 'evt_test', e.status])).toEqual([
+            [false, 'pending'],
+            [true, 'delivered']
         ]);
     });
 });

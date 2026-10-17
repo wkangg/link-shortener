@@ -79,6 +79,7 @@ export function startApp(opts: AppOptions) {
     const outbox = new WebhookOutbox(db);
     const webhooks = new WebhookDeliverer(db, {
         shortOrigin: config.shortOrigin,
+        dashOrigin: config.dashOrigin,
         abuseMinScore: config.abuseMinScore,
         allowPrivate: !config.isProd,
         fetch: opts.webhookFetch,

@@ -3,9 +3,11 @@
 import type { Database } from 'bun:sqlite';
 
 import type { WebhookKind, WebhookSkipCategory } from '../shared/types.ts';
+import { clicksMessage, DISCORD_INTERVAL_MS, discordWaitMs, testMessage } from './discord.ts';
 import {
     type ClickReader,
     createClickReader,
+    type LinkClickedEvent,
     linkClickedEvent,
     skipReason,
     testEvent,
@@ -24,12 +26,16 @@ export const KEEP_FINISHED_MS = 7 * 86_400_000;
 export const MAX_PENDING = 100_000;
 
 const MAINTENANCE_INTERVAL_MS = 60_000;
+/** Due events read per Discord message; past 10 they are summarized. */
+const DISCORD_BATCH = 200;
 const MAX_ERROR = 300;
 
 export type WebhookFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 export interface DelivererOptions {
     shortOrigin: string;
+    /** Discord embeds link to the link's dashboard page. */
+    dashOrigin: string;
     abuseMinScore: number;
     /** Allow URLs on private networks (development). */
     allowPrivate: boolean;
@@ -37,7 +43,7 @@ export interface DelivererOptions {
     resolve?: ResolveHost;
     now?: () => number;
     intervalMs?: number;
-    /** Requests in flight at once. */
+    /** Requests in flight at once to standard endpoints (Discord endpoints get one each). */
     concurrency?: number;
     timeoutMs?: number;
     /** Pending events kept at most (default MAX_PENDING). */
@@ -73,7 +79,12 @@ export class WebhookDeliverer {
     readonly #opts: Required<Omit<DelivererOptions, 'resolve' | 'onDisable'>> &
         Pick<DelivererOptions, 'resolve' | 'onDisable'>;
     readonly #readClick: ClickReader;
+    /** Standard events being sent, by event id. */
     readonly #inFlight = new Map<number, Promise<void>>();
+    /** Discord endpoints with a message being sent, by endpoint id. */
+    readonly #discordBusy = new Map<number, Promise<void>>();
+    /** Earliest time each Discord endpoint may get its next message. */
+    readonly #discordNext = new Map<number, number>();
     #timer: ReturnType<typeof setInterval> | null = null;
     #lastMaintenance = 0;
     #sent = 0;
@@ -101,32 +112,56 @@ export class WebhookDeliverer {
     async stop(): Promise<void> {
         if (this.#timer) clearInterval(this.#timer);
         this.#timer = null;
-        await Promise.all(this.#inFlight.values());
+        await Promise.all([...this.#inFlight.values(), ...this.#discordBusy.values()]);
     }
 
     /** Starts every due event there is room for and waits for those to finish. */
     async tick(): Promise<void> {
         const now = this.#opts.now();
         if (now - this.#lastMaintenance >= MAINTENANCE_INTERVAL_MS) this.maintain(now);
+        await Promise.all([...this.#startStandard(now), ...this.#startDiscord(now)]);
+    }
+
+    #startStandard(now: number): Promise<void>[] {
         const room = this.#opts.concurrency - this.#inFlight.size;
-        if (room <= 0) return;
-        const due = this.#db
-            .query<DueRow, [number, number]>(
-                `SELECT ev.id, ev.type, ev.click_id, ev.event_id, ev.attempts, ev.endpoint_id,
-                        e.kind, e.url, e.secret, e.skip, e.include_ip, e.failing_since
-                 FROM webhook_events ev JOIN webhook_endpoints e ON e.id = ev.endpoint_id
-                 WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1
-                 ORDER BY ev.due_at, ev.id LIMIT ?`
-            )
+        if (room <= 0) return [];
+        const due = this.#dueQuery("e.kind = 'standard'")
             .all(now, room + this.#inFlight.size)
             .filter(row => !this.#inFlight.has(row.id))
             .slice(0, room);
-        const started = due.map(row => {
+        return due.map(row => {
             const run = this.#attempt(row).finally(() => this.#inFlight.delete(row.id));
             this.#inFlight.set(row.id, run);
             return run;
         });
-        await Promise.all(started);
+    }
+
+    /** One batch per Discord endpoint that has due events, isn't busy and isn't paced. */
+    #startDiscord(now: number): Promise<void>[] {
+        const endpoints = this.#db
+            .query<{ id: number }, [number]>(
+                `SELECT DISTINCT ev.endpoint_id AS id
+                 FROM webhook_events ev JOIN webhook_endpoints e ON e.id = ev.endpoint_id
+                 WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1 AND e.kind = 'discord'`
+            )
+            .all(now)
+            .map(r => r.id)
+            .filter(id => !this.#discordBusy.has(id) && (this.#discordNext.get(id) ?? 0) <= now);
+        return endpoints.map(id => {
+            const run = this.#discordBatch(id, now).finally(() => this.#discordBusy.delete(id));
+            this.#discordBusy.set(id, run);
+            return run;
+        });
+    }
+
+    #dueQuery(where: string) {
+        return this.#db.query<DueRow, number[]>(
+            `SELECT ev.id, ev.type, ev.click_id, ev.event_id, ev.attempts, ev.endpoint_id,
+                    e.kind, e.url, e.secret, e.skip, e.include_ip, e.failing_since
+             FROM webhook_events ev JOIN webhook_endpoints e ON e.id = ev.endpoint_id
+             WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1 AND ${where}
+             ORDER BY ev.due_at, ev.id LIMIT ?`
+        );
     }
 
     /** Prunes old finished events and caps the pending ones. */
@@ -162,16 +197,70 @@ export class WebhookDeliverer {
             allowPrivate: this.#opts.allowPrivate,
             resolve: this.#opts.resolve
         });
-        switch (row.kind) {
-            case 'standard':
-                return this.#sendStandard(row, event, now);
-            case 'discord':
-                return {
-                    kind: 'failed',
-                    status: null,
-                    error: 'Discord endpoints are not supported yet'
-                };
+        return this.#sendStandard(row, event, now);
+    }
+
+    /**
+     * Sends a Discord endpoint's due events as one message: test events on their
+     * own, clicks batched (summarized past 10). Paced by DISCORD_INTERVAL_MS and
+     * Discord's rate-limit headers; a 429 waits without counting as an attempt.
+     */
+    async #discordBatch(endpointId: number, now: number): Promise<void> {
+        const rows = this.#dueQuery('ev.endpoint_id = ?').all(now, endpointId, DISCORD_BATCH);
+        const first = rows[0];
+        if (!first) return;
+        const tests = rows.filter(row => row.type === 'webhook.test');
+        const clicks: { row: DueRow; event: LinkClickedEvent }[] = [];
+        if (tests.length === 0) {
+            for (const row of rows) {
+                const event = this.#build(row, now);
+                if ('reason' in event) this.#record(row, { kind: 'skipped', reason: event.reason });
+                else if (event.type === 'link.clicked') clicks.push({ row, event });
+            }
         }
+        const batch = tests.length > 0 ? tests : clicks.map(c => c.row);
+        if (batch.length === 0) return;
+        const message =
+            tests.length > 0
+                ? testMessage()
+                : clicksMessage(
+                      clicks.map(c => c.event),
+                      this.#opts.dashOrigin
+                  );
+
+        this.#discordNext.set(endpointId, now + DISCORD_INTERVAL_MS);
+        let res: Response;
+        try {
+            await checkWebhookUrl(first.url, {
+                allowPrivate: this.#opts.allowPrivate,
+                resolve: this.#opts.resolve
+            });
+            res = await this.#opts.fetch(first.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(message),
+                redirect: 'manual',
+                signal: AbortSignal.timeout(this.#opts.timeoutMs)
+            });
+        } catch (error) {
+            const outcome: Outcome = { kind: 'failed', status: null, error: errorMessage(error) };
+            for (const row of batch) this.#record(row, outcome);
+            return;
+        }
+        const wait = await discordWaitMs(res);
+        await res.body?.cancel().catch(() => null);
+        if (wait !== null) {
+            this.#discordNext.set(endpointId, now + Math.max(wait, DISCORD_INTERVAL_MS));
+        }
+        if (res.status === 429) return;
+        if (res.status === 401 || res.status === 404) {
+            this.disable(endpointId, 'Discord says this webhook no longer exists', now);
+            return;
+        }
+        const outcome: Outcome = res.ok
+            ? { kind: 'delivered', status: res.status }
+            : { kind: 'failed', status: res.status, error: `HTTP ${res.status}` };
+        for (const row of batch) this.#record(row, outcome);
     }
 
     /** The event to send, or why not to send it. */
@@ -283,7 +372,7 @@ export class WebhookDeliverer {
 
     get stats() {
         return {
-            inFlight: this.#inFlight.size,
+            inFlight: this.#inFlight.size + this.#discordBusy.size,
             sent: this.#sent,
             failedAttempts: this.#failedAttempts
         };
