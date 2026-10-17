@@ -4,6 +4,7 @@ import { openDatabase } from '../src/db/client.ts';
 import type {
     ApiError,
     Link,
+    LinkListResponse,
     WebhookEndpoint,
     WebhookEndpointCreated,
     WebhookEventRow,
@@ -225,6 +226,37 @@ describe('webhook endpoints API', () => {
 
         expect(await statusOf('DELETE', `/api/links/${a.body.id}`)).toBe(204);
         expect(await statusOf('DELETE', `/api/links/${b.body.id}`)).toBe(204);
+    });
+
+    test('the links list says which webhooks each link was chosen for', async () => {
+        const a = await send<Link>('POST', '/api/links', { url: 'https://a.example', slug: 'la' });
+        const b = await send<Link>('POST', '/api/links', {
+            url: 'https://b.example',
+            slug: 'lb',
+            tags: ['launch']
+        });
+        const c = await send<Link>('POST', '/api/links', { url: 'https://c.example', slug: 'lc' });
+        const direct = await create({ url: 'https://hooks.example/a', links: [a.body.id] });
+        const tagged = await create({
+            url: 'https://hooks.example/b',
+            description: 'Launch',
+            tags: ['launch'],
+            links: [b.body.id]
+        });
+        await create({ url: 'https://hooks.example/every' });
+        await send('PATCH', `/api/webhooks/${tagged.body.id}`, { enabled: false });
+
+        const list = await send<LinkListResponse>('GET', '/api/links?limit=500');
+        const of = (id: number) => list.body.links.find(l => l.id === id)?.webhooks;
+        expect(of(a.body.id)).toEqual([
+            { id: direct.body.id, name: 'hooks.example', enabled: true }
+        ]);
+        // Chosen directly and by tag: listed once.
+        expect(of(b.body.id)).toEqual([{ id: tagged.body.id, name: 'Launch', enabled: false }]);
+        // Webhooks for every link aren't listed per link.
+        expect(of(c.body.id)).toEqual([]);
+
+        for (const link of [a, b, c]) await send('DELETE', `/api/links/${link.body.id}`);
     });
 
     test('rotating the secret replaces it', async () => {

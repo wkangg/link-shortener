@@ -1,7 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
 import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
-import type { Link, LinkListResponse, LinkWithStats, RedirectType } from '../shared/types.ts';
+import type {
+    Link,
+    LinkListResponse,
+    LinkWebhookRef,
+    LinkWithStats,
+    RedirectType
+} from '../shared/types.ts';
 import type { CreateLinkInput, UpdateLinkInput } from './schemas.ts';
 
 interface LinkRow {
@@ -108,11 +114,13 @@ export class LinkRepo {
         const ids = rows.map(r => r.id);
         const tags = this.#tagsFor(ids);
         const sparks = this.#sparklines(ids, opts.tz ?? 0);
+        const webhooks = this.#webhooksFor(ids);
         const links: LinkWithStats[] = rows.map(row => ({
             ...toLink(row, tags.get(row.id) ?? []),
             clicks: row.clicks,
             visitors: row.visitors,
-            spark: sparks.get(row.id) ?? Array.from({ length: SPARK_DAYS }, () => 0)
+            spark: sparks.get(row.id) ?? Array.from({ length: SPARK_DAYS }, () => 0),
+            webhooks: webhooks.get(row.id) ?? []
         }));
         return { links, total };
     }
@@ -235,6 +243,49 @@ export class LinkRepo {
         return out;
     }
 
+    /** Webhooks chosen for each link, by link or by tag. */
+    #webhooksFor(ids: number[]): Map<number, LinkWebhookRef[]> {
+        const out = new Map<number, LinkWebhookRef[]>();
+        if (ids.length === 0) return out;
+        const rows = this.#db
+            .query<
+                {
+                    link_id: number;
+                    id: number;
+                    kind: string;
+                    url: string;
+                    description: string | null;
+                    enabled: number;
+                },
+                number[]
+            >(
+                `SELECT DISTINCT m.link_id, e.id, e.kind, e.url, e.description, e.enabled
+                 FROM (
+                     SELECT link_id, endpoint_id FROM webhook_endpoint_links
+                     WHERE link_id IN (${placeholders(ids)})
+                     UNION
+                     SELECT t.link_id, e.id FROM link_tags t
+                     JOIN webhook_endpoints e ON e.all_links = 0
+                     JOIN json_each(e.tags) j ON j.value = t.tag
+                     WHERE t.link_id IN (${placeholders(ids)})
+                 ) m JOIN webhook_endpoints e ON e.id = m.endpoint_id
+                 WHERE e.all_links = 0
+                 ORDER BY m.link_id, e.id`
+            )
+            .all(...ids, ...ids);
+        for (const row of rows) {
+            const ref: LinkWebhookRef = {
+                id: row.id,
+                name: row.description ?? (row.kind === 'discord' ? 'Discord' : hostOf(row.url)),
+                enabled: row.enabled === 1
+            };
+            const list = out.get(row.link_id);
+            if (list) list.push(ref);
+            else out.set(row.link_id, [ref]);
+        }
+        return out;
+    }
+
     #sparklines(ids: number[], tz: number): Map<number, number[]> {
         const out = new Map<number, number[]>();
         if (ids.length === 0) return out;
@@ -275,6 +326,10 @@ function toLink(row: LinkRow, tags: string[]): Link {
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
+}
+
+function hostOf(url: string): string {
+    return URL.canParse(url) ? new URL(url).host : url;
 }
 
 function placeholders(values: unknown[]): string {

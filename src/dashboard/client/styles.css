@@ -534,6 +534,15 @@ a.slug:hover {
     content: '#';
 }
 
+.webhook-marker {
+    color: var(--text-secondary);
+}
+
+.webhook-marker.off {
+    color: var(--muted);
+    text-decoration: line-through;
+}
+
 .link-stats {
     display: flex;
     justify-content: flex-end;

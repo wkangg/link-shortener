@@ -127,6 +127,28 @@ export function LinksPage() {
     );
 }
 
+/** "→ #clicks", "→ 2 webhooks" or "→ webhook off", naming them all on hover. */
+function WebhookMarker({ webhooks }: { webhooks: LinkWithStats['webhooks'] }) {
+    if (webhooks.length === 0) return null;
+    const on = webhooks.filter(w => w.enabled);
+    const title = `Sends clicks to: ${webhooks
+        .map(w => (w.enabled ? w.name : `${w.name} (off)`))
+        .join(', ')}`;
+    const text =
+        on.length === 0
+            ? webhooks.length === 1
+                ? 'webhook off'
+                : 'webhooks off'
+            : on.length === 1
+              ? (on[0]?.name ?? 'webhook')
+              : `${on.length} webhooks`;
+    return (
+        <span className={on.length > 0 ? 'webhook-marker' : 'webhook-marker off'} title={title}>
+            → {text}
+        </span>
+    );
+}
+
 function LinkRow({
     link,
     host,
@@ -180,6 +202,7 @@ function LinkRow({
                     )}
                     {link.redirectType !== 302 && <span>{link.redirectType}</span>}
                     {link.trackDevice && <span title="Detailed device tracking">tracked</span>}
+                    <WebhookMarker webhooks={link.webhooks} />
                     {link.tags.map(t => (
                         <button key={t} type="button" className="tag" onClick={() => onTag(t)}>
                             {t}
