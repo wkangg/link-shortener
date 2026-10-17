@@ -2,6 +2,9 @@
 
 /** The links search (dashboard/links.ts compiles it). */
 export const LINK_SEARCH_FIELDS: readonly SearchField[] = [
+    { name: 'slug', hint: 'short link, e.g. slug:promo' },
+    { name: 'destination', hint: 'where it goes, e.g. destination:github.com (or url:)' },
+    { name: 'title', hint: 'title' },
     { name: 'webhook', hint: 'webhook name, e.g. webhook:discord' },
     { name: 'is', hint: 'a flag, e.g. is:tracked' },
     { name: 'has', hint: 'e.g. has:webhook' }

@@ -325,9 +325,18 @@ const LINK_WEBHOOKS = `SELECT 1 FROM webhook_endpoints e WHERE (e.all_links = 1
 
 const LIKE = String.raw`LIKE ? ESCAPE '\'`;
 
+/** Link columns a field searches; `title` may be NULL. */
+const LINK_COLUMNS: Record<string, string> = {
+    slug: 'l.slug',
+    destination: 'l.url',
+    url: 'l.url',
+    title: "COALESCE(l.title, '')"
+};
+
 /**
- * The links search: words match the slug, destination or title, and
- * `has:webhook`, `webhook:<name>` and `is:tracked` filter. Terms are AND-ed; a
+ * The links search: words match the slug, destination or title;
+ * `slug:`, `destination:` (or `url:`) and `title:` match one of them (`:=` for
+ * the whole value); `has:webhook`, `webhook:<name>` and `is:tracked` filter. Terms are AND-ed; a
  * leading `-` negates one; "quoted phrases" stay together.
  */
 export function compileLinkSearch(q: string): { where: string[]; params: string[] } {
@@ -359,6 +368,18 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
                     OR (e.kind = 'standard' AND e.url ${LIKE})))`;
                 const pattern = likePattern(value);
                 params.push(pattern, pattern, pattern);
+                break;
+            }
+            case 'slug':
+            case 'destination':
+            case 'url':
+            case 'title': {
+                const column = LINK_COLUMNS[term.field ?? ''] ?? 'l.slug';
+                const exact = term.value.startsWith('=');
+                sql = exact
+                    ? `${column} = ?${column === 'l.url' ? '' : ' COLLATE NOCASE'}`
+                    : `${column} ${LIKE}`;
+                params.push(exact ? value : likePattern(value));
                 break;
             }
             default: {

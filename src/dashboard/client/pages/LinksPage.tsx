@@ -124,6 +124,23 @@ export function LinksPage() {
     );
 }
 
+const LINK_VALUE_FIELDS = new Set(['slug', 'destination', 'url', 'title', 'webhook']);
+
+/** Slugs, destinations or titles of links matching what's typed, each with a reminder of the link. */
+async function linkValues(field: string, text: string) {
+    const params = new URLSearchParams({ limit: '20' });
+    // Search that field only, so the suggestions contain what's typed.
+    if (text) params.set('q', `${field}:${text.includes(' ') ? `"${text}"` : text}`);
+    const { links } = await api.links(params);
+    const values = new Map<string, string>();
+    for (const link of links) {
+        const value = field === 'slug' ? link.slug : field === 'title' ? link.title : link.url;
+        if (!value || values.has(value)) continue;
+        values.set(value, field === 'slug' ? (link.title ?? link.url) : `/${link.slug}`);
+    }
+    return [...values].map(([value, hint]) => ({ value, hint }));
+}
+
 /** The links search: slug, destination and title, plus webhook and tracking filters. */
 const LINK_SYNTAX: SearchSyntax = {
     label: 'Search links',
@@ -131,10 +148,11 @@ const LINK_SYNTAX: SearchSyntax = {
     fields: LINK_SEARCH_FIELDS,
     flags: LINK_SEARCH_FLAGS,
     has: LINK_SEARCH_HAS,
-    hasValues: field => field === 'webhook',
-    // Webhook names, as the rows and the search know them.
-    loadValues: async (_field, text) => {
+    hasValues: field => LINK_VALUE_FIELDS.has(field),
+    loadValues: async (field, text) => {
         const typed = text.toLowerCase();
+        if (field !== 'webhook') return linkValues(field, text);
+        // Webhook names, as the rows and the search know them.
         const endpoints = await api.webhooks();
         return endpoints
             .map(e => ({

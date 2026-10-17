@@ -310,6 +310,19 @@ describe('webhook endpoints API', () => {
         expect(await slugs('-has:webhook')).toEqual([]);
         expect(await slugs('webhook:zap')).toEqual(['sa', 'sb', 'sc']);
         await send('DELETE', `/api/webhooks/${every.body.id}`);
+        // One property at a time; := for the whole value.
+        expect(await slugs('slug:s')).toEqual(['sa', 'sb', 'sc']);
+        expect(await slugs('slug:=SB')).toEqual(['sb']);
+        expect(await slugs('destination:c.example')).toEqual(['sc']);
+        expect(await slugs('url:=https://a.example')).toEqual(['sa']);
+        expect(await slugs('url:=a.example')).toEqual([]);
+        await send('PATCH', `/api/links/${b.body.id}`, { title: 'Spring launch' });
+        expect(await slugs('title:spring')).toEqual(['sb']);
+        expect(await slugs('title:"spring launch"')).toEqual(['sb']);
+        // Links without a title count as not matching, so -title: keeps them.
+        expect(await slugs('-title:spring')).toEqual(['sa', 'sc']);
+        // A field match isn't a match on the other properties.
+        expect(await slugs('title:example')).toEqual([]);
         // Plain words still match slug, destination and title.
         expect(await slugs('b.example')).toEqual(['sb']);
         expect(await slugs('https://c.example')).toEqual(['sc']);
