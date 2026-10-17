@@ -4,7 +4,7 @@ import { loadConfig } from './config.ts';
 import { openDatabase } from './db/client.ts';
 
 const config = loadConfig();
-const db = openDatabase(config.dbPath, { log: true });
+const db = openDatabase(config.dbPath, { log: true, visitorSalt: config.visitorSalt });
 const app = startApp({ config, db, version: pkg.version });
 
 console.log(`[shortener] ${config.env} v${pkg.version}`);

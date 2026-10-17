@@ -1,8 +1,7 @@
 // A device fingerprint: a short hash over the most stable identifying traits of
-// a visitor's browser. The daily visitor_hash answers "how many unique people
-// today" (it mixes in the IP and the date, so it rotates); the fingerprint
-// answers "is this the same device as before", surviving a new day or a changed
-// IP. It is deliberately coarse — many devices share one — so it's a signal for
+// a visitor's browser. The visitor_hash answers "how many unique people" (it
+// mixes in the IP, so it changes with the network); the fingerprint answers "is
+// this the same device as before", surviving a changed IP. It is deliberately coarse — many devices share one — so it's a signal for
 // grouping clicks, never a unique-person identifier.
 
 /** The traits a fingerprint is built from. All optional; missing ones are skipped. */

@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 import { refineApple } from '../analytics/apple.ts';
+import { visitorHash } from '../analytics/enrich.ts';
 import { parseUserAgent } from '../analytics/ua.ts';
 import { fixUtf8ReadAsLatin1 } from '../shared/text.ts';
 
@@ -86,4 +87,33 @@ export function backfillAppleDetails(db: Database): number {
         );
     })();
     return fixed;
+}
+
+const VISITOR_NAME = 'data:visitor-hash-without-day';
+
+/**
+ * One-time rehash of clicks stored when the visitor hash included the date, so a
+ * visitor counts once across days. Clicks recorded before IPs were stored keep
+ * their old per-day hash.
+ */
+export function rehashVisitors(db: Database, salt: string): number {
+    const done = db
+        .query<{ name: string }, [string]>('SELECT name FROM _migrations WHERE name = ?')
+        .get(VISITOR_NAME);
+    if (done) return 0;
+
+    const rows = db
+        .query<{ id: number; ip: string; ua: string | null }, []>(
+            'SELECT id, ip, user_agent AS ua FROM clicks WHERE ip IS NOT NULL'
+        )
+        .all();
+    const update = db.query('UPDATE clicks SET visitor_hash = ? WHERE id = ?');
+    db.transaction(() => {
+        for (const row of rows) update.run(visitorHash(row.ip, row.ua, salt), row.id);
+        db.query('INSERT INTO _migrations (name, applied_at) VALUES (?, ?)').run(
+            VISITOR_NAME,
+            Date.now()
+        );
+    })();
+    return rows.length;
 }

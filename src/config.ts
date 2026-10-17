@@ -29,7 +29,7 @@ export interface Config {
     dashOrigin: string;
     dbPath: string;
     cfAccess: { teamDomain: string; aud: string } | null;
-    /** Secret mixed into the daily visitor hash. Random per process when unset. */
+    /** Secret mixed into the visitor hash. Random per process when unset. */
     visitorSalt: string;
     /** AbuseIPDB reputation lookups; null when no API key is set. */
     abuseIpdb: { apiKey: string; dailyLimit: number } | null;

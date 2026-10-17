@@ -102,7 +102,7 @@ const CONNECTIONS = new Set([
 export interface EnrichOptions {
     /** Host of the short domain; clicks referred from it are treated as Direct. */
     shortHost: string;
-    /** Secret mixed into the daily visitor hash. */
+    /** Secret mixed into the visitor hash. */
     salt: string;
 }
 
@@ -117,6 +117,8 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
     const ua = parseUserAgent(click.ua);
     const lang = language(click.language.split(',')[0]?.split(';')[0] ?? '');
     const tz = timezone(click.timezone);
+    const ip = clean(click.ip.slice(0, MAX_IP));
+    const userAgent = clean(click.ua.slice(0, MAX_USER_AGENT));
 
     return {
         link_id: click.linkId,
@@ -133,11 +135,11 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         os: ua.os,
         os_version: ua.osVersion,
         is_bot: ua.isBot ? 1 : 0,
-        visitor_hash: visitorHash(click, opts.salt),
+        visitor_hash: visitorHash(ip, userAgent, opts.salt),
         ...utm,
         query: otherParams(params),
-        ip: clean(click.ip.slice(0, MAX_IP)),
-        user_agent: clean(click.ua.slice(0, MAX_USER_AGENT)),
+        ip,
+        user_agent: userAgent,
         language: lang,
         timezone: tz,
         bot_name: ua.botName,
@@ -250,10 +252,17 @@ function otherParams(params: URLSearchParams): string | null {
     return count > 0 ? JSON.stringify(out) : null;
 }
 
-function visitorHash(click: RawClick, salt: string): string | null {
-    if (click.ip === '') return null;
-    const day = new Date(click.ts).toISOString().slice(0, 10);
-    return Bun.hash(`${salt}|${day}|${click.ip}|${click.ua}`).toString(36);
+/**
+ * Identifies a unique visitor: the same IP and user agent always hash the same, across
+ * days. Takes the stored (trimmed, capped) values so stored clicks can be rehashed.
+ */
+export function visitorHash(
+    ip: string | null,
+    userAgent: string | null,
+    salt: string
+): string | null {
+    if (!ip) return null;
+    return Bun.hash(`${salt}|${ip}|${userAgent ?? ''}`).toString(36);
 }
 
 function clean(value: string): string | null {

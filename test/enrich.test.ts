@@ -273,12 +273,12 @@ describe('enrichClick', () => {
         });
     });
 
-    test('visitor hash is stable within a day and changes across days', () => {
+    test('visitor hash is stable across days and changes with IP or user agent', () => {
         const a = enrichClick(base, opts).visitor_hash;
-        const b = enrichClick({ ...base, ts: base.ts + 3_600_000 }, opts).visitor_hash;
-        const c = enrichClick({ ...base, ts: base.ts + 86_400_000 }, opts).visitor_hash;
+        const b = enrichClick({ ...base, ts: base.ts + 30 * 86_400_000 }, opts).visitor_hash;
         expect(a).toBe(b);
-        expect(a).not.toBe(c);
+        expect(enrichClick({ ...base, ip: '192.0.2.99' }, opts).visitor_hash).not.toBe(a);
+        expect(enrichClick({ ...base, ua: 'curl/8.0' }, opts).visitor_hash).not.toBe(a);
         expect(enrichClick({ ...base, ip: '' }, opts).visitor_hash).toBeNull();
     });
 });

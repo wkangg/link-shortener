@@ -3,15 +3,19 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { migrate } from './migrate.ts';
-import { backfillAppleDetails, repairGeoEncoding } from './repair.ts';
+import { backfillAppleDetails, rehashVisitors, repairGeoEncoding } from './repair.ts';
 
 export const MIGRATIONS_DIR = path.join(import.meta.dir, 'migrations');
 
 /**
  * Opens (creating if needed) the SQLite database, applies connection PRAGMAs,
- * and runs pending migrations. Pass ":memory:" for tests.
+ * and runs pending migrations. Pass ":memory:" for tests. With `visitorSalt`, also
+ * rehashes visitors stored before the hash stopped including the day (once).
  */
-export function openDatabase(file: string, opts: { log?: boolean } = {}): Database {
+export function openDatabase(
+    file: string,
+    opts: { log?: boolean; visitorSalt?: string } = {}
+): Database {
     if (file !== ':memory:') mkdirSync(path.dirname(file), { recursive: true });
 
     const db = new Database(file, { create: true, strict: true });
@@ -33,6 +37,11 @@ export function openDatabase(file: string, opts: { log?: boolean } = {}): Databa
     const apple = backfillAppleDetails(db);
     if (opts.log && apple > 0)
         console.log(`[db] filled in iOS version and model on ${apple} clicks`);
+    if (opts.visitorSalt) {
+        const rehashed = rehashVisitors(db, opts.visitorSalt);
+        if (opts.log && rehashed > 0)
+            console.log(`[db] recomputed unique-visitor ids on ${rehashed} clicks`);
+    }
 
     return db;
 }
