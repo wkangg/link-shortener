@@ -307,9 +307,9 @@ You're responsible for meeting the privacy laws that apply to you (GDPR and simi
 | ------------------------------ | ----------------------------------------------------------------- |
 | `bun run dev`                  | Dev server that restarts on changes; the dashboard has HMR        |
 | `bun run start`                | Run without watching                                              |
-| `bun run check`                | Format check, lint, type check and tests (what CI runs)           |
+| `bun run verify`               | Format check, lint, type check and tests (what CI runs)           |
 | `bun test`                     | Run the test suite                                                |
-| `bun run typecheck`            | `tsc --noEmit`                                                    |
+| `bun run typecheck`            | `bun check` (built-in type checker)                               |
 | `bun run format`               | Format everything with `bun fmt`                                  |
 | `bun run lint` / `lint:fix`    | Lint with the rules in [`bunfig.toml`](./bunfig.toml)             |
 | `bun run seed [--clicks 5000]` | Fill the database with sample data                                |
@@ -330,5 +330,5 @@ Add `src/db/migrations/NNNN_description.sql`, numbered after the last one. It ru
 
 1. Fork the repository and create a branch.
 2. Make your change, with tests.
-3. Run `bun run check` until it passes.
+3. Run `bun run verify` until it passes.
 4. Open a pull request.
