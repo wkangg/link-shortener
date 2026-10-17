@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { LINK_SEARCH_FIELDS, LINK_SEARCH_FLAGS, LINK_SEARCH_HAS } from '../../../shared/search.ts';
+import { LINK_SEARCH_FIELDS, LINK_SEARCH_HAS } from '../../../shared/search.ts';
 import type { LinkWithStats } from '../../../shared/types.ts';
 import { api, localTz } from '../api.ts';
 import { CreateBar } from '../components/CreateBar.tsx';
@@ -144,9 +144,9 @@ async function linkValues(field: string, text: string) {
 /** The links search: slug, destination and title, plus webhook and tracking filters. */
 const LINK_SYNTAX: SearchSyntax = {
     label: 'Search links',
-    placeholder: 'Search links: slug, destination, title, tag:, webhook:, is:tracked, …',
+    placeholder: 'Search links: slug, destination, title, tag:, webhook:, has:tracking, …',
     fields: LINK_SEARCH_FIELDS,
-    flags: LINK_SEARCH_FLAGS,
+    flags: [],
     has: LINK_SEARCH_HAS,
     hasValues: field => LINK_VALUE_FIELDS.has(field),
     loadValues: async (field, text) => {

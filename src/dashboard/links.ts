@@ -336,8 +336,8 @@ const LINK_COLUMNS: Record<string, string> = {
 /**
  * The links search: words match the slug, destination or title;
  * `slug:`, `destination:` (or `url:`), `title:` and `tag:` match one of them
- * (`:=` for the whole value); `has:webhook`, `has:tag`, `webhook:<name>` and
- * `is:tracked` filter. Terms are AND-ed; a
+ * (`:=` for the whole value); `has:webhook`, `has:tag`, `has:tracking` and
+ * `webhook:<name>` filter. Terms are AND-ed; a
  * leading `-` negates one; "quoted phrases" stay together.
  */
 export function compileLinkSearch(q: string): { where: string[]; params: string[] } {
@@ -345,7 +345,7 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
     const params: string[] = [];
     for (const term of tokenize(q).slice(0, 32)) {
         const value = term.value.replace(/^=/, '');
-        // `is:` with nothing after it yet: the list filters as you type. (The
+        // `has:` with nothing after it yet: the list filters as you type. (The
         // tokenizer reads a bare `is:` as text.)
         if (term.field ? value === '' : /^[a-z_]+:$/i.test(value)) continue;
         let sql: string;
@@ -354,8 +354,11 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
                 if (/^webhooks?$/i.test(value)) sql = `EXISTS (${LINK_WEBHOOKS})`;
                 else if (/^tags?$/i.test(value)) {
                     sql = 'EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id)';
-                } else {
-                    throw new BadQueryError(`Unknown has:${value}. Try has:webhook or has:tag.`);
+                } else if (value.toLowerCase() === 'tracking') sql = 'l.track_device = 1';
+                else {
+                    throw new BadQueryError(
+                        `Unknown has:${value}. Try has:webhook, has:tag or has:tracking.`
+                    );
                 }
                 break;
             case 'tag': {
@@ -368,12 +371,6 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
                 params.push(exact ? tag : likePattern(tag));
                 break;
             }
-            case 'is':
-                if (value.toLowerCase() !== 'tracked') {
-                    throw new BadQueryError(`Unknown is:${value}. Try is:tracked.`);
-                }
-                sql = 'l.track_device = 1';
-                break;
             case 'webhook': {
                 // The name the dashboard shows: the description, "Discord", or the URL.
                 sql = `EXISTS (${LINK_WEBHOOKS} AND (e.description ${LIKE}

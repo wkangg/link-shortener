@@ -7,17 +7,13 @@ export const LINK_SEARCH_FIELDS: readonly SearchField[] = [
     { name: 'title', hint: 'title' },
     { name: 'tag', hint: 'tag, e.g. tag:promo' },
     { name: 'webhook', hint: 'webhook name, e.g. webhook:discord' },
-    { name: 'is', hint: 'a flag, e.g. is:tracked' },
     { name: 'has', hint: 'e.g. has:webhook' }
-];
-
-export const LINK_SEARCH_FLAGS: readonly SearchField[] = [
-    { name: 'tracked', hint: 'detailed device tracking is on' }
 ];
 
 export const LINK_SEARCH_HAS: readonly SearchField[] = [
     { name: 'webhook', hint: 'sends clicks to a webhook' },
-    { name: 'tag', hint: 'has at least one tag' }
+    { name: 'tag', hint: 'has at least one tag' },
+    { name: 'tracking', hint: 'detailed device tracking is on' }
 ];
 
 export interface SearchField {

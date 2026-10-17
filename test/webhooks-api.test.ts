@@ -299,11 +299,11 @@ describe('webhook endpoints API', () => {
         expect(await slugs('webhook:"promo launch"')).toEqual(['sa']);
         expect(await slugs('webhook:discord')).toEqual(['sb']);
         expect(await slugs('webhook:hooks.example')).toEqual(['sa']);
-        expect(await slugs('is:tracked')).toEqual(['sa']);
+        expect(await slugs('has:tracking')).toEqual(['sa']);
         // A field with nothing after it yet (typing) filters nothing.
-        expect(await slugs('is:')).toEqual(['sa', 'sb', 'sc']);
-        expect(await slugs('is:tracked webhook:')).toEqual(['sa']);
-        expect(await slugs('-is:tracked has:webhook')).toEqual(['sb']);
+        expect(await slugs('has:')).toEqual(['sa', 'sb', 'sc']);
+        expect(await slugs('has:tracking webhook:')).toEqual(['sa']);
+        expect(await slugs('-has:tracking has:webhook')).toEqual(['sb']);
         // A webhook for every link gives every link a webhook.
         const every = await create({ url: 'https://zap.example/every', description: 'Zapier' });
         expect(await slugs('has:webhook')).toEqual(['sa', 'sb', 'sc']);
@@ -332,9 +332,9 @@ describe('webhook endpoints API', () => {
         expect(await slugs('b.example')).toEqual(['sb']);
         expect(await slugs('https://c.example')).toEqual(['sc']);
 
-        const bad = await send<ApiError>('GET', '/api/links?q=is:nope');
+        const bad = await send<ApiError>('GET', '/api/links?q=has:nope');
         expect(bad.status).toBe(400);
-        expect(bad.body.error).toContain('is:tracked');
+        expect(bad.body.error).toContain('has:tracking');
 
         for (const link of [a, b, c]) await send('DELETE', `/api/links/${link.body.id}`);
     });
