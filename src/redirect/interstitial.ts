@@ -31,7 +31,8 @@ s.gpu=tryit(function(){
   return g.getParameter(x?x.UNMASKED_RENDERER_WEBGL:g.RENDERER);
 });
 var bait=document.createElement('div');
-bait.className='adsbox ad-banner pub_300x250 textads';
+// Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
+bait.className='ad_banner ad-slot ad-unit';
 bait.style.cssText='position:absolute;left:-999px;width:1px;height:1px';
 bait.innerHTML='&nbsp;';
 document.body.appendChild(bait);
@@ -59,7 +60,7 @@ var tasks=[
   platform().then(function(v){if(v)s.platform=v}),
   n.getBattery?n.getBattery().then(function(b){s.battery=Math.round(b.level*100);s.charging=b.charging}):0,
   incognito().then(function(v){if(v!==null)s.incognito=v}),
-  new Promise(function(r){setTimeout(r,50)}).then(function(){
+  new Promise(function(r){setTimeout(r,30)}).then(function(){
     var cs=getComputedStyle(bait);
     s.adBlocker=!bait.offsetHeight||cs.display==='none'||cs.visibility==='hidden';
   })
