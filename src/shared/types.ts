@@ -107,7 +107,8 @@ export interface StatsQuery {
 export interface SummaryResponse {
     clicks: number;
     visitors: number;
-    previous: { clicks: number; visitors: number };
+    /** The period of the same length just before; null if no link existed yet. */
+    previous: { clicks: number; visitors: number } | null;
 }
 
 export interface TimeseriesResponse {

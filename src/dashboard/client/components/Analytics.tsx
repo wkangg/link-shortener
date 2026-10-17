@@ -302,11 +302,11 @@ export function Analytics({ linkId }: AnalyticsProps) {
             </div>
 
             <div className="totals">
-                <Total label="Clicks" value={s?.clicks} previous={s?.previous.clicks} />
+                <Total label="Clicks" value={s?.clicks} previous={s?.previous?.clicks} />
                 <Total
                     label="Unique visitors"
                     value={s?.visitors}
-                    previous={s?.previous.visitors}
+                    previous={s?.previous?.visitors}
                 />
             </div>
             {summary.error && <p className="error">{summary.error.message}</p>}

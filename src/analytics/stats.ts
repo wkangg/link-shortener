@@ -168,8 +168,26 @@ export class Stats {
         const span = query.to - query.from;
         return {
             ...this.#totals(query, query.from, query.to),
-            previous: this.#totals(query, query.from - span, query.from)
+            previous:
+                this.#trackedSince(query) < query.from
+                    ? this.#totals(query, query.from - span, query.from)
+                    : null
         };
+    }
+
+    /** When the link (or the oldest link) was created; Infinity if there are none. */
+    #trackedSince(query: StatsQuery): number {
+        const row =
+            query.link === undefined
+                ? this.#db
+                      .query<{ t: number | null }, []>('SELECT MIN(created_at) AS t FROM links')
+                      .get()
+                : this.#db
+                      .query<{ t: number | null }, [number]>(
+                          'SELECT created_at AS t FROM links WHERE id = ?'
+                      )
+                      .get(query.link);
+        return row?.t ?? Infinity;
     }
 
     timeseries(query: StatsQuery): TimeseriesResponse {

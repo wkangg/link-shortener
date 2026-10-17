@@ -121,6 +121,19 @@ describe('summary', () => {
         expect(stats.summary(q({ bots: true })).clicks).toBe(5);
         expect(stats.summary(q({ link: 2 })).clicks).toBe(0);
     });
+
+    test('no previous period before the link existed', () => {
+        db.run(
+            `INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (3, 'c', 'https://c.com', ${T0 + HOUR}, 0)`
+        );
+        expect(stats.summary(q({ link: 3 })).previous).toBeNull();
+        expect(stats.summary(q({ link: 3, from: T0 + DAY })).previous).toEqual({
+            clicks: 0,
+            visitors: 0
+        });
+        expect(stats.summary(q()).previous).not.toBeNull();
+        db.run('DELETE FROM links WHERE id = 3');
+    });
 });
 
 describe('timeseries', () => {
