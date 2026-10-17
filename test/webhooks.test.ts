@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
-import { ClickBuffer } from '../src/analytics/clicks.ts';
+import { SIGNALS_WINDOW_MS } from '../src/analytics/classify.ts';
+import { ClickBuffer, EXPIRE_INTERVAL_MS } from '../src/analytics/clicks.ts';
 import { LinkRepo } from '../src/dashboard/links.ts';
 import { openDatabase } from '../src/db/client.ts';
 import { isDiscordWebhookUrl, maskDiscordUrl } from '../src/shared/discord.ts';
@@ -264,7 +265,12 @@ function pipeline(
 ) {
     const { db, links } = setup();
     const clock = { now: 1_000_000 };
-    const requests: { url: string; headers: Record<string, string>; body: string }[] = [];
+    const requests: {
+        url: string;
+        headers: Record<string, string>;
+        body: string;
+        tls?: { serverName?: string };
+    }[] = [];
     const replies: Reply[] = [];
     const outbox = new WebhookOutbox(db);
     let disabled = 0;
@@ -272,7 +278,8 @@ function pipeline(
         requests.push({
             url,
             headers: init.headers as Record<string, string>,
-            body: init.body as string
+            body: init.body as string,
+            tls: (init as { tls?: { serverName?: string } }).tls
         });
         const reply = replies.shift() ?? 200;
         if (reply instanceof Error) return Promise.reject(reply);
@@ -614,6 +621,100 @@ describe('delivery', () => {
             status: 'pending',
             last_error: 'internal.example points at a private network address'
         });
+    });
+
+    test('requests go to the address that was checked', async () => {
+        const p = pipeline({
+            allowPrivate: false,
+            resolve: () => Promise.resolve(['93.184.215.14'])
+        });
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [], url: 'https://hooks.example:8443/in?x=1' });
+        p.click(raw(link.id));
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        expect(p.requests[0]).toMatchObject({
+            url: 'https://93.184.215.14:8443/in?x=1',
+            headers: { Host: 'hooks.example:8443' },
+            tls: { serverName: 'hooks.example' }
+        });
+        expect(p.events()[0]?.status).toBe('delivered');
+    });
+
+    test('a request that fails after its endpoint was turned off stays skipped', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        const endpoint = p.addEndpoint({ skip: [] });
+        p.click(raw(link.id));
+        const deliverer: WebhookDeliverer = new WebhookDeliverer(p.db, {
+            shortOrigin: SHORT,
+            dashOrigin: DASH,
+            abuseMinScore: 25,
+            allowPrivate: true,
+            now: () => Date.now() + 1,
+            fetch: () => {
+                deliverer.disable(endpoint, 'Turned off');
+                return Promise.resolve(new Response(null, { status: 500 }));
+            }
+        });
+        await deliverer.tick();
+        expect(p.events()[0]).toMatchObject({ status: 'skipped', attempts: 0 });
+    });
+
+    test('a success while another request is in flight ends the failure streak', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        const endpoint = p.addEndpoint({ skip: [] });
+        p.click(raw(link.id), raw(link.id));
+        const now = Date.now() + 1;
+        p.db
+            .query('UPDATE webhook_endpoints SET failing_since = ? WHERE id = ?')
+            .run(now - AUTO_DISABLE_AFTER_MS, endpoint);
+        const release: ((status: number) => void)[] = [];
+        const deliverer = new WebhookDeliverer(p.db, {
+            shortOrigin: SHORT,
+            dashOrigin: DASH,
+            abuseMinScore: 25,
+            allowPrivate: true,
+            now: () => now,
+            fetch: () =>
+                new Promise(resolve => {
+                    release.push(status => resolve(new Response(null, { status })));
+                })
+        });
+        const tick = deliverer.tick();
+        await Bun.sleep(0);
+        expect(release).toHaveLength(2);
+        release[0]?.(204);
+        await Bun.sleep(0);
+        release[1]?.(500);
+        await tick;
+        expect(p.endpoint(endpoint)).toMatchObject({ enabled: 1, failing_since: now });
+    });
+
+    test('tracked clicks from hosting IPs wait for the no-JavaScript scraper verdict', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com', trackDevice: true });
+        p.addEndpoint({ skip: ['scraper'] });
+        p.click(raw(link.id, { token: 'tok-2' }));
+        p.db.query('UPDATE clicks SET is_datacenter = 1').run();
+        const ts = p.db.query<{ ts: number }, []>('SELECT ts FROM clicks').get()?.ts ?? 0;
+
+        p.clock.now = Date.now() + SETTLE_DELAY_MS;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()[0]).toMatchObject({
+            status: 'pending',
+            attempts: 0,
+            due_at: ts + SIGNALS_WINDOW_MS + EXPIRE_INTERVAL_MS
+        });
+
+        // The page never reported back, so token expiry labels it a scraper.
+        p.db.query("UPDATE clicks SET scraper = 'Skipped JavaScript on a hosting IP'").run();
+        p.clock.now = ts + SIGNALS_WINDOW_MS + EXPIRE_INTERVAL_MS;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Skipped: scraper' });
     });
 
     test('at most `concurrency` requests are in flight', async () => {

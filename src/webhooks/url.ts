@@ -34,28 +34,47 @@ export function parseWebhookUrl(raw: string): URL {
 }
 
 /**
+ * Where to send a checked URL. A hostname is pinned to the address that was
+ * checked, so a second DNS lookup can't point the request somewhere else.
+ */
+export interface WebhookTarget {
+    url: string;
+    /** The Host header and TLS server name for a pinned hostname. */
+    host?: string;
+    serverName?: string;
+}
+
+/**
  * Throws a WebhookUrlError if the URL is malformed or, unless `allowPrivate`,
  * resolves to an address on a private network.
  */
 export async function checkWebhookUrl(
     raw: string,
     opts: { allowPrivate: boolean; resolve?: ResolveHost }
-): Promise<void> {
+): Promise<WebhookTarget> {
     const url = parseWebhookUrl(raw);
-    if (opts.allowPrivate) return;
+    if (opts.allowPrivate) return { url: url.href };
     // IPv6 literals keep their brackets in `hostname`.
     const host = url.hostname.replace(/^\[(.*)\]$/, '$1');
     // An IP address is its own answer; only names are resolved.
-    let addresses = [host];
-    if (!isIP(host)) {
-        try {
-            addresses = await (opts.resolve ?? resolveHost)(host);
-        } catch {
-            throw new WebhookUrlError(`Could not resolve ${host}`);
+    if (isIP(host)) {
+        if (isPrivateIp(host)) {
+            throw new WebhookUrlError(`${host} points at a private network address`);
         }
+        return { url: url.href };
     }
-    if (addresses.length === 0) throw new WebhookUrlError(`Could not resolve ${host}`);
-    if (addresses.some(address => isPrivateIp(address))) {
+    let addresses: string[];
+    try {
+        addresses = await (opts.resolve ?? resolveHost)(host);
+    } catch {
+        throw new WebhookUrlError(`Could not resolve ${host}`);
+    }
+    const [address] = addresses;
+    if (address === undefined) throw new WebhookUrlError(`Could not resolve ${host}`);
+    if (addresses.some(a => isPrivateIp(a))) {
         throw new WebhookUrlError(`${host} points at a private network address`);
     }
+    const pinned = new URL(url);
+    pinned.hostname = isIP(address) === 6 ? `[${address}]` : address;
+    return { url: pinned.href, host: url.host, serverName: host };
 }

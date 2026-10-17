@@ -66,7 +66,7 @@ const SIGNAL_COLUMNS = [
 ] as const satisfies readonly (keyof DeviceSignals)[];
 
 /** Unused tokens are cleared (and their clicks reclassified) at most this often. */
-const EXPIRE_INTERVAL_MS = 60_000;
+export const EXPIRE_INTERVAL_MS = 60_000;
 /** Reverse DNS lookups in flight at once; clicks beyond it just get no hostname. */
 const MAX_LOOKUPS = 32;
 const MAX_HOSTNAMES = 5000;

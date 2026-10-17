@@ -9,6 +9,7 @@ import {
     createClickReader,
     type LinkClickedEvent,
     linkClickedEvent,
+    scraperVerdictAt,
     skipReason,
     testEvent,
     type WebhookEvent
@@ -65,13 +66,14 @@ interface DueRow {
     secret: string | null;
     skip: string;
     include_ip: number;
-    failing_since: number | null;
 }
 
 /** What one attempt came to. */
 type Outcome =
     | { kind: 'delivered'; status: number }
     | { kind: 'skipped'; reason: string }
+    /** Not ready to send; tried again at `dueAt` without counting an attempt. */
+    | { kind: 'deferred'; dueAt: number }
     | { kind: 'failed'; status: number | null; error: string };
 
 export class WebhookDeliverer {
@@ -157,7 +159,7 @@ export class WebhookDeliverer {
     #dueQuery(where: string) {
         return this.#db.query<DueRow, number[]>(
             `SELECT ev.id, ev.type, ev.click_id, ev.event_id, ev.attempts, ev.endpoint_id,
-                    e.kind, e.url, e.secret, e.skip, e.include_ip, e.failing_since
+                    e.kind, e.url, e.secret, e.skip, e.include_ip
              FROM webhook_events ev JOIN webhook_endpoints e ON e.id = ev.endpoint_id
              WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1 AND ${where}
              ORDER BY ev.due_at, ev.id LIMIT ?`
@@ -193,10 +195,7 @@ export class WebhookDeliverer {
         const now = this.#opts.now();
         const event = this.#build(row, now);
         if ('reason' in event) return { kind: 'skipped', reason: event.reason };
-        await checkWebhookUrl(row.url, {
-            allowPrivate: this.#opts.allowPrivate,
-            resolve: this.#opts.resolve
-        });
+        if ('dueAt' in event) return { kind: 'deferred', dueAt: event.dueAt };
         return this.#sendStandard(row, event, now);
     }
 
@@ -215,6 +214,8 @@ export class WebhookDeliverer {
             for (const row of rows) {
                 const event = this.#build(row, now);
                 if ('reason' in event) this.#record(row, { kind: 'skipped', reason: event.reason });
+                else if ('dueAt' in event)
+                    this.#record(row, { kind: 'deferred', dueAt: event.dueAt });
                 else if (event.type === 'link.clicked') clicks.push({ row, event });
             }
         }
@@ -231,17 +232,11 @@ export class WebhookDeliverer {
         this.#discordNext.set(endpointId, now + DISCORD_INTERVAL_MS);
         let res: Response;
         try {
-            await checkWebhookUrl(first.url, {
-                allowPrivate: this.#opts.allowPrivate,
-                resolve: this.#opts.resolve
-            });
-            res = await this.#opts.fetch(first.url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(message),
-                redirect: 'manual',
-                signal: AbortSignal.timeout(this.#opts.timeoutMs)
-            });
+            res = await this.#post(
+                first.url,
+                { 'Content-Type': 'application/json' },
+                JSON.stringify(message)
+            );
         } catch (error) {
             const outcome: Outcome = { kind: 'failed', status: null, error: errorMessage(error) };
             for (const row of batch) this.#record(row, outcome);
@@ -263,8 +258,8 @@ export class WebhookDeliverer {
         for (const row of batch) this.#record(row, outcome);
     }
 
-    /** The event to send, or why not to send it. */
-    #build(row: DueRow, now: number): WebhookEvent | { reason: string } {
+    /** The event to send, why not to send it, or when it will be ready. */
+    #build(row: DueRow, now: number): WebhookEvent | { reason: string } | { dueAt: number } {
         if (row.type === 'webhook.test') return testEvent(now);
         if (row.click_id === null) return { reason: 'No click' };
         const click = this.#readClick(row.click_id);
@@ -273,6 +268,8 @@ export class WebhookDeliverer {
         const skip = new Set(JSON.parse(row.skip) as WebhookSkipCategory[]);
         const reason = skipReason(click, skip, this.#opts.abuseMinScore);
         if (reason) return { reason: `Skipped: ${reason}` };
+        const verdictAt = scraperVerdictAt(click, skip);
+        if (verdictAt !== null && verdictAt > now) return { dueAt: verdictAt };
         return linkClickedEvent(
             { ...click, slug: click.slug, url: click.url },
             { shortOrigin: this.#opts.shortOrigin, includeIp: row.include_ip === 1, now }
@@ -282,23 +279,44 @@ export class WebhookDeliverer {
     async #sendStandard(row: DueRow, event: WebhookEvent, now: number): Promise<Outcome> {
         if (!row.secret) return { kind: 'failed', status: null, error: 'Endpoint has no secret' };
         const body = JSON.stringify(event);
-        const res = await this.#opts.fetch(row.url, {
-            method: 'POST',
-            headers: signedHeaders(row.secret, row.event_id, Math.floor(now / 1000), body),
-            body,
-            redirect: 'manual',
-            signal: AbortSignal.timeout(this.#opts.timeoutMs)
-        });
+        const res = await this.#post(
+            row.url,
+            signedHeaders(row.secret, row.event_id, Math.floor(now / 1000), body),
+            body
+        );
         await res.body?.cancel().catch(() => null);
         return res.ok
             ? { kind: 'delivered', status: res.status }
             : { kind: 'failed', status: res.status, error: `HTTP ${res.status}` };
     }
 
+    /** POSTs to a webhook URL, connecting to the address its check resolved. */
+    async #post(url: string, headers: Record<string, string>, body: string): Promise<Response> {
+        const target = await checkWebhookUrl(url, {
+            allowPrivate: this.#opts.allowPrivate,
+            resolve: this.#opts.resolve
+        });
+        return this.#opts.fetch(target.url, {
+            method: 'POST',
+            headers: target.host ? { ...headers, Host: target.host } : headers,
+            body,
+            redirect: 'manual',
+            signal: AbortSignal.timeout(this.#opts.timeoutMs),
+            ...(target.serverName && { tls: { serverName: target.serverName } })
+        });
+    }
+
     #record(row: DueRow, outcome: Outcome): void {
         const now = this.#opts.now();
         const attempts = row.attempts + 1;
         switch (outcome.kind) {
+            case 'deferred':
+                this.#db
+                    .query(
+                        "UPDATE webhook_events SET due_at = ? WHERE id = ? AND status = 'pending'"
+                    )
+                    .run(outcome.dueAt, row.id);
+                return;
             case 'skipped':
                 this.#db
                     .query(
@@ -324,28 +342,32 @@ export class WebhookDeliverer {
                 this.#failedAttempts++;
                 const delay = RETRY_DELAYS_MS[attempts - 1];
                 const error = outcome.error.slice(0, MAX_ERROR);
-                const failingSince = row.failing_since ?? now;
-                this.#db.transaction(() => {
+                // Only while still pending: turning the endpoint off mid-request skipped it.
+                const failingSince = this.#db.transaction(() => {
                     if (delay === undefined) {
                         this.#db
                             .query(
                                 `UPDATE webhook_events SET status = 'failed', attempts = ?, last_status = ?,
-                                    last_error = ?, finished_at = ? WHERE id = ?`
+                                    last_error = ?, finished_at = ? WHERE id = ? AND status = 'pending'`
                             )
                             .run(attempts, outcome.status, error, now, row.id);
                     } else {
                         this.#db
                             .query(
                                 `UPDATE webhook_events SET attempts = ?, last_status = ?, last_error = ?,
-                                    due_at = ? WHERE id = ?`
+                                    due_at = ? WHERE id = ? AND status = 'pending'`
                             )
                             .run(attempts, outcome.status, error, now + delay, row.id);
                     }
-                    this.#db
-                        .query(
-                            'UPDATE webhook_endpoints SET failing_since = COALESCE(failing_since, ?) WHERE id = ?'
-                        )
-                        .run(now, row.endpoint_id);
+                    // Read back: a delivery that finished meanwhile may have ended the streak.
+                    return (
+                        this.#db
+                            .query<{ failing_since: number }, [number, number]>(
+                                `UPDATE webhook_endpoints SET failing_since = COALESCE(failing_since, ?)
+                                 WHERE id = ? RETURNING failing_since`
+                            )
+                            .get(now, row.endpoint_id)?.failing_since ?? now
+                    );
                 })();
                 if (now - failingSince >= AUTO_DISABLE_AFTER_MS) {
                     this.disable(row.endpoint_id, 'Failing for 3 days', now);

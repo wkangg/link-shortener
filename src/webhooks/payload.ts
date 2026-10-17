@@ -2,6 +2,8 @@
 // it carries verdicts that landed after the insert (hostname, VPN, abuse score).
 import type { Database } from 'bun:sqlite';
 
+import { SIGNALS_WINDOW_MS } from '../analytics/classify.ts';
+import { EXPIRE_INTERVAL_MS } from '../analytics/clicks.ts';
 import type { WebhookSkipCategory } from '../shared/types.ts';
 
 /** A click as stored, with its link. Link fields are null if the link was deleted. */
@@ -32,6 +34,8 @@ export interface ClickSnapshot {
     utm_term: string | null;
     utm_content: string | null;
     visitor_hash: string | null;
+    /** null = no device page served, 0 = served but no report yet, 1 = reported. */
+    js: number | null;
     is_bot: number;
     bot_name: string | null;
     is_datacenter: number;
@@ -50,7 +54,7 @@ export function createClickReader(db: Database): ClickReader {
         `SELECT c.id, c.ts, c.link_id, l.slug, l.url, l.title, c.country, c.region, c.city,
                 c.source, c.referrer_host, c.via_qr, c.device, c.browser, c.os, c.os_version, c.platform,
                 c.language, c.utm_source, c.utm_medium, c.utm_campaign, c.utm_term, c.utm_content,
-                c.visitor_hash, c.is_bot, c.bot_name, c.is_datacenter, c.vpn, c.scraper,
+                c.visitor_hash, c.js, c.is_bot, c.bot_name, c.is_datacenter, c.vpn, c.scraper,
                 c.abuse_score, c.ip, c.user_agent
          FROM clicks c LEFT JOIN links l ON l.id = c.link_id WHERE c.id = ?`
     );
@@ -82,6 +86,21 @@ export function skipReason(
     }
     if (skip.has('vpn') && click.vpn !== null) return 'vpn';
     return null;
+}
+
+/**
+ * When a click that may still be labelled a scraper will have its verdict, or
+ * null if it won't get one. A hosting IP that was served the device page and
+ * hasn't reported back counts as a scraper only once the signals window is over
+ * and the next token expiry has reclassified it.
+ */
+export function scraperVerdictAt(
+    click: Pick<ClickSnapshot, 'ts' | 'js' | 'is_datacenter' | 'vpn' | 'scraper'>,
+    skip: ReadonlySet<WebhookSkipCategory>
+): number | null {
+    if (!skip.has('scraper') || click.js !== 0 || click.scraper !== null) return null;
+    if (click.is_datacenter !== 1 && !click.vpn?.startsWith('VPN host: ')) return null;
+    return click.ts + SIGNALS_WINDOW_MS + EXPIRE_INTERVAL_MS;
 }
 
 export interface WebhookLink {
