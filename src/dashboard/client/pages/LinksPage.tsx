@@ -132,7 +132,12 @@ function WebhookMarker({ webhooks }: { webhooks: LinkWithStats['webhooks'] }) {
     if (webhooks.length === 0) return null;
     const on = webhooks.filter(w => w.enabled);
     const title = `Sends clicks to: ${webhooks
-        .map(w => (w.enabled ? w.name : `${w.name} (off)`))
+        .map(w => {
+            const notes = [w.allLinks ? 'every link' : null, w.enabled ? null : 'off'].filter(
+                Boolean
+            );
+            return notes.length > 0 ? `${w.name} (${notes.join(', ')})` : w.name;
+        })
         .join(', ')}`;
     const text =
         on.length === 0

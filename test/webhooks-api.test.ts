@@ -243,18 +243,23 @@ describe('webhook endpoints API', () => {
             tags: ['launch'],
             links: [b.body.id]
         });
-        await create({ url: 'https://hooks.example/every' });
+        const every = await create({ url: 'https://zap.example/every', description: 'Zapier' });
         await send('PATCH', `/api/webhooks/${tagged.body.id}`, { enabled: false });
 
         const list = await send<LinkListResponse>('GET', '/api/links?limit=500');
         const of = (id: number) => list.body.links.find(l => l.id === id)?.webhooks;
+        const zapier = { id: every.body.id, name: 'Zapier', enabled: true, allLinks: true };
         expect(of(a.body.id)).toEqual([
-            { id: direct.body.id, name: 'hooks.example', enabled: true }
+            { id: direct.body.id, name: 'hooks.example', enabled: true, allLinks: false },
+            zapier
         ]);
         // Chosen directly and by tag: listed once.
-        expect(of(b.body.id)).toEqual([{ id: tagged.body.id, name: 'Launch', enabled: false }]);
-        // Webhooks for every link aren't listed per link.
-        expect(of(c.body.id)).toEqual([]);
+        expect(of(b.body.id)).toEqual([
+            { id: tagged.body.id, name: 'Launch', enabled: false, allLinks: false },
+            zapier
+        ]);
+        // Webhooks for every link show under every link.
+        expect(of(c.body.id)).toEqual([zapier]);
 
         for (const link of [a, b, c]) await send('DELETE', `/api/links/${link.body.id}`);
     });
@@ -277,7 +282,6 @@ describe('webhook endpoints API', () => {
             links: [a.body.id]
         });
         await create({ url: DISCORD_URL, tags: ['launch'] });
-        await create({ url: 'https://zap.example/every' });
 
         const slugs = async (q: string) => {
             const res = await send<LinkListResponse>(
@@ -295,10 +299,14 @@ describe('webhook endpoints API', () => {
         expect(await slugs('webhook:"promo launch"')).toEqual(['sa']);
         expect(await slugs('webhook:discord')).toEqual(['sb']);
         expect(await slugs('webhook:hooks.example')).toEqual(['sa']);
-        // Webhooks for every link don't count as a link's own.
-        expect(await slugs('webhook:zap')).toEqual([]);
         expect(await slugs('is:tracked')).toEqual(['sa']);
         expect(await slugs('-is:tracked has:webhook')).toEqual(['sb']);
+        // A webhook for every link gives every link a webhook.
+        const every = await create({ url: 'https://zap.example/every', description: 'Zapier' });
+        expect(await slugs('has:webhook')).toEqual(['sa', 'sb', 'sc']);
+        expect(await slugs('-has:webhook')).toEqual([]);
+        expect(await slugs('webhook:zap')).toEqual(['sa', 'sb', 'sc']);
+        await send('DELETE', `/api/webhooks/${every.body.id}`);
         // Plain words still match slug, destination and title.
         expect(await slugs('b.example')).toEqual(['sb']);
         expect(await slugs('https://c.example')).toEqual(['sc']);

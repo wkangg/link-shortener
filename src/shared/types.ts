@@ -41,7 +41,7 @@ export interface LinkWithStats extends Link {
     visitors: number;
     /** Clicks per day for the last 7 days, oldest first. */
     spark: number[];
-    /** Webhooks chosen for this link, directly or by tag (not ones for every link). */
+    /** Webhooks that get this link's clicks: for every link, chosen for it, or by tag. */
     webhooks: LinkWebhookRef[];
 }
 
@@ -50,6 +50,8 @@ export interface LinkWebhookRef {
     /** The description, or "Discord" / the URL's host. */
     name: string;
     enabled: boolean;
+    /** It's for every link, not chosen for this one. */
+    allLinks: boolean;
 }
 
 export interface LinkListResponse {

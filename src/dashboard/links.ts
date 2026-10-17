@@ -243,7 +243,7 @@ export class LinkRepo {
         return out;
     }
 
-    /** Webhooks chosen for each link, by link or by tag. */
+    /** The webhooks that get each link's clicks: for every link, chosen for it, or by tag. */
     #webhooksFor(ids: number[]): Map<number, LinkWebhookRef[]> {
         const out = new Map<number, LinkWebhookRef[]>();
         if (ids.length === 0) return out;
@@ -256,11 +256,16 @@ export class LinkRepo {
                     url: string;
                     description: string | null;
                     enabled: number;
+                    all_links: number;
                 },
                 number[]
             >(
-                `SELECT DISTINCT m.link_id, e.id, e.kind, e.url, e.description, e.enabled
+                `SELECT DISTINCT m.link_id, e.id, e.kind, e.url, e.description, e.enabled, e.all_links
                  FROM (
+                     SELECT l.id AS link_id, e.id AS endpoint_id FROM links l
+                     JOIN webhook_endpoints e ON e.all_links = 1
+                     WHERE l.id IN (${placeholders(ids)})
+                     UNION
                      SELECT link_id, endpoint_id FROM webhook_endpoint_links
                      WHERE link_id IN (${placeholders(ids)})
                      UNION
@@ -269,15 +274,15 @@ export class LinkRepo {
                      JOIN json_each(e.tags) j ON j.value = t.tag
                      WHERE t.link_id IN (${placeholders(ids)})
                  ) m JOIN webhook_endpoints e ON e.id = m.endpoint_id
-                 WHERE e.all_links = 0
                  ORDER BY m.link_id, e.id`
             )
-            .all(...ids, ...ids);
+            .all(...ids, ...ids, ...ids);
         for (const row of rows) {
             const ref: LinkWebhookRef = {
                 id: row.id,
                 name: row.description ?? (row.kind === 'discord' ? 'Discord' : hostOf(row.url)),
-                enabled: row.enabled === 1
+                enabled: row.enabled === 1,
+                allLinks: row.all_links === 1
             };
             const list = out.get(row.link_id);
             if (list) list.push(ref);
@@ -312,12 +317,9 @@ export class LinkRepo {
     }
 }
 
-/**
- * Webhooks chosen for link `l`, directly or by tag. Webhooks for every link
- * don't count: they'd match every link.
- */
-const CHOSEN_WEBHOOKS = `SELECT 1 FROM webhook_endpoints e WHERE e.all_links = 0 AND (
-    EXISTS (SELECT 1 FROM webhook_endpoint_links el WHERE el.endpoint_id = e.id AND el.link_id = l.id)
+/** Webhooks that get link `l`'s clicks: for every link, chosen for it, or by tag. */
+const LINK_WEBHOOKS = `SELECT 1 FROM webhook_endpoints e WHERE (e.all_links = 1
+    OR EXISTS (SELECT 1 FROM webhook_endpoint_links el WHERE el.endpoint_id = e.id AND el.link_id = l.id)
     OR EXISTS (SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
                WHERE t.link_id = l.id))`;
 
@@ -339,7 +341,7 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
                 if (!/^webhooks?$/i.test(value)) {
                     throw new BadQueryError(`Unknown has:${value}. Try has:webhook.`);
                 }
-                sql = `EXISTS (${CHOSEN_WEBHOOKS})`;
+                sql = `EXISTS (${LINK_WEBHOOKS})`;
                 break;
             case 'is':
                 if (value.toLowerCase() !== 'tracked') {
@@ -349,7 +351,7 @@ export function compileLinkSearch(q: string): { where: string[]; params: string[
                 break;
             case 'webhook': {
                 // The name the dashboard shows: the description, "Discord", or the URL.
-                sql = `EXISTS (${CHOSEN_WEBHOOKS} AND (e.description ${LIKE}
+                sql = `EXISTS (${LINK_WEBHOOKS} AND (e.description ${LIKE}
                     OR (e.kind = 'discord' AND 'Discord' ${LIKE})
                     OR (e.kind = 'standard' AND e.url ${LIKE})))`;
                 const pattern = likePattern(value);
