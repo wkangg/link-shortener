@@ -1,5 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
+import { BadQueryError } from '../analytics/errors.ts';
+import { likePattern, tokenize } from '../analytics/search.ts';
 import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
 import type {
     Link,
@@ -80,11 +82,9 @@ export class LinkRepo {
         const where: string[] = ['l.archived = ?'];
         const params: (string | number)[] = [opts.archived ? 1 : 0];
         if (opts.q) {
-            const like = `%${opts.q.replaceAll(/[%_\\]/g, String.raw`\$&`)}%`;
-            where.push(
-                String.raw`(l.slug LIKE ? ESCAPE '\' OR l.url LIKE ? ESCAPE '\' OR l.title LIKE ? ESCAPE '\')`
-            );
-            params.push(like, like, like);
+            const search = compileLinkSearch(opts.q);
+            where.push(...search.where);
+            params.push(...search.params);
         }
         if (opts.tag) {
             where.push('EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id AND t.tag = ?)');
@@ -310,6 +310,63 @@ export class LinkRepo {
         }
         return out;
     }
+}
+
+/**
+ * Webhooks chosen for link `l`, directly or by tag. Webhooks for every link
+ * don't count: they'd match every link.
+ */
+const CHOSEN_WEBHOOKS = `SELECT 1 FROM webhook_endpoints e WHERE e.all_links = 0 AND (
+    EXISTS (SELECT 1 FROM webhook_endpoint_links el WHERE el.endpoint_id = e.id AND el.link_id = l.id)
+    OR EXISTS (SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
+               WHERE t.link_id = l.id))`;
+
+const LIKE = String.raw`LIKE ? ESCAPE '\'`;
+
+/**
+ * The links search: words match the slug, destination or title, and
+ * `has:webhook`, `webhook:<name>` and `is:tracked` filter. Terms are AND-ed; a
+ * leading `-` negates one; "quoted phrases" stay together.
+ */
+export function compileLinkSearch(q: string): { where: string[]; params: string[] } {
+    const where: string[] = [];
+    const params: string[] = [];
+    for (const term of tokenize(q).slice(0, 32)) {
+        const value = term.value.replace(/^=/, '');
+        let sql: string;
+        switch (term.field ?? '') {
+            case 'has':
+                if (!/^webhooks?$/i.test(value)) {
+                    throw new BadQueryError(`Unknown has:${value}. Try has:webhook.`);
+                }
+                sql = `EXISTS (${CHOSEN_WEBHOOKS})`;
+                break;
+            case 'is':
+                if (value.toLowerCase() !== 'tracked') {
+                    throw new BadQueryError(`Unknown is:${value}. Try is:tracked.`);
+                }
+                sql = 'l.track_device = 1';
+                break;
+            case 'webhook': {
+                // The name the dashboard shows: the description, "Discord", or the URL.
+                sql = `EXISTS (${CHOSEN_WEBHOOKS} AND (e.description ${LIKE}
+                    OR (e.kind = 'discord' AND 'Discord' ${LIKE})
+                    OR (e.kind = 'standard' AND e.url ${LIKE})))`;
+                const pattern = likePattern(value);
+                params.push(pattern, pattern, pattern);
+                break;
+            }
+            default: {
+                // Plain words, and anything that isn't one of the fields above.
+                const text = term.field ? `${term.field}:${term.value}` : value;
+                sql = `(l.slug ${LIKE} OR l.url ${LIKE} OR l.title ${LIKE})`;
+                const pattern = likePattern(text);
+                params.push(pattern, pattern, pattern);
+            }
+        }
+        where.push(term.negate ? `NOT ${sql}` : sql);
+    }
+    return { where, params };
 }
 
 function toLink(row: LinkRow, tags: string[]): Link {

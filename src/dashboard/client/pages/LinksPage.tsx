@@ -49,7 +49,7 @@ export function LinksPage() {
                     <span className="visually-hidden">Search links</span>
                     <input
                         type="search"
-                        placeholder="Search by slug, destination or title"
+                        placeholder="Search links, or try has:webhook, webhook:name, is:tracked"
                         value={q}
                         onChange={e => setQ(e.target.value)}
                     />

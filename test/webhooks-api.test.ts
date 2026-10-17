@@ -259,6 +259,57 @@ describe('webhook endpoints API', () => {
         for (const link of [a, b, c]) await send('DELETE', `/api/links/${link.body.id}`);
     });
 
+    test('the links search finds links by webhook and by tracking', async () => {
+        const a = await send<Link>('POST', '/api/links', {
+            url: 'https://a.example',
+            slug: 'sa',
+            trackDevice: true
+        });
+        const b = await send<Link>('POST', '/api/links', {
+            url: 'https://b.example',
+            slug: 'sb',
+            tags: ['launch']
+        });
+        const c = await send<Link>('POST', '/api/links', { url: 'https://c.example', slug: 'sc' });
+        await create({
+            url: 'https://hooks.example/a',
+            description: 'Promo launch',
+            links: [a.body.id]
+        });
+        await create({ url: DISCORD_URL, tags: ['launch'] });
+        await create({ url: 'https://zap.example/every' });
+
+        const slugs = async (q: string) => {
+            const res = await send<LinkListResponse>(
+                'GET',
+                `/api/links?limit=500&q=${encodeURIComponent(q)}`
+            );
+            return res.body.links
+                .map(l => l.slug)
+                .filter(s => ['sa', 'sb', 'sc'].includes(s))
+                .toSorted();
+        };
+        expect(await slugs('has:webhook')).toEqual(['sa', 'sb']);
+        expect(await slugs('-has:webhook')).toEqual(['sc']);
+        expect(await slugs('webhook:promo')).toEqual(['sa']);
+        expect(await slugs('webhook:"promo launch"')).toEqual(['sa']);
+        expect(await slugs('webhook:discord')).toEqual(['sb']);
+        expect(await slugs('webhook:hooks.example')).toEqual(['sa']);
+        // Webhooks for every link don't count as a link's own.
+        expect(await slugs('webhook:zap')).toEqual([]);
+        expect(await slugs('is:tracked')).toEqual(['sa']);
+        expect(await slugs('-is:tracked has:webhook')).toEqual(['sb']);
+        // Plain words still match slug, destination and title.
+        expect(await slugs('b.example')).toEqual(['sb']);
+        expect(await slugs('https://c.example')).toEqual(['sc']);
+
+        const bad = await send<ApiError>('GET', '/api/links?q=is:nope');
+        expect(bad.status).toBe(400);
+        expect(bad.body.error).toContain('is:tracked');
+
+        for (const link of [a, b, c]) await send('DELETE', `/api/links/${link.body.id}`);
+    });
+
     test('rotating the secret replaces it', async () => {
         const created = await create({ url: 'https://hooks.example/in' });
         const rotated = await send<WebhookSecretResponse>(
