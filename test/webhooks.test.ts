@@ -23,12 +23,13 @@ import {
     type DiscordMessage,
     discordWaitMs
 } from '../src/webhooks/discord.ts';
-import { SETTLE_DELAY_MS, WebhookOutbox } from '../src/webhooks/outbox.ts';
+import { SETTLE_DELAY_MS, SIGNALS_DELAY_MS, WebhookOutbox } from '../src/webhooks/outbox.ts';
 import {
     type ClickSnapshot,
     createClickReader,
     type LinkClickedEvent,
     linkClickedEvent,
+    osVersionOf,
     skipReason
 } from '../src/webhooks/payload.ts';
 import { generateSecret, parseSecret, sign, signedHeaders } from '../src/webhooks/sign.ts';
@@ -159,6 +160,22 @@ describe('payload', () => {
         db.query('DELETE FROM links WHERE id = ?').run(link.id);
         expect(read(id)).toMatchObject({ slug: null, url: null, tags: [] });
         expect(read(999_999)).toBeNull();
+    });
+});
+
+/** The OS version for a click with this OS, UA version and reported platform. */
+const v = (os: string | null, osVersion: string | null, platform: string | null) =>
+    osVersionOf({ os, os_version: osVersion, platform });
+
+describe('OS version', () => {
+    test('the browser-reported platform wins over the user agent', () => {
+        expect(v('Windows', null, 'Windows 11')).toBe('11');
+        expect(v('Windows', null, 'Windows 10')).toBe('10');
+        expect(v('macOS', null, 'macOS 15.1.0')).toBe('15.1.0');
+        expect(v('iOS', '18.6', null)).toBe('18.6');
+        expect(v('Windows', null, null)).toBeNull();
+        // A platform for some other OS is ignored.
+        expect(v('Linux', null, 'Windows 11')).toBeNull();
     });
 });
 
@@ -328,6 +345,7 @@ function pipeline(
         replies,
         outbox,
         deliverer,
+        buffer,
         fakeFetch,
         addEndpoint,
         events,
@@ -442,6 +460,38 @@ describe('delivery', () => {
         expect(body.data.click).toMatchObject({ country: 'CA', browser: 'Safari', os: 'iOS' });
         expect(body.data.click).not.toHaveProperty('ip');
         expect(p.events()[0]).toMatchObject({ status: 'delivered', attempts: 1, last_status: 200 });
+    });
+
+    test('tracked clicks wait for the device page, so Windows 11 is reported', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com', trackDevice: true });
+        p.addEndpoint({ skip: ['bot'] });
+        const discord = p.addEndpoint({
+            kind: 'discord',
+            url: 'https://discord.com/api/webhooks/1/x',
+            secret: null,
+            skip: ['bot']
+        });
+        const before = Date.now();
+        p.click(
+            raw(link.id, {
+                token: 'tok-1',
+                ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+            })
+        );
+        expect(p.events().every(e => e.due_at >= before + SIGNALS_DELAY_MS)).toBe(true);
+
+        p.buffer.pushSignals('tok-1', JSON.stringify({ platform: 'Windows 11' }), Date.now());
+        p.buffer.flush();
+        p.clock.now = Date.now() + SIGNALS_DELAY_MS;
+        await p.deliverer.tick();
+
+        const standard = p.requests.find(r => r.url === 'https://hooks.example/in');
+        const body = JSON.parse(standard?.body ?? '{}') as LinkClickedEvent;
+        expect(body.data.click).toMatchObject({ os: 'Windows', osVersion: '11' });
+        const embed = embedsOf(p.requests.find(r => r.url.includes('discord'))?.body)[0];
+        expect(embed?.fields?.find(f => f.name === 'Device')?.value).toContain('Windows 11');
+        expect(p.events().find(e => e.endpoint_id === discord)?.status).toBe('delivered');
     });
 
     test('IP and user agent are sent only to endpoints that ask for them', async () => {

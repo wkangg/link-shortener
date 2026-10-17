@@ -219,7 +219,13 @@ export class ClickBuffer implements ClickSink {
                     const id = this.#insert.get(...COLUMNS.map(column => row[column]))?.id;
                     if (id !== undefined) {
                         touched.push(id);
-                        this.#opts.webhooks?.enqueue(id, row.link_id, row.is_bot, now);
+                        this.#opts.webhooks?.enqueue(
+                            id,
+                            row.link_id,
+                            row.is_bot,
+                            now,
+                            row.token !== null
+                        );
                     }
                     if (id !== undefined && row.ip) {
                         inserted.push({ id, ip: row.ip });

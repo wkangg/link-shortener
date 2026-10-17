@@ -23,6 +23,8 @@ export interface ClickSnapshot {
     browser: string | null;
     os: string | null;
     os_version: string | null;
+    /** From the device page, e.g. "Windows 11" (tracked links, Chromium only). */
+    platform: string | null;
     language: string | null;
     utm_source: string | null;
     utm_medium: string | null;
@@ -46,7 +48,7 @@ export type ClickReader = (id: number) => ClickSnapshot | null;
 export function createClickReader(db: Database): ClickReader {
     const click = db.query<Omit<ClickSnapshot, 'tags'>, [number]>(
         `SELECT c.id, c.ts, c.link_id, l.slug, l.url, l.title, c.country, c.region, c.city,
-                c.source, c.referrer_host, c.via_qr, c.device, c.browser, c.os, c.os_version,
+                c.source, c.referrer_host, c.via_qr, c.device, c.browser, c.os, c.os_version, c.platform,
                 c.language, c.utm_source, c.utm_medium, c.utm_campaign, c.utm_term, c.utm_content,
                 c.visitor_hash, c.is_bot, c.bot_name, c.is_datacenter, c.vpn, c.scraper,
                 c.abuse_score, c.ip, c.user_agent
@@ -146,6 +148,18 @@ export interface TestEvent {
 
 export type WebhookEvent = LinkClickedEvent | TestEvent;
 
+/**
+ * The OS version, as the dashboard shows it. The browser-reported platform wins
+ * over the user agent: user agents say "Windows NT 10.0" on both Windows 10 and 11.
+ */
+export function osVersionOf(
+    click: Pick<ClickSnapshot, 'os' | 'os_version' | 'platform'>
+): string | null {
+    const { os, platform } = click;
+    if (os && platform?.startsWith(`${os} `)) return platform.slice(os.length + 1);
+    return click.os_version;
+}
+
 /** The short URL of a slug ('' is the root link). */
 export function shortUrlOf(shortOrigin: string, slug: string): string {
     return `${shortOrigin}/${slug}`;
@@ -180,7 +194,7 @@ export function linkClickedEvent(
                 device: click.device,
                 browser: click.browser,
                 os: click.os,
-                osVersion: click.os_version,
+                osVersion: osVersionOf(click),
                 language: click.language,
                 utm: {
                     source: click.utm_source,
