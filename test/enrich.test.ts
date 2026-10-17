@@ -115,6 +115,7 @@ describe('extra click fields', () => {
                     timezone: 'Europe/Paris',
                     language: 'en-GB',
                     memory: 8,
+                    cores: 12,
                     platform: 'Windows 11',
                     touch: 10,
                     webdriver: false
@@ -130,6 +131,7 @@ describe('extra click fields', () => {
             incognito: 0,
             ad_blocker: 1,
             memory: 8,
+            cpu_cores: 12,
             platform: 'Windows 11',
             touch_points: 10,
             webdriver: 0,
@@ -147,8 +149,9 @@ describe('extra click fields', () => {
             )
         ).toMatchObject({ screen: null, battery: null, charging: null, connection: null });
         expect(
-            parseSignals(JSON.stringify({ memory: -1, platform: '<b>x</b>', touch: 2.5 }))
-        ).toMatchObject({ memory: null, platform: null, touch_points: null });
+            parseSignals(JSON.stringify({ memory: -1, cores: 0, platform: '<b>x</b>', touch: 2.5 }))
+        ).toMatchObject({ memory: null, cpu_cores: null, platform: null, touch_points: null });
+        expect(parseSignals(JSON.stringify({ cores: 1.5 }))).toMatchObject({ cpu_cores: null });
         expect(parseSignals('not json')).toBeNull();
         expect(parseSignals('[1]')).toMatchObject({ screen: null });
     });

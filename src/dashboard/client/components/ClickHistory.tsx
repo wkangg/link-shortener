@@ -83,10 +83,11 @@ function technology(c: ClickHistoryRow): (string | null)[] {
     return [c.browser, os, c.deviceModel ?? c.device];
 }
 
-/** Memory, touch, battery and connection, as reported by the browser. */
+/** Memory, CPU cores, touch, battery and connection, as reported by the browser. */
 function specs(c: ClickHistoryRow): (string | null)[] {
     return [
         c.memory === null ? null : `${c.memory} GB RAM`,
+        c.cpuCores === null ? null : `${c.cpuCores} ${c.cpuCores === 1 ? 'core' : 'cores'}`,
         c.touchPoints === null ? null : c.touchPoints > 0 ? 'touch' : 'no touch',
         c.battery === null ? null : `${c.battery}% battery`,
         c.charging ? 'charging' : null,

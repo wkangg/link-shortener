@@ -327,7 +327,7 @@ export class Stats {
                         c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
                         c.screen, c.orientation, c.battery, c.charging, c.connection, c.gpu,
                         c.incognito, c.ad_blocker AS adBlocker, c.latitude, c.longitude,
-                        c.memory, c.platform, c.touch_points AS touchPoints
+                        c.memory, c.cpu_cores AS cpuCores, c.platform, c.touch_points AS touchPoints
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -421,6 +421,7 @@ export class Stats {
             'latitude',
             'longitude',
             'memory',
+            'cpu_cores',
             'platform',
             'touch_points'
         ];
@@ -431,7 +432,7 @@ export class Stats {
                         c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
                         c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
                         c.orientation, c.battery, c.charging, c.connection, c.gpu, c.incognito,
-                        c.ad_blocker, c.latitude, c.longitude, c.memory, c.platform,
+                        c.ad_blocker, c.latitude, c.longitude, c.memory, c.cpu_cores, c.platform,
                         c.touch_points
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${where.sql} ORDER BY c.ts DESC LIMIT ?`

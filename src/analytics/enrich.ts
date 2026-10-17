@@ -55,6 +55,8 @@ export interface DeviceSignals {
     incognito: 0 | 1 | null;
     ad_blocker: 0 | 1 | null;
     memory: number | null;
+    /** navigator.hardwareConcurrency: logical CPU cores. */
+    cpu_cores: number | null;
     platform: string | null;
     touch_points: number | null;
     /** navigator.webdriver: the browser is driven by automation. */
@@ -183,6 +185,13 @@ export function parseSignals(body: string): DeviceSignals | null {
         incognito: flag('incognito'),
         ad_blocker: flag('adBlocker'),
         memory: typeof s.memory === 'number' && s.memory > 0 && s.memory <= 1024 ? s.memory : null,
+        cpu_cores:
+            typeof s.cores === 'number' &&
+            Number.isInteger(s.cores) &&
+            s.cores >= 1 &&
+            s.cores <= 1024
+                ? s.cores
+                : null,
         platform: PLATFORM_RE.test(str('platform')) ? clean(str('platform')) : null,
         touch_points:
             typeof s.touch === 'number' &&

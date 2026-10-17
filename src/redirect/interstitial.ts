@@ -21,6 +21,7 @@ s.orientation=tryit(function(){return screen.orientation.type});
 s.timezone=tryit(function(){return Intl.DateTimeFormat().resolvedOptions().timeZone});
 s.language=n.language;
 s.memory=n.deviceMemory;
+s.cores=n.hardwareConcurrency;
 s.touch=n.maxTouchPoints;
 if(typeof n.webdriver==='boolean')s.webdriver=n.webdriver;
 var c=n.connection;

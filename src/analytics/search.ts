@@ -69,6 +69,7 @@ const TEXT_FIELDS: Record<string, readonly string[]> = {
 
 const NUMBER_FIELDS: Record<string, string> = {
     ram: 'c.memory',
+    cores: 'c.cpu_cores',
     battery: 'c.battery',
     abuse: 'c.abuse_score',
     touch: 'c.touch_points',
@@ -84,6 +85,7 @@ const ALIASES: Record<string, string> = {
     timezone: 'tz',
     fingerprint: 'fp',
     memory: 'ram',
+    cpu: 'cores',
     param: 'query',
     slug: 'link',
     score: 'abuse',

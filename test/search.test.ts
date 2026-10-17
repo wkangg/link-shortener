@@ -79,6 +79,9 @@ describe('search', () => {
         expect(ips('isp:rogers')).toEqual(['198.51.100.7']);
         expect(ips('ram:>=8')).toEqual(['203.0.113.5']);
         expect(ips('ram:4')).toEqual(['198.51.100.7']);
+        db.run("UPDATE clicks SET cpu_cores = 12 WHERE ip = '203.0.113.5'");
+        expect(ips('cores:>=8')).toEqual(['203.0.113.5']);
+        expect(ips('cpu:12')).toEqual(['203.0.113.5']);
         expect(ips('battery:<20')).toEqual(['198.51.100.7']);
         expect(ips('-os:windows')).toEqual(['198.51.100.7']);
         expect(ips('link:launch')).toEqual(['198.51.100.7', '203.0.113.5']);

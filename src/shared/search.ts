@@ -48,6 +48,7 @@ export const SEARCH_FIELDS: readonly SearchField[] = [
     { name: 'orientation', hint: 'screen orientation' },
     { name: 'connection', hint: 'network type' },
     { name: 'ram', hint: 'memory in GB, e.g. ram:>=8' },
+    { name: 'cores', hint: 'CPU cores, e.g. cores:>=8' },
     { name: 'battery', hint: 'battery %, e.g. battery:<20' },
     { name: 'touch', hint: 'touch points' },
     { name: 'abuse', hint: 'AbuseIPDB score' },

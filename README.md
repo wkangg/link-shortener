@@ -64,7 +64,7 @@ Each category has its own toggle, and a search like `is:bot` overrides the defau
 
 When a link has tracking turned on, visitors see a short page instead of a bare redirect. The page reads what only the browser knows and then forwards them. It waits at most about 0.5 s, and a `<meta refresh>` covers browsers with JavaScript off. It records:
 
-- OS version, screen size, orientation, GPU, RAM, touch points, network type and battery
+- OS version, screen size, orientation, GPU, RAM, CPU cores, touch points, network type and battery
 - Private browsing and ad-blocker detection
 - A coarse **device fingerprint** that groups one device's clicks across days and IP changes
 

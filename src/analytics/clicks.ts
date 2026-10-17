@@ -60,6 +60,7 @@ const SIGNAL_COLUMNS = [
     'incognito',
     'ad_blocker',
     'memory',
+    'cpu_cores',
     'platform',
     'touch_points',
     'webdriver'

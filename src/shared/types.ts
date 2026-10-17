@@ -197,6 +197,8 @@ export interface ClickHistoryRow {
     longitude: number | null;
     /** GB of RAM as rounded by the browser (Chromium only). */
     memory: number | null;
+    /** Logical CPU cores (navigator.hardwareConcurrency). */
+    cpuCores: number | null;
     /** e.g. "Windows 11" (Chromium only). */
     platform: string | null;
     /** Max simultaneous touches; 0 = no touch screen. */
