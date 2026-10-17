@@ -58,6 +58,7 @@ interface SearchBoxProps {
 export function SearchBox({ value, onChange, onCommit, params, count }: SearchBoxProps) {
     const listId = useId();
     const input = useRef<HTMLInputElement>(null);
+    const list = useRef<HTMLUListElement>(null);
     const [caret, setCaret] = useState(0);
     const [open, setOpen] = useState(false);
     const [active, setActive] = useState(-1);
@@ -86,15 +87,14 @@ export function SearchBox({ value, onChange, onCommit, params, count }: SearchBo
 
     let suggestions: Suggestion[] = [];
     if (field === null) {
+        // Nothing typed yet lists every field, so they can be browsed.
         const typed = text.toLowerCase();
-        if (typed) {
-            suggestions = SEARCH_FIELDS.filter(f => f.name.startsWith(typed)).map(f => ({
-                insert: `${negate}${f.name}:`,
-                label: `${f.name}:`,
-                hint: f.hint,
-                partial: true
-            }));
-        }
+        suggestions = SEARCH_FIELDS.filter(f => f.name.startsWith(typed)).map(f => ({
+            insert: `${negate}${f.name}:`,
+            label: `${f.name}:`,
+            hint: f.hint,
+            partial: true
+        }));
     } else if (field === 'is' || field === 'has') {
         const options =
             field === 'is' ? SEARCH_FLAGS : SEARCH_FIELDS.filter(f => !NO_VALUES.has(f.name));
@@ -104,13 +104,13 @@ export function SearchBox({ value, onChange, onCommit, params, count }: SearchBo
     } else if (values.data?.field === field && asked === wanted) {
         suggestions = values.data.values
             .filter(v => v.value !== text)
+            .slice(0, MAX_SUGGESTIONS)
             .map(v => ({
                 insert: `${negate}${field}:=${quoted(v.value)} `,
                 label: v.value,
                 hint: `${formatCount(v.clicks)} ${v.clicks === 1 ? 'click' : 'clicks'}`
             }));
     }
-    suggestions = suggestions.slice(0, MAX_SUGGESTIONS);
     const shown = open && suggestions.length > 0;
     const highlighted = shown && active < suggestions.length ? active : -1;
 
@@ -120,6 +120,12 @@ export function SearchBox({ value, onChange, onCommit, params, count }: SearchBo
         input.current.setSelectionRange(nextCaret.current, nextCaret.current);
         nextCaret.current = null;
     }, [value]);
+
+    // Keep the highlighted suggestion in view as the arrow keys move through a long list.
+    useEffect(() => {
+        if (highlighted >= 0)
+            list.current?.children[highlighted]?.scrollIntoView({ block: 'nearest' });
+    }, [highlighted]);
 
     const update = (next: string, at: number) => {
         onChange(next);
@@ -191,7 +197,13 @@ export function SearchBox({ value, onChange, onCommit, params, count }: SearchBo
                 </span>
             )}
             {shown && (
-                <ul className="suggestions" id={listId} role="listbox" aria-label="Suggestions">
+                <ul
+                    ref={list}
+                    className="suggestions"
+                    id={listId}
+                    role="listbox"
+                    aria-label="Suggestions"
+                >
                     {suggestions.map((s, i) => (
                         <li
                             key={s.insert}
