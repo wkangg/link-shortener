@@ -68,7 +68,8 @@ function location(c: ClickHistoryRow): string {
 }
 
 function technology(c: ClickHistoryRow): string {
-    return [c.browser, c.os, c.deviceModel ?? c.device].filter(Boolean).join(' · ') || 'Unknown';
+    const os = [c.os, c.osVersion].filter(Boolean).join(' ');
+    return [c.browser, os, c.deviceModel ?? c.device].filter(Boolean).join(' · ') || 'Unknown';
 }
 
 /** Timezone and language, e.g. "America/Toronto · en-CA". */

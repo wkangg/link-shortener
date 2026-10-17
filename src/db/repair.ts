@@ -1,5 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
+import { refineApple } from '../analytics/apple.ts';
+import { parseUserAgent } from '../analytics/ua.ts';
 import { fixUtf8ReadAsLatin1 } from '../shared/text.ts';
 
 /** Recorded in `_migrations` so this runs once. Not a .sql file, so the migrator ignores it. */
@@ -32,6 +34,56 @@ export function repairGeoEncoding(db: Database): number {
             fixed++;
         }
         db.query('INSERT INTO _migrations (name, applied_at) VALUES (?, ?)').run(NAME, Date.now());
+    })();
+    return fixed;
+}
+
+const APPLE_NAME = 'data:apple-device-details';
+
+/**
+ * One-time backfill of iOS version and iPhone/iPad model (analytics/apple.ts)
+ * for clicks stored before they were recorded, including iPads that claimed to
+ * be a Mac. Only Apple rows are read.
+ */
+export function backfillAppleDetails(db: Database): number {
+    const done = db
+        .query<{ name: string }, [string]>('SELECT name FROM _migrations WHERE name = ?')
+        .get(APPLE_NAME);
+    if (done) return 0;
+
+    const rows = db
+        .query<
+            {
+                id: number;
+                ua: string | null;
+                os: string | null;
+                model: string | null;
+                screen: string | null;
+                touchPoints: number | null;
+            },
+            []
+        >(
+            `SELECT id, user_agent AS ua, os, device_model AS model, screen,
+                    touch_points AS touchPoints
+             FROM clicks WHERE os = 'iOS' OR (os = 'macOS' AND touch_points > 1)`
+        )
+        .all();
+    const update = db.query(
+        'UPDATE clicks SET os = ?, os_version = ?, device = ?, device_model = ? WHERE id = ?'
+    );
+    let fixed = 0;
+    db.transaction(() => {
+        for (const row of rows) {
+            const model = row.ua ? (parseUserAgent(row.ua).model ?? row.model) : row.model;
+            const apple = refineApple({ ...row, model }, row);
+            if (!apple) continue;
+            update.run(apple.os, apple.osVersion, apple.device, apple.model, row.id);
+            fixed++;
+        }
+        db.query('INSERT INTO _migrations (name, applied_at) VALUES (?, ?)').run(
+            APPLE_NAME,
+            Date.now()
+        );
     })();
     return fixed;
 }
