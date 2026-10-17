@@ -4,7 +4,6 @@ import { iosVersion, modelFromScreen, refineApple } from '../src/analytics/apple
 import { ClickBuffer } from '../src/analytics/clicks.ts';
 import { parseUserAgent } from '../src/analytics/ua.ts';
 import { openDatabase } from '../src/db/client.ts';
-import { backfillAppleDetails } from '../src/db/repair.ts';
 import type { RawClick } from '../src/shared/types.ts';
 
 const SAFARI_17 =
@@ -157,31 +156,5 @@ describe('stored clicks', () => {
                 device_model: 'Apple iPad Pro 11″ (M4 or later)'
             }
         ]);
-    });
-
-    test('old clicks are backfilled once', () => {
-        const db = setup();
-        db.query(
-            `INSERT INTO clicks (link_id, ts, source, os, device, device_model, user_agent, screen, touch_points)
-             VALUES (1, 0, 'Direct', 'iOS', 'mobile', 'Apple iPhone', ?, NULL, NULL),
-                    (1, 0, 'Direct', 'iOS', 'mobile', 'Apple iPhone', ?, '390x844@3', 5)`
-        ).run(INSTAGRAM, SAFARI_17);
-        db.run(`DELETE FROM _migrations WHERE name = 'data:apple-device-details'`);
-        expect(backfillAppleDetails(db)).toBe(2);
-        expect(rows(db)).toEqual([
-            {
-                os: 'iOS',
-                os_version: '26.0.1',
-                device: 'mobile',
-                device_model: 'Apple iPhone 15 Pro'
-            },
-            {
-                os: 'iOS',
-                os_version: '17.5.1',
-                device: 'mobile',
-                device_model: 'Apple iPhone 12, 12 Pro, 13, 13 Pro, 14 or 16e'
-            }
-        ]);
-        expect(backfillAppleDetails(db)).toBe(0);
     });
 });

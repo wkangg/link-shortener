@@ -252,15 +252,8 @@ function otherParams(params: URLSearchParams): string | null {
     return count > 0 ? JSON.stringify(out) : null;
 }
 
-/**
- * Identifies a unique visitor: the same IP and user agent always hash the same, across
- * days. Takes the stored (trimmed, capped) values so stored clicks can be rehashed.
- */
-export function visitorHash(
-    ip: string | null,
-    userAgent: string | null,
-    salt: string
-): string | null {
+/** Identifies a unique visitor: the same IP and user agent always hash the same, across days. */
+function visitorHash(ip: string | null, userAgent: string | null, salt: string): string | null {
     if (!ip) return null;
     return Bun.hash(`${salt}|${ip}|${userAgent ?? ''}`).toString(36);
 }
