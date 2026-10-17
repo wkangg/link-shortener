@@ -76,6 +76,8 @@ describe('webhook endpoints API', () => {
             url: 'https://hooks.example/in',
             description: 'Zapier',
             enabled: true,
+            allLinks: true,
+            links: [],
             tags: [],
             skip: ['bot', 'datacenter', 'scraper', 'abusive'],
             includeIp: false,
@@ -172,6 +174,57 @@ describe('webhook endpoints API', () => {
         expect(t.app.outbox.active).toBe(true);
 
         expect(await statusOf('PATCH', '/api/webhooks/999', { enabled: true })).toBe(404);
+    });
+
+    test('an endpoint can be limited to chosen links, and links toggled one at a time', async () => {
+        const a = await send<Link>('POST', '/api/links', { url: 'https://a.example', slug: 'wa' });
+        const b = await send<Link>('POST', '/api/links', { url: 'https://b.example', slug: 'wb' });
+
+        const created = await create({ url: 'https://hooks.example/in', links: [a.body.id] });
+        expect(created.body).toMatchObject({
+            allLinks: false,
+            links: [{ id: a.body.id, slug: 'wa' }],
+            tags: []
+        });
+        const id = created.body.id;
+
+        const added = await send<WebhookEndpoint>('PUT', `/api/webhooks/${id}/links/${b.body.id}`);
+        expect(added.body.links.map(l => l.slug)).toEqual(['wa', 'wb']);
+        const removed = await send<WebhookEndpoint>(
+            'DELETE',
+            `/api/webhooks/${id}/links/${a.body.id}`
+        );
+        expect(removed.body.links.map(l => l.slug)).toEqual(['wb']);
+        // Removing the last link leaves it for no links, not every link.
+        const empty = await send<WebhookEndpoint>(
+            'DELETE',
+            `/api/webhooks/${id}/links/${b.body.id}`
+        );
+        expect(empty.body).toMatchObject({ allLinks: false, links: [] });
+
+        const replaced = await send<WebhookEndpoint>('PATCH', `/api/webhooks/${id}`, {
+            links: [b.body.id, a.body.id]
+        });
+        expect(replaced.body.links.map(l => l.slug)).toEqual(['wa', 'wb']);
+        const all = await send<WebhookEndpoint>('PATCH', `/api/webhooks/${id}`, { allLinks: true });
+        expect(all.body.allLinks).toBe(true);
+        expect(await statusOf('PUT', `/api/webhooks/${id}/links/${a.body.id}`)).toBe(409);
+
+        const missing = await send<ApiError>('POST', '/api/webhooks', {
+            url: 'https://hooks.example/in',
+            links: [999_999]
+        });
+        expect(missing.status).toBe(400);
+        expect(missing.body.error).toContain('999999');
+        expect(
+            await statusOf('PATCH', `/api/webhooks/${id}`, { allLinks: false, links: [999_999] })
+        ).toBe(400);
+        await send('PATCH', `/api/webhooks/${id}`, { allLinks: false });
+        expect(await statusOf('PUT', `/api/webhooks/${id}/links/999999`)).toBe(400);
+        expect(await statusOf('PUT', `/api/webhooks/999999/links/${a.body.id}`)).toBe(404);
+
+        expect(await statusOf('DELETE', `/api/links/${a.body.id}`)).toBe(204);
+        expect(await statusOf('DELETE', `/api/links/${b.body.id}`)).toBe(204);
     });
 
     test('rotating the secret replaces it', async () => {

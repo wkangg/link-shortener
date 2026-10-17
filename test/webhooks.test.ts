@@ -218,6 +218,9 @@ interface EndpointFields {
     kind?: 'standard' | 'discord';
     url?: string;
     secret?: string | null;
+    /** Defaults to true unless tags or links are given. */
+    allLinks?: boolean;
+    links?: number[];
     tags?: string[];
     skip?: WebhookSkipCategory[];
     includeIp?: boolean;
@@ -282,18 +285,25 @@ function pipeline(
     const addEndpoint = (fields: EndpointFields = {}) => {
         const id = db
             .query<{ id: number }, (string | number | null)[]>(
-                `INSERT INTO webhook_endpoints (kind, url, secret, tags, skip, include_ip, enabled, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0) RETURNING id`
+                `INSERT INTO webhook_endpoints (kind, url, secret, all_links, tags, skip, include_ip, enabled, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0) RETURNING id`
             )
             .get(
                 fields.kind ?? 'standard',
                 fields.url ?? 'https://hooks.example/in',
                 fields.secret === undefined ? generateSecret() : fields.secret,
+                (fields.allLinks ?? (!fields.tags?.length && !fields.links?.length)) ? 1 : 0,
                 JSON.stringify(fields.tags ?? []),
                 JSON.stringify(fields.skip ?? DEFAULT_WEBHOOK_SKIP),
                 fields.includeIp ? 1 : 0,
                 fields.enabled === false ? 0 : 1
             )?.id as number;
+        for (const linkId of fields.links ?? []) {
+            db.query('INSERT INTO webhook_endpoint_links (endpoint_id, link_id) VALUES (?, ?)').run(
+                id,
+                linkId
+            );
+        }
         outbox.refresh();
         return id;
     };
@@ -353,6 +363,39 @@ describe('outbox', () => {
         expect(count(everything)).toBe(3);
         expect(new Set(p.events().map(e => e.event_id)).size).toBe(6);
         expect(p.events().every(e => /^evt_[\da-f]{24}$/.test(e.event_id))).toBe(true);
+    });
+
+    test('an endpoint can be for chosen links, tags, both, or nothing yet', () => {
+        const p = pipeline();
+        const a = p.links.create({ url: 'https://a.example' });
+        const b = p.links.create({ url: 'https://b.example', tags: ['promo'] });
+        const c = p.links.create({ url: 'https://c.example' });
+        const onlyA = p.addEndpoint({ links: [a.id] });
+        const aOrPromo = p.addEndpoint({ links: [a.id], tags: ['promo'] });
+        const none = p.addEndpoint({ allLinks: false });
+
+        p.click(raw(a.id), raw(b.id), raw(c.id));
+        const linksFor = (id: number) =>
+            p
+                .events()
+                .filter(e => e.endpoint_id === id)
+                .map(
+                    e =>
+                        p.db
+                            .query<{ link_id: number }, [number]>(
+                                'SELECT link_id FROM clicks WHERE id = ?'
+                            )
+                            .get(e.click_id ?? 0)?.link_id
+                );
+        expect(linksFor(onlyA)).toEqual([a.id]);
+        expect(linksFor(aOrPromo)).toEqual([a.id, b.id]);
+        expect(linksFor(none)).toEqual([]);
+
+        // Deleting a link drops it from the endpoints it was chosen for.
+        p.links.delete(a.id);
+        expect(p.db.query('SELECT COUNT(*) AS n FROM webhook_endpoint_links').get()).toEqual({
+            n: 0
+        });
     });
 
     test('endpoints that skip late verdicts wait for them; others are due at once', () => {

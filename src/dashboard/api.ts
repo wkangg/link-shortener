@@ -305,6 +305,23 @@ export function apiRoutes(deps: ApiDeps) {
             })
         },
 
+        '/api/webhooks/:id/links/:linkId': {
+            PUT: guard<'/api/webhooks/:id/links/:linkId'>(req => {
+                const id = parseId(req.params.id);
+                const linkId = parseId(req.params.linkId);
+                const endpoint =
+                    id === null || linkId === null ? null : webhooks.setLink(id, linkId, true);
+                return endpoint ? json(endpoint) : error('Webhook not found', 404);
+            }),
+            DELETE: guard<'/api/webhooks/:id/links/:linkId'>(req => {
+                const id = parseId(req.params.id);
+                const linkId = parseId(req.params.linkId);
+                const endpoint =
+                    id === null || linkId === null ? null : webhooks.setLink(id, linkId, false);
+                return endpoint ? json(endpoint) : error('Webhook not found', 404);
+            })
+        },
+
         '/api/webhooks/:id/secret': {
             POST: guard<'/api/webhooks/:id/secret'>(req => {
                 const id = parseId(req.params.id);

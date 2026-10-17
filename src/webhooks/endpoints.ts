@@ -24,6 +24,7 @@ interface EndpointRow {
     description: string | null;
     secret: string | null;
     enabled: number;
+    all_links: number;
     tags: string;
     skip: string;
     include_ip: number;
@@ -93,27 +94,36 @@ export class EndpointRepo {
     async create(input: CreateWebhookInput): Promise<WebhookEndpointCreated> {
         const kind = input.kind ?? (isDiscordWebhookUrl(input.url) ? 'discord' : 'standard');
         await this.#checkUrl(input.url, kind);
+        const links = input.links ?? [];
+        this.#checkLinks(links);
+        const allLinks = input.allLinks ?? (links.length === 0 && (input.tags ?? []).length === 0);
         const secret = kind === 'standard' ? generateSecret() : null;
         const now = this.#now();
-        const row = this.#db
-            .query<EndpointRow, (string | number | null)[]>(
-                `INSERT INTO webhook_endpoints
-                    (kind, url, description, secret, enabled, tags, skip, include_ip, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
-            )
-            .get(
-                kind,
-                input.url,
-                input.description ?? null,
-                secret,
-                input.enabled === false ? 0 : 1,
-                JSON.stringify(input.tags ?? []),
-                JSON.stringify(input.skip ?? DEFAULT_WEBHOOK_SKIP),
-                input.includeIp ? 1 : 0,
-                now,
-                now
-            );
-        if (!row) throw new Error('Insert returned no row');
+        const row = this.#db.transaction(() => {
+            const inserted = this.#db
+                .query<EndpointRow, (string | number | null)[]>(
+                    `INSERT INTO webhook_endpoints
+                        (kind, url, description, secret, enabled, all_links, tags, skip, include_ip,
+                         created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
+                )
+                .get(
+                    kind,
+                    input.url,
+                    input.description ?? null,
+                    secret,
+                    input.enabled === false ? 0 : 1,
+                    allLinks ? 1 : 0,
+                    JSON.stringify(input.tags ?? []),
+                    JSON.stringify(input.skip ?? DEFAULT_WEBHOOK_SKIP),
+                    input.includeIp ? 1 : 0,
+                    now,
+                    now
+                );
+            if (!inserted) throw new Error('Insert returned no row');
+            this.#setLinks(inserted.id, links);
+            return inserted;
+        })();
         this.#outbox.refresh();
         return { ...this.#toEndpoint(row), secret };
     }
@@ -122,6 +132,7 @@ export class EndpointRepo {
         const existing = this.#row(id);
         if (!existing) return null;
         if (patch.url !== undefined) await this.#checkUrl(patch.url, existing.kind);
+        if (patch.links !== undefined) this.#checkLinks(patch.links);
 
         const now = this.#now();
         const sets: string[] = ['updated_at = ?'];
@@ -132,6 +143,7 @@ export class EndpointRepo {
         };
         if (patch.url !== undefined) column('url', patch.url);
         if (patch.description !== undefined) column('description', patch.description);
+        if (patch.allLinks !== undefined) column('all_links', patch.allLinks ? 1 : 0);
         if (patch.tags !== undefined) column('tags', JSON.stringify(patch.tags));
         if (patch.skip !== undefined) column('skip', JSON.stringify(patch.skip));
         if (patch.includeIp !== undefined) column('include_ip', patch.includeIp ? 1 : 0);
@@ -148,6 +160,7 @@ export class EndpointRepo {
             this.#db
                 .query(`UPDATE webhook_endpoints SET ${sets.join(', ')} WHERE id = ?`)
                 .run(...params, id);
+            if (patch.links !== undefined) this.#setLinks(id, patch.links);
             if (patch.enabled === false && existing.enabled === 1) {
                 skipPending(this.#db, id, 'Endpoint turned off', now);
             }
@@ -235,6 +248,60 @@ export class EndpointRepo {
         });
     }
 
+    /** Turns one link on or off for an endpoint that isn't for every link. */
+    setLink(id: number, linkId: number, on: boolean): WebhookEndpoint | null {
+        const row = this.#row(id);
+        if (!row) return null;
+        if (row.all_links === 1) {
+            throw new WebhookRequestError('This webhook is for every link', 409);
+        }
+        this.#checkLinks([linkId]);
+        this.#db.transaction(() => {
+            if (on) {
+                this.#db
+                    .query(
+                        'INSERT OR IGNORE INTO webhook_endpoint_links (endpoint_id, link_id) VALUES (?, ?)'
+                    )
+                    .run(id, linkId);
+            } else {
+                this.#db
+                    .query(
+                        'DELETE FROM webhook_endpoint_links WHERE endpoint_id = ? AND link_id = ?'
+                    )
+                    .run(id, linkId);
+            }
+            this.#db
+                .query('UPDATE webhook_endpoints SET updated_at = ? WHERE id = ?')
+                .run(this.#now(), id);
+        })();
+        return this.get(id);
+    }
+
+    /** Throws unless every id is an existing link. */
+    #checkLinks(ids: number[]): void {
+        if (ids.length === 0) return;
+        const found = new Set(
+            this.#db
+                .query<{ id: number }, number[]>(
+                    `SELECT id FROM links WHERE id IN (${ids.map(() => '?').join(', ')})`
+                )
+                .all(...ids)
+                .map(r => r.id)
+        );
+        const missing = ids.find(id => !found.has(id));
+        if (missing !== undefined) {
+            throw new WebhookRequestError(`Link ${missing} doesn’t exist`);
+        }
+    }
+
+    #setLinks(id: number, ids: number[]): void {
+        this.#db.query('DELETE FROM webhook_endpoint_links WHERE endpoint_id = ?').run(id);
+        const insert = this.#db.query(
+            'INSERT INTO webhook_endpoint_links (endpoint_id, link_id) VALUES (?, ?)'
+        );
+        for (const linkId of ids) insert.run(id, linkId);
+    }
+
     #row(id: number): EndpointRow | null {
         return this.#db
             .query<EndpointRow, [number]>('SELECT * FROM webhook_endpoints WHERE id = ?')
@@ -272,6 +339,13 @@ export class EndpointRepo {
             url: row.kind === 'discord' ? maskDiscordUrl(row.url) : row.url,
             description: row.description,
             enabled: row.enabled === 1,
+            allLinks: row.all_links === 1,
+            links: this.#db
+                .query<{ id: number; slug: string }, [number]>(
+                    `SELECT l.id, l.slug FROM webhook_endpoint_links el JOIN links l ON l.id = el.link_id
+                     WHERE el.endpoint_id = ? ORDER BY l.slug COLLATE NOCASE`
+                )
+                .all(row.id),
             tags: JSON.parse(row.tags) as string[],
             skip: JSON.parse(row.skip) as WebhookSkipCategory[],
             includeIp: row.include_ip === 1,

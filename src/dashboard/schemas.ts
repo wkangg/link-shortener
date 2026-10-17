@@ -73,6 +73,11 @@ const webhookFields = {
     kind: z.enum(['standard', 'discord']),
     description: z.string().trim().max(200).nullable(),
     enabled: z.boolean(),
+    allLinks: z.boolean(),
+    links: z
+        .array(z.number().int().positive())
+        .max(1000)
+        .transform(ids => [...new Set(ids)]),
     tags: z
         .array(tag)
         .max(20)
@@ -91,6 +96,9 @@ export const webhookSchemas = {
         kind: webhookFields.kind.optional(),
         description: webhookFields.description.optional(),
         enabled: webhookFields.enabled.optional(),
+        // Missing: every link, unless links or tags are given.
+        allLinks: webhookFields.allLinks.optional(),
+        links: webhookFields.links.optional(),
         tags: webhookFields.tags.optional(),
         skip: webhookFields.skip.optional(),
         includeIp: webhookFields.includeIp.optional()
@@ -99,6 +107,8 @@ export const webhookSchemas = {
         url: webhookFields.url.optional(),
         description: webhookFields.description.optional(),
         enabled: webhookFields.enabled.optional(),
+        allLinks: webhookFields.allLinks.optional(),
+        links: webhookFields.links.optional(),
         tags: webhookFields.tags.optional(),
         skip: webhookFields.skip.optional(),
         includeIp: webhookFields.includeIp.optional()

@@ -74,7 +74,7 @@ Every link has a QR code, as PNG or SVG with custom colors and error correction.
 
 ### 🪝 Webhooks
 
-Send clicks as they happen to a Discord channel (paste the webhook URL) or to any URL as signed JSON. Each endpoint picks which links and which kinds of traffic it gets, and failed deliveries are retried for about a day. See [Webhooks](#webhooks).
+Send clicks as they happen to a Discord channel (paste the webhook URL) or to any URL as signed JSON. A webhook can be for every link or only the links you choose, so each short link can have its own. Failed deliveries are retried for about a day. See [Webhooks](#webhooks).
 
 ### 🌐 Two domains
 
@@ -168,7 +168,12 @@ The app is designed to sit behind Cloudflare:
 
 ## Webhooks
 
-Add endpoints under **Settings → Webhooks**. Each one gets every click on your links, or only clicks on links with certain tags, and can leave out traffic you don't want: bots, datacenter IPs, scrapers, abusive IPs and VPNs. The first four are left out by default, the same as on the dashboard. **Send test** checks the connection, and **Delivery log** shows what was sent and lets you send failed events again.
+Add endpoints under **Settings → Webhooks**, or from a link's page with **Webhooks → Add a webhook for this link**.
+
+- **Which links:** each endpoint gets clicks on **every link**, or **only the links you choose**: specific links, any link with certain tags, or both. To pick which webhooks a link sends to, open the link's page and click **Webhooks**. That shows a switch for each endpoint that isn't for every link.
+- **Which traffic:** each endpoint can leave out bots, datacenter IPs, scrapers, abusive IPs and VPNs. The first four are left out by default, the same as on the dashboard.
+
+**Send test** checks the connection, and **Delivery log** shows what was sent and lets you send failed events again.
 
 ### Discord
 

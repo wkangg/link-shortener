@@ -133,6 +133,18 @@ interface WebhookRowProps {
     onDelete: () => void;
 }
 
+/** "All links", "Only /a, /b and links tagged promo", "No links chosen yet". */
+function scopeSummary(endpoint: WebhookEndpoint): string {
+    if (endpoint.allLinks) return 'All links';
+    const shown = endpoint.links.slice(0, 5).map(l => `/${l.slug}`);
+    const more = endpoint.links.length - shown.length;
+    const parts = [
+        shown.length > 0 ? shown.join(', ') + (more > 0 ? ` and ${more} more` : '') : null,
+        endpoint.tags.length > 0 ? `links tagged ${endpoint.tags.join(', ')}` : null
+    ].filter(Boolean);
+    return parts.length > 0 ? `Only ${parts.join(' and ')}` : 'No links chosen yet';
+}
+
 function health(endpoint: WebhookEndpoint): { text: string; tone: 'ok' | 'warn' | 'muted' } {
     if (!endpoint.enabled) {
         return endpoint.disabledReason
@@ -162,7 +174,7 @@ function WebhookRow(props: WebhookRowProps) {
     const status = health(endpoint);
     const { pending, delivered, skipped, failed } = endpoint.counts;
     const filters = [
-        endpoint.tags.length > 0 ? `Links tagged ${endpoint.tags.join(', ')}` : 'All links',
+        scopeSummary(endpoint),
         endpoint.skip.length > 0
             ? `skipping ${endpoint.skip.map(s => SKIP_SUMMARY[s]).join(', ')}`
             : 'nothing skipped',

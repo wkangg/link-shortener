@@ -18,7 +18,8 @@ export class WebhookOutbox {
     constructor(db: Database) {
         this.#db = db;
         // One row per enabled endpoint that wants this click: bots are dropped
-        // here for endpoints that skip them, and the tag filter applies.
+        // here for endpoints that skip them, and an endpoint that isn't for every
+        // link gets only its chosen links and links with one of its tags.
         this.#insert = db.query<never, [number, number, number, number]>(
             `INSERT INTO webhook_events (endpoint_id, click_id, event_id, due_at, created_at)
              SELECT e.id, ?1, 'evt_' || lower(hex(randomblob(12))),
@@ -29,10 +30,11 @@ export class WebhookOutbox {
              FROM webhook_endpoints e
              WHERE e.enabled = 1
                AND NOT (?3 = 1 AND EXISTS (SELECT 1 FROM json_each(e.skip) WHERE value = 'bot'))
-               AND (json_array_length(e.tags) = 0 OR EXISTS (
-                   SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
-                   WHERE t.link_id = ?2
-               ))`
+               AND (e.all_links = 1
+                    OR EXISTS (SELECT 1 FROM webhook_endpoint_links el
+                               WHERE el.endpoint_id = e.id AND el.link_id = ?2)
+                    OR EXISTS (SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
+                               WHERE t.link_id = ?2))`
         );
         this.refresh();
     }

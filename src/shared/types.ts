@@ -264,7 +264,11 @@ export interface WebhookEndpoint {
     url: string;
     description: string | null;
     enabled: boolean;
-    /** Only clicks on links with one of these tags; empty = every link. */
+    /** Clicks on every link; when false, only `links` and links tagged with one of `tags`. */
+    allLinks: boolean;
+    /** Links chosen for this endpoint (used when `allLinks` is false). */
+    links: { id: number; slug: string }[];
+    /** Links with one of these tags (used when `allLinks` is false). */
     tags: string[];
     skip: WebhookSkipCategory[];
     /** Send the visitor's IP address and user agent. */

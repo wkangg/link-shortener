@@ -1401,6 +1401,124 @@ input[type='color'] {
     overflow-wrap: anywhere;
 }
 
+.webhook-scope {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.25rem;
+    margin: 1rem 0 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+}
+
+.webhook-scope legend {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0 0.25rem;
+}
+
+.webhook-scope-links {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.link-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.link-picker-chosen,
+.link-picker-results,
+.link-webhooks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.link-picker-chosen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.link-picker-chosen .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-family: var(--mono);
+}
+
+.link-picker-chosen .icon-button {
+    width: auto;
+    height: auto;
+    padding: 0 0.15rem;
+    line-height: 1;
+}
+
+.link-picker-results {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    overflow: hidden;
+}
+
+.link-picker-results li {
+    border-top: 1px solid var(--line);
+}
+
+.link-picker-results li:first-child {
+    border-top: none;
+}
+
+.link-picker-results li.muted {
+    padding: 0.5rem 0.75rem;
+}
+
+.link-picker-results button {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: none;
+    border: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.link-picker-results button:hover {
+    background: var(--accent-soft);
+}
+
+.link-picker-results .muted {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.link-webhooks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 0.5rem 0 0;
+}
+
+.link-webhooks .checkbox {
+    align-items: flex-start;
+    white-space: normal;
+    color: var(--ink);
+}
+
+.link-webhooks small {
+    display: block;
+    color: var(--muted);
+}
+
 /* ---------- toast ---------- */
 
 .toast-region {

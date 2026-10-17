@@ -9,6 +9,7 @@ import {
 } from '../../../shared/types.ts';
 import { api, ApiRequestError } from '../api.ts';
 import { Dialog } from './Dialog.tsx';
+import { LinkPicker, type PickedLink } from './LinkPicker.tsx';
 import { useToast } from './Toast.tsx';
 
 export const SKIP_LABELS: Record<WebhookSkipCategory, string> = {
@@ -24,14 +25,18 @@ export const KIND_LABELS = { standard: 'Signed JSON', discord: 'Discord' } as co
 interface WebhookEditorProps {
     /** null to add a new endpoint. */
     endpoint: WebhookEndpoint | null;
+    /** A new endpoint starts out for just this link. */
+    forLink?: PickedLink;
     onClose: () => void;
     onSaved: () => void;
 }
 
-export function WebhookEditor({ endpoint, onClose, onSaved }: WebhookEditorProps) {
+export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEditorProps) {
     // A Discord URL comes back masked, so editing starts blank and keeps the old one.
     const [url, setUrl] = useState(endpoint?.kind === 'standard' ? endpoint.url : '');
     const [description, setDescription] = useState(endpoint?.description ?? '');
+    const [allLinks, setAllLinks] = useState(endpoint ? endpoint.allLinks : !forLink);
+    const [links, setLinks] = useState<PickedLink[]>(endpoint?.links ?? (forLink ? [forLink] : []));
     const [tags, setTags] = useState(endpoint?.tags.join(', ') ?? '');
     const [skip, setSkip] = useState<Set<WebhookSkipCategory>>(
         () => new Set(endpoint?.skip ?? DEFAULT_WEBHOOK_SKIP)
@@ -49,6 +54,8 @@ export function WebhookEditor({ endpoint, onClose, onSaved }: WebhookEditorProps
         setErrors({});
         const fields = {
             description: description.trim() || null,
+            allLinks,
+            links: links.map(l => l.id),
             tags: tags
                 .split(',')
                 .map(t => t.trim())
@@ -119,25 +126,57 @@ export function WebhookEditor({ endpoint, onClose, onSaved }: WebhookEditorProps
                         </small>
                     )}
                 </label>
-                <div className="field-row">
-                    <label className="field">
-                        <span>Description</span>
+                <label className="field">
+                    <span>Description</span>
+                    <input
+                        value={description}
+                        placeholder="Optional, e.g. #clicks channel"
+                        onChange={e => setDescription(e.target.value)}
+                    />
+                </label>
+                <fieldset className="webhook-scope">
+                    <legend>Send clicks on</legend>
+                    <label className="checkbox">
                         <input
-                            value={description}
-                            placeholder="Optional, e.g. #clicks channel"
-                            onChange={e => setDescription(e.target.value)}
+                            type="radio"
+                            name="scope"
+                            checked={allLinks}
+                            onChange={() => setAllLinks(true)}
                         />
+                        Every link
                     </label>
-                    <label className="field">
-                        <span>Only links tagged</span>
+                    <label className="checkbox">
                         <input
-                            value={tags}
-                            placeholder="All links"
-                            onChange={e => setTags(e.target.value)}
+                            type="radio"
+                            name="scope"
+                            checked={!allLinks}
+                            onChange={() => setAllLinks(false)}
                         />
-                        {errors.tags && <small className="field-error">{errors.tags}</small>}
+                        Only the links I choose
                     </label>
-                </div>
+                    {!allLinks && (
+                        <div className="webhook-scope-links">
+                            <LinkPicker value={links} onChange={setLinks} />
+                            <label className="field">
+                                <span>And any link tagged</span>
+                                <input
+                                    value={tags}
+                                    placeholder="Optional, e.g. promo, launch"
+                                    onChange={e => setTags(e.target.value)}
+                                />
+                                {errors.tags && (
+                                    <small className="field-error">{errors.tags}</small>
+                                )}
+                            </label>
+                            {links.length === 0 && !tags.trim() && (
+                                <small className="warn">
+                                    No links chosen yet, so nothing will be sent. You can also turn
+                                    links on from each link’s page.
+                                </small>
+                            )}
+                        </div>
+                    )}
+                </fieldset>
                 <fieldset className="webhook-skip">
                     <legend>Don’t send clicks from</legend>
                     {WEBHOOK_SKIP_CATEGORIES.map(category => (

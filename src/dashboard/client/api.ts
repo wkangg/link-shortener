@@ -59,6 +59,9 @@ export interface WebhookInput {
     kind?: WebhookKind;
     description?: string | null;
     enabled?: boolean;
+    allLinks?: boolean;
+    /** Link ids. */
+    links?: number[];
     tags?: string[];
     skip?: WebhookSkipCategory[];
     includeIp?: boolean;
@@ -86,6 +89,8 @@ export const api = {
     updateWebhook: (id: number, input: Partial<Omit<WebhookInput, 'kind'>>) =>
         request<WebhookEndpoint>('PATCH', `/api/webhooks/${id}`, input),
     deleteWebhook: (id: number) => request<undefined>('DELETE', `/api/webhooks/${id}`),
+    setWebhookLink: (id: number, linkId: number, on: boolean) =>
+        request<WebhookEndpoint>(on ? 'PUT' : 'DELETE', `/api/webhooks/${id}/links/${linkId}`),
     rotateWebhookSecret: (id: number) =>
         request<WebhookSecretResponse>('POST', `/api/webhooks/${id}/secret`),
     testWebhook: (id: number) => request<WebhookEventRow>('POST', `/api/webhooks/${id}/test`),

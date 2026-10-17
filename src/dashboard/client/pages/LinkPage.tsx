@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { api } from '../api.ts';
 import { Analytics } from '../components/Analytics.tsx';
 import { LinkActions } from '../components/LinkActions.tsx';
+import { LinkWebhooks } from '../components/LinkWebhooks.tsx';
 import { useToast } from '../components/Toast.tsx';
 import { useConfig } from '../config.tsx';
 import { formatDateTime, hostOf } from '../format.ts';
@@ -13,6 +14,7 @@ export function LinkPage({ id }: { id: number }) {
     const { shortOrigin } = useConfig();
     const toast = useToast();
     const [version, setVersion] = useState(0);
+    const [webhooksOpen, setWebhooksOpen] = useState(false);
     const { data: link, error } = useApi(`${id}|${version}`, () => api.link(id));
 
     if (error) {
@@ -69,6 +71,13 @@ export function LinkPage({ id }: { id: number }) {
                     <button
                         type="button"
                         className="text-button"
+                        onClick={() => setWebhooksOpen(true)}
+                    >
+                        Webhooks
+                    </button>
+                    <button
+                        type="button"
+                        className="text-button"
                         onClick={() => void toggleArchived()}
                     >
                         {link.archived ? 'Restore' : 'Archive'}
@@ -76,6 +85,7 @@ export function LinkPage({ id }: { id: number }) {
                 </div>
             </header>
             <Analytics linkId={link.id} />
+            {webhooksOpen && <LinkWebhooks link={link} onClose={() => setWebhooksOpen(false)} />}
         </main>
     );
 }
