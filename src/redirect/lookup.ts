@@ -15,7 +15,7 @@ export type LinkLookup = (slug: string) => CachedLink | null;
 
 export function createLinkLookup(db: Database): LinkLookup {
     const stmt = db.query<Row, [string]>(
-        'SELECT id, url, redirect_type, expires_at, track_device FROM links WHERE slug = ? AND archived = 0'
+        'SELECT id, url, redirect_type, expires_at, track_device FROM links WHERE slug = ? COLLATE NOCASE AND archived = 0'
     );
     return slug => {
         const row = stmt.get(slug);

@@ -85,10 +85,11 @@ export function createRedirectHandler(opts: RedirectHandlerOptions) {
         if (slug !== ROOT_SLUG && !SLUG_RE.test(slug)) return notFound();
 
         const t = now();
-        let link = cache.get(slug, t);
+        const key = slug.toLowerCase();
+        let link = cache.get(key, t);
         if (link === undefined) {
             link = lookup(slug);
-            cache.set(slug, link, t);
+            cache.set(key, link, t);
         }
         if (!link) return notFound();
         if (link.expiresAt !== null && link.expiresAt <= t) return gone();

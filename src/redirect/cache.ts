@@ -1,5 +1,6 @@
 // HOT PATH. Bounded in-memory cache of slug -> link, plus a short-lived cache of
-// slugs that don't exist (so scanners can't hammer SQLite).
+// slugs that don't exist (so scanners can't hammer SQLite). Keys are lowercase
+// slugs, since slugs match case-insensitively.
 
 export interface CachedLink {
     id: number;
@@ -52,8 +53,9 @@ export class LinkCache {
 
     /** Forget a slug. Called by the dashboard after any write that touches it. */
     invalidate(slug: string): void {
-        this.#hits.delete(slug);
-        this.#misses.delete(slug);
+        const key = slug.toLowerCase();
+        this.#hits.delete(key);
+        this.#misses.delete(key);
     }
 
     clear(): void {

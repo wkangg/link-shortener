@@ -163,6 +163,16 @@ describe('redirect handler', () => {
         expect(lookups).toEqual(['abc']);
     });
 
+    test('slugs match regardless of case and share one cache entry', () => {
+        const { get, lookups, cache } = setup({ GitHub: LINK });
+        expect(get('/GitHub').status).toBe(302);
+        expect(get('/github').status).toBe(302);
+        expect(get('/GITHUB').status).toBe(302);
+        expect(lookups).toEqual(['GitHub']);
+        cache.invalidate('GITHUB');
+        expect(cache.get('github', 0)).toBeUndefined();
+    });
+
     test('only GET and HEAD', () => {
         const res = setup({ abc: LINK }).get('/abc', { method: 'POST' });
         expect(res.status).toBe(405);

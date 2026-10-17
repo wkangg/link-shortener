@@ -65,7 +65,7 @@ export class LinkRepo {
 
     getBySlug(slug: string): Link | null {
         const row = this.#db
-            .query<LinkRow, [string]>('SELECT * FROM links WHERE slug = ?')
+            .query<LinkRow, [string]>('SELECT * FROM links WHERE slug = ? COLLATE NOCASE')
             .get(slug);
         return row ? toLink(row, this.#tagsFor([row.id]).get(row.id) ?? []) : null;
     }

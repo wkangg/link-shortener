@@ -15,15 +15,21 @@ describe('LinkRepo', () => {
     test('create with a random slug', () => {
         const { repo } = setup();
         const link = repo.create({ url: 'https://example.com' });
-        expect(link.slug).toMatch(/^[\dA-Za-z]{6}$/);
+        expect(link.slug).toMatch(/^[\da-z]{6}$/);
         expect(link).toMatchObject({ redirectType: 302, title: null, tags: [], archived: false });
     });
 
-    test('custom slugs must be unique; slugs are case-sensitive', () => {
+    test('custom slugs must be unique, ignoring case; the slug keeps its casing', () => {
         const { repo } = setup();
-        repo.create({ url: 'https://a.com', slug: 'gh' });
-        expect(() => repo.create({ url: 'https://b.com', slug: 'gh' })).toThrow(SlugTakenError);
-        expect(repo.create({ url: 'https://b.com', slug: 'GH' }).slug).toBe('GH');
+        const link = repo.create({ url: 'https://a.com', slug: 'GitHub' });
+        expect(link.slug).toBe('GitHub');
+        expect(() => repo.create({ url: 'https://b.com', slug: 'GitHub' })).toThrow(SlugTakenError);
+        expect(() => repo.create({ url: 'https://b.com', slug: 'github' })).toThrow(SlugTakenError);
+        const other = repo.create({ url: 'https://b.com', slug: 'other' });
+        expect(() => repo.update(other.id, { slug: 'GITHUB' })).toThrow(SlugTakenError);
+        expect(repo.getBySlug('GITHUB')?.id).toBe(link.id);
+        // Re-casing a link's own slug is fine.
+        expect(repo.update(link.id, { slug: 'github' })?.slug).toBe('github');
     });
 
     test('update changes fields, tags and invalidates old and new slugs', () => {

@@ -181,8 +181,9 @@ The app is designed to sit behind Cloudflare:
 | [`src/dashboard`](./src/dashboard) | JSON API on `Bun.serve` routes, Cloudflare Access auth and a React SPA. Editing a link clears its cache entry immediately.                                                                              |
 | [`src/db`](./src/db)               | SQLite client and numbered SQL migrations                                                                                                                                                               |
 
-Two more behaviors worth knowing:
+A few more behaviors worth knowing:
 
+- **Slugs are case-insensitive.** `/GitHub`, `/github` and `/GITHUB` are the same link, so two links can't differ only by case. A slug keeps the casing you gave it for display, and random slugs use lowercase letters and digits.
 - **Query parameters pass through.** `/abc?utm_source=newsletter` arrives at the destination with the tag, and the dashboard reports it.
 - **QR codes** encode `https://<short-domain>/<slug>?qr`. The `?qr` is removed before redirecting and recorded, so scans show up as their own source.
 
