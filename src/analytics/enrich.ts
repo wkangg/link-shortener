@@ -251,10 +251,10 @@ function utmFromUrl(url: string): Record<UtmKey, string | null> {
 }
 
 function otherParams(params: URLSearchParams): string | null {
-    const out: Record<string, string> = {};
+    const out: Record<string, string> = Object.create(null);
     let count = 0;
     for (const [key, value] of params) {
-        if (UTM_SET.has(key) || key === '' || key in out) continue;
+        if (UTM_SET.has(key) || key === '' || Object.hasOwn(out, key)) continue;
         out[key.slice(0, 64)] = value.slice(0, MAX_VALUE);
         if (++count >= MAX_PARAMS) break;
     }
