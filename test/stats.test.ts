@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 
-import { BadQueryError, filterCondition, Stats } from '../src/analytics/stats.ts';
+import { BadQueryError, csvCell, filterCondition, Stats } from '../src/analytics/stats.ts';
 import { openDatabase } from '../src/db/client.ts';
 import type { StatsQuery } from '../src/shared/types.ts';
 
@@ -216,6 +216,13 @@ describe('csv', () => {
         expect(lines).toHaveLength(5);
         expect(lines[1]).toStartWith(new Date(T0 + DAY + HOUR).toISOString());
         expect(lines.some(l => l.includes('"{""ref"":""ig""}"'))).toBe(true);
+    });
+
+    test('text that a spreadsheet would run as a formula is escaped', () => {
+        expect(csvCell('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
+        expect(csvCell('@SUM(A1)')).toBe("'@SUM(A1)");
+        expect(csvCell(-12.5)).toBe('-12.5');
+        expect(csvCell('Mozilla/5.0')).toBe('Mozilla/5.0');
     });
 });
 
