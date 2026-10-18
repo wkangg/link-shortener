@@ -4,7 +4,8 @@ const port = z.coerce.number().int().min(0).max(65535);
 const origin = z.url({ protocol: /^https?$/ }).transform(s => s.replace(/\/+$/, ''));
 
 const schema = z.object({
-    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    // Production unless told otherwise, so a deploy that forgets NODE_ENV still requires Access.
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
     SHORT_PORT: port.default(3000),
     DASH_PORT: port.default(3001),
     SHORT_ORIGIN: origin.optional(),

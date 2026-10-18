@@ -2,9 +2,15 @@ import { describe, expect, test } from 'bun:test';
 
 import { loadConfig } from '../src/config.ts';
 
+const dev = (env: Record<string, string>) => loadConfig({ NODE_ENV: 'development', ...env });
+
 describe('loadConfig', () => {
+    test('NODE_ENV defaults to production, so Access is required', () => {
+        expect(() => loadConfig({})).toThrow(/required in production/);
+    });
+
     test('development defaults', () => {
-        const c = loadConfig({});
+        const c = dev({});
         expect(c.env).toBe('development');
         expect(c.shortPort).toBe(3000);
         expect(c.dashPort).toBe(3001);
@@ -18,19 +24,19 @@ describe('loadConfig', () => {
 
     test('AbuseIPDB settings', () => {
         expect(
-            loadConfig({
+            dev({
                 ABUSEIPDB_API_KEY: 'k',
                 ABUSEIPDB_MIN_SCORE: '50',
                 ABUSEIPDB_DAILY_LIMIT: '5000'
             })
         ).toMatchObject({ abuseIpdb: { apiKey: 'k', dailyLimit: 5000 }, abuseMinScore: 50 });
-        expect(loadConfig({ ABUSEIPDB_API_KEY: '' }).abuseIpdb).toBeNull();
-        expect(() => loadConfig({ ABUSEIPDB_MIN_SCORE: '0' })).toThrow();
-        expect(() => loadConfig({ ABUSEIPDB_MIN_SCORE: '101' })).toThrow();
+        expect(dev({ ABUSEIPDB_API_KEY: '' }).abuseIpdb).toBeNull();
+        expect(() => dev({ ABUSEIPDB_MIN_SCORE: '0' })).toThrow();
+        expect(() => dev({ ABUSEIPDB_MIN_SCORE: '101' })).toThrow();
     });
 
     test('production uses the configured domains', () => {
-        const c = loadConfig({
+        const c = dev({
             NODE_ENV: 'production',
             SHORT_ORIGIN: 'https://s.example',
             DASH_ORIGIN: 'https://dash.example',
@@ -43,9 +49,9 @@ describe('loadConfig', () => {
     });
 
     test('production requires its domains and Cloudflare Access', () => {
-        expect(() => loadConfig({ NODE_ENV: 'production' })).toThrow(/ORIGIN.*required/);
+        expect(() => dev({ NODE_ENV: 'production' })).toThrow(/ORIGIN.*required/);
         expect(() =>
-            loadConfig({
+            dev({
                 NODE_ENV: 'production',
                 SHORT_ORIGIN: 'https://s.example',
                 DASH_ORIGIN: 'https://dash.example'
@@ -54,15 +60,15 @@ describe('loadConfig', () => {
     });
 
     test('visitor salt: explicit, or random per process', () => {
-        expect(loadConfig({ VISITOR_SALT: 'a-long-enough-secret' }).visitorSalt).toBe(
+        expect(dev({ VISITOR_SALT: 'a-long-enough-secret' }).visitorSalt).toBe(
             'a-long-enough-secret'
         );
-        expect(loadConfig({}).visitorSalt).not.toBe(loadConfig({}).visitorSalt);
-        expect(() => loadConfig({ VISITOR_SALT: 'short' })).toThrow(/VISITOR_SALT/);
+        expect(dev({}).visitorSalt).not.toBe(dev({}).visitorSalt);
+        expect(() => dev({ VISITOR_SALT: 'short' })).toThrow(/VISITOR_SALT/);
     });
 
     test('explicit origins win and lose their trailing slash', () => {
-        const c = loadConfig({
+        const c = dev({
             SHORT_ORIGIN: 'https://s.example/',
             DASH_ORIGIN: 'https://d.example'
         });
@@ -71,18 +77,18 @@ describe('loadConfig', () => {
     });
 
     test('empty strings count as unset', () => {
-        expect(loadConfig({ SHORT_PORT: '', DB_PATH: '' }).shortPort).toBe(3000);
+        expect(dev({ SHORT_PORT: '', DB_PATH: '' }).shortPort).toBe(3000);
     });
 
     test('rejects bad values', () => {
-        expect(() => loadConfig({ SHORT_PORT: 'nope' })).toThrow(/SHORT_PORT/);
-        expect(() => loadConfig({ DASH_ORIGIN: 'ftp://x' })).toThrow(/DASH_ORIGIN/);
-        expect(() => loadConfig({ SHORT_PORT: '4000', DASH_PORT: '4000' })).toThrow(/must differ/);
-        expect(() => loadConfig({ CF_ACCESS_AUD: 'abc' })).toThrow(/CF_ACCESS/);
+        expect(() => dev({ SHORT_PORT: 'nope' })).toThrow(/SHORT_PORT/);
+        expect(() => dev({ DASH_ORIGIN: 'ftp://x' })).toThrow(/DASH_ORIGIN/);
+        expect(() => dev({ SHORT_PORT: '4000', DASH_PORT: '4000' })).toThrow(/must differ/);
+        expect(() => dev({ CF_ACCESS_AUD: 'abc' })).toThrow(/CF_ACCESS/);
     });
 
     test('Cloudflare Access config', () => {
-        const c = loadConfig({
+        const c = dev({
             CF_ACCESS_TEAM_DOMAIN: 'me.cloudflareaccess.com',
             CF_ACCESS_AUD: 'aud'
         });

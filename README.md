@@ -119,7 +119,7 @@ All settings are environment variables. Copy [`.env.example`](./.env.example) to
 
 | Variable                | Default           | Description                                                                        |
 | ----------------------- | ----------------- | ---------------------------------------------------------------------------------- |
-| `NODE_ENV`              | `development`     | `development`, `production` or `test`                                              |
+| `NODE_ENV`              | `production`      | `development`, `production` or `test`. `bun run dev` sets `development`.           |
 | `SHORT_PORT`            | `3000`            | Port for short links                                                               |
 | `DASH_PORT`             | `3001`            | Port for the dashboard                                                             |
 | `DB_PATH`               | `./data/links.db` | SQLite file (`/data/links.db` in the Docker image)                                 |
