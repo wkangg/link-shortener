@@ -93,11 +93,11 @@ bun install
 bun run dev
 ```
 
-| URL                             | What                                                                    |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `http://localhost:3001`         | Dashboard. Auth is off locally when Cloudflare Access isn't configured. |
-| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).   |
-| `http://localhost:3001/healthz` | Health check                                                            |
+| URL                             | What                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `http://localhost:3001`         | Dashboard. Without Cloudflare Access, only this machine and your local network can use it. |
+| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).                      |
+| `http://localhost:3001/healthz` | Health check                                                                               |
 
 ---
 

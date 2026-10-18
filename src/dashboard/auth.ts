@@ -1,11 +1,14 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
+import { isPrivateIp } from '../shared/ip.ts';
+
 export interface Identity {
     /** Email for a person; the service token's client ID for a machine. */
     subject: string;
 }
 
-export type Authenticate = (req: Request) => Promise<Identity | null>;
+/** `peerIp` is the address of the connection itself (not a forwarded header). */
+export type Authenticate = (req: Request, peerIp?: string) => Promise<Identity | null>;
 
 export interface AccessConfig {
     teamDomain: string;
@@ -16,13 +19,18 @@ export interface AccessConfig {
  * Verifies the JWT that Cloudflare Access attaches to every request it lets
  * through. Keys are fetched from the team's JWKS endpoint and cached by `jose`.
  *
- * With no Access config (local development) every request is allowed.
+ * With no Access config (local development) only loopback and private-network
+ * peers are allowed, so a deploy that forgot to set up Access isn't open to the
+ * internet.
  */
 export function createAuthenticator(
     config: AccessConfig | null,
     keys?: JWTVerifyGetKey
 ): Authenticate {
-    if (!config) return () => Promise.resolve({ subject: 'local-dev' });
+    if (!config) {
+        return (_, peerIp) =>
+            Promise.resolve(isPrivateIp(peerIp ?? '') ? { subject: 'local-dev' } : null);
+    }
 
     const issuer = `https://${config.teamDomain}`;
     const jwks = keys ?? createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
