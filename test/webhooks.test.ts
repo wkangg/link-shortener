@@ -536,7 +536,21 @@ describe('delivery', () => {
         p.clock.now = Date.now() + 1;
         await p.deliverer.tick();
         expect(p.requests).toHaveLength(0);
-        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Click was deleted' });
+        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Link was deleted' });
+    });
+
+    test("a deleted link's events never send a click that reused its id", async () => {
+        const p = pipeline();
+        const a = p.links.create({ url: 'https://a.example' });
+        const b = p.links.create({ url: 'https://b.example' });
+        p.addEndpoint({ skip: [], links: [a.id] });
+        p.click(raw(a.id));
+        p.links.delete(a.id);
+        p.click(raw(b.id)); // gets the deleted click's id
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()).toMatchObject([{ click_id: null, status: 'skipped' }]);
     });
 
     test('failures retry with backoff, then give up', async () => {
