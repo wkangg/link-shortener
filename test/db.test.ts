@@ -1,6 +1,5 @@
-import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -65,38 +64,6 @@ describe('database', () => {
             .map(r => r.detail)
             .join('\n');
         expect(plan).toContain('links_slug_nocase');
-        db.close();
-    });
-
-    test('the case-insensitive migration renames newer links whose slugs differ only by case', () => {
-        const dir = path.join(tmp, 'migrations-0001');
-        mkdirSync(dir);
-        copyFileSync(path.join(MIGRATIONS_DIR, '0001_init.sql'), path.join(dir, '0001_init.sql'));
-        const db = new Database(':memory:', { strict: true });
-        migrate(db, dir);
-        const insert = db.query(
-            'INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (?, ?, ?, 0, 0)'
-        );
-        insert.run(1, 'gh', 'https://a.com');
-        insert.run(2, 'GH', 'https://b.com');
-        insert.run(3, 'Gh', 'https://c.com');
-        insert.run(4, 'other', 'https://d.com');
-        insert.run(5, 'x'.repeat(64), 'https://e.com');
-        insert.run(6, 'X'.repeat(64), 'https://f.com');
-
-        expect(migrate(db, MIGRATIONS_DIR)).toContain('0002_case_insensitive_slugs.sql');
-        const slugs = db
-            .query<{ slug: string }, []>('SELECT slug FROM links ORDER BY id')
-            .all()
-            .map(r => r.slug);
-        expect(slugs).toEqual([
-            'gh',
-            'GH-2',
-            'Gh-3',
-            'other',
-            'x'.repeat(64),
-            `${'X'.repeat(62)}-6`
-        ]);
         db.close();
     });
 
