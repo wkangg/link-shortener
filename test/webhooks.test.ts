@@ -540,6 +540,18 @@ describe('delivery', () => {
         expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Link was deleted' });
     });
 
+    test("deleting a link leaves its delivered events' log as it was", async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [] });
+        p.click(raw(link.id));
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        const before = p.events();
+        p.links.delete(link.id);
+        expect(p.events()).toEqual(before.map(e => ({ ...e, click_id: null })));
+    });
+
     test("a deleted link's events never send a click that reused its id", async () => {
         const p = pipeline();
         const a = p.links.create({ url: 'https://a.example' });

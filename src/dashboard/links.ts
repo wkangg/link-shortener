@@ -219,8 +219,8 @@ export class LinkRepo {
                 .query(
                     `UPDATE webhook_events SET click_id = NULL,
                         status = CASE status WHEN 'pending' THEN 'skipped' ELSE status END,
-                        last_error = COALESCE(last_error, 'Link was deleted'),
-                        finished_at = COALESCE(finished_at, ?)
+                        last_error = CASE status WHEN 'pending' THEN 'Link was deleted' ELSE last_error END,
+                        finished_at = CASE status WHEN 'pending' THEN ? ELSE finished_at END
                      WHERE click_id IN (SELECT id FROM clicks WHERE link_id = ?)`
                 )
                 .run(this.#now(), id);
