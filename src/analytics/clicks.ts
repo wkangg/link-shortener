@@ -112,7 +112,6 @@ export class ClickBuffer implements ClickSink {
     #lookups = 0;
     #timer: ReturnType<typeof setInterval> | null = null;
     #dropped = 0;
-    #written = 0;
     #lastExpiry = Date.now();
     readonly #db: Database;
     readonly #opts: Required<Omit<ClickBufferOptions, 'classifier'>>;
@@ -194,6 +193,10 @@ export class ClickBuffer implements ClickSink {
 
     /** Writes everything pending. Returns the number of click rows written. */
     flush(): number {
+        if (this.#dropped > 0) {
+            console.error(`[clicks] buffer full, dropped ${this.#dropped} clicks or signals`);
+            this.#dropped = 0;
+        }
         const now = Date.now();
         const expire = now - this.#lastExpiry >= EXPIRE_INTERVAL_MS;
         if (
@@ -284,7 +287,6 @@ export class ClickBuffer implements ClickSink {
                 }
                 this.#classifier.ids(touched);
             })();
-            this.#written += batch.length;
             for (const row of inserted) this.#resolve(row.id, row.ip);
             return batch.length;
         } catch (error) {
@@ -327,13 +329,5 @@ export class ClickBuffer implements ClickSink {
         if (this.#timer) clearInterval(this.#timer);
         this.#timer = null;
         this.flush();
-    }
-
-    get stats() {
-        return {
-            pending: this.#pending.length + this.#signals.length,
-            written: this.#written,
-            dropped: this.#dropped
-        };
     }
 }

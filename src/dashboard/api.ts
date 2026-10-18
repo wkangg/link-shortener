@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
-import type { BunRequest } from 'bun';
+import type { BunRequest, Server } from 'bun';
 import { z } from 'zod/v4';
 
 import { BadQueryError, Stats } from '../analytics/stats.ts';
@@ -34,7 +34,10 @@ export interface ApiDeps {
     abuseMinScore: number;
 }
 
-type Handler<Path extends string> = (req: BunRequest<Path>) => Response | Promise<Response>;
+type Handler<Path extends string> = (
+    req: BunRequest<Path>,
+    server: Server<undefined>
+) => Response | Promise<Response>;
 
 const MAX_RANGE = 5 * 366 * 86_400_000;
 
@@ -138,15 +141,15 @@ export function apiRoutes(deps: ApiDeps) {
     const { links, webhooks, stats, schemas } = deps;
 
     function guard<Path extends string>(handler: Handler<Path>): Handler<Path> {
-        return async req => {
+        return async (req, server) => {
             if (req.method !== 'GET' && req.method !== 'HEAD') {
                 const origin = req.headers.get('origin');
                 if (origin && origin !== deps.dashOrigin) return error('Cross-origin request', 403);
             }
-            const identity = await deps.authenticate(req);
+            const identity = await deps.authenticate(req, server.requestIP(req)?.address ?? '');
             if (!identity) return error('Not signed in through Cloudflare Access', 401);
             try {
-                return await handler(req);
+                return await handler(req, server);
             } catch (error_) {
                 if (error_ instanceof BadQueryError) return error(error_.message, 400);
                 if (error_ instanceof SlugTakenError) return error(error_.message, 409);

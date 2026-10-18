@@ -15,6 +15,7 @@ export const DASH = 'https://dash.example';
 export function testApp(opts: { checkIp?: CheckIp; webhookFetch?: WebhookFetch } = {}) {
     const db = openDatabase(':memory:');
     const config = loadConfig({
+        NODE_ENV: 'test',
         SHORT_PORT: '0',
         DASH_PORT: '0',
         SHORT_ORIGIN: 'https://s.example',

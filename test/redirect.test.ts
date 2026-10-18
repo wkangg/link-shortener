@@ -235,7 +235,6 @@ describe('device tracking', () => {
         expect(await post('/_/signals', body)).toBe(204);
         expect(signals).toEqual([{ token: 'abc-123', body, ts: 1_000_000 }]);
         expect(await post('/_/signals', '{}')).toBe(204);
-        expect(await post('/_/signals', 'x'.repeat(5000))).toBe(413);
         expect(signals).toHaveLength(1);
     });
 });

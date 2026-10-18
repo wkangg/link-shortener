@@ -61,7 +61,19 @@ describe('Cloudflare Access authentication', () => {
         expect(await authenticate(req({ 'cf-access-jwt-assertion': wrongIss }))).toBeNull();
     });
 
-    test('no config means local development: everything allowed', async () => {
-        expect(await createAuthenticator(null)(req({}))).toEqual({ subject: 'local-dev' });
+    test('no config allows only local, private-network and Tailscale peers', async () => {
+        const local = createAuthenticator(null);
+        for (const ip of [
+            '127.0.0.1',
+            '::1',
+            '192.168.1.20',
+            '10.0.0.5',
+            '100.101.102.103',
+            'fd7a:115c:a1e0::1'
+        ]) {
+            expect(await local(req({}), ip)).toEqual({ subject: 'local-dev' });
+        }
+        for (const ip of ['203.0.113.9', '2001:db8::1', ''])
+            expect(await local(req({}), ip)).toBeNull();
     });
 });

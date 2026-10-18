@@ -8,7 +8,7 @@
     },
     "type": "module",
     "scripts": {
-        "dev": "bun --watch src/index.ts",
+        "dev": "NODE_ENV=development bun --watch src/index.ts",
         "start": "bun src/index.ts",
         "test": "bun test",
         "typecheck": "bun check",
@@ -17,7 +17,7 @@
         "lint": "bun lint --max-warnings 0",
         "lint:fix": "bun lint --fix",
         "verify": "bun run format:check && bun run lint && bun run typecheck && bun test",
-        "seed": "bun scripts/seed.ts",
+        "seed": "NODE_ENV=development bun scripts/seed.ts",
         "backup": "bun scripts/backup.ts",
         "bench": "bun scripts/bench.ts"
     },

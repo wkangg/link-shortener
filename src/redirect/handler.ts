@@ -3,7 +3,7 @@
 import { ROOT_SLUG, SLUG_RE } from '../shared/slug.ts';
 import type { ClickSink } from '../shared/types.ts';
 import type { LinkCache } from './cache.ts';
-import { interstitialHtml, MAX_SIGNALS_BODY, SIGNALS_PATH } from './interstitial.ts';
+import { interstitialHtml, SIGNALS_PATH } from './interstitial.ts';
 import type { LinkLookup } from './lookup.ts';
 
 export interface RedirectHandlerOptions {
@@ -128,10 +128,8 @@ export function createRedirectHandler(opts: RedirectHandlerOptions) {
 }
 
 async function receiveSignals(req: Request, clicks: ClickSink, ts: number): Promise<Response> {
-    const length = Number(req.headers.get('content-length') ?? 0);
-    if (length > MAX_SIGNALS_BODY) return new Response(null, { status: 413 });
+    // Bun.serve's maxRequestBodySize caps the body (413) before it's read.
     const body = await req.text();
-    if (body.length > MAX_SIGNALS_BODY) return new Response(null, { status: 413 });
     // The token is checked against the clicks table at flush time; just find it here.
     const token = /"t":"([\w-]{1,64})"/.exec(body)?.[1];
     if (token) clicks.pushSignals(token, body, ts);

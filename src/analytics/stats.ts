@@ -465,11 +465,13 @@ function emptyLabel(dim: string): string {
     return '(none)';
 }
 
-function csvCell(
+export function csvCell(
     value: string | number | bigint | boolean | null | undefined | Uint8Array
 ): string {
     if (value === null || value === undefined) return '';
-    const text = value instanceof Uint8Array ? '' : String(value);
+    let text = value instanceof Uint8Array ? '' : String(value);
+    // Visitor-controlled text (user agent, referrer) must not run as a spreadsheet formula.
+    if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
     return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

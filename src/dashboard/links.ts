@@ -214,6 +214,16 @@ export class LinkRepo {
         const existing = this.get(id);
         if (!existing) return false;
         this.#db.transaction(() => {
+            // Click ids can be reused once deleted, so events must stop pointing at them.
+            this.#db
+                .query(
+                    `UPDATE webhook_events SET click_id = NULL,
+                        status = CASE status WHEN 'pending' THEN 'skipped' ELSE status END,
+                        last_error = CASE status WHEN 'pending' THEN 'Link was deleted' ELSE last_error END,
+                        finished_at = CASE status WHEN 'pending' THEN ? ELSE finished_at END
+                     WHERE click_id IN (SELECT id FROM clicks WHERE link_id = ?)`
+                )
+                .run(this.#now(), id);
             this.#db.query('DELETE FROM clicks WHERE link_id = ?').run(id);
             this.#db.query('DELETE FROM links WHERE id = ?').run(id);
         })();

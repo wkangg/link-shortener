@@ -37,4 +37,12 @@ describe('redirect server', () => {
         const res = await t.click('/');
         expect(res.status).toBe(404);
     });
+
+    test.each([
+        ['with a length', 'x'.repeat(5000)],
+        ['streamed', new Blob(['x'.repeat(5000)]).stream()]
+    ] as const)('signals bodies over the limit get 413 (%s)', async (_, body) => {
+        const res = await fetch(new URL('/_/signals', t.app.short.url), { method: 'POST', body });
+        expect(res.status).toBe(413);
+    });
 });

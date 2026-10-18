@@ -244,6 +244,11 @@ describe('enrichClick', () => {
         });
     });
 
+    test('params named like Object methods are kept', () => {
+        const row = enrichClick({ ...base, query: 'toString=1&constructor=2&__proto__=3' }, opts);
+        expect(row.query).toBe('{"toString":"1","constructor":"2","__proto__":"3"}');
+    });
+
     test("destination UTM fills the columns but doesn't override the referrer source", () => {
         const row = enrichClick(
             { ...base, url: 'https://ex.com/?utm_source=bio', referrer: 'https://t.co/a' },

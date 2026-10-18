@@ -14,6 +14,7 @@ import {
     AUTO_DISABLE_AFTER_MS,
     KEEP_FINISHED_MS,
     RETRY_DELAYS_MS,
+    STANDARD_BATCH,
     WebhookDeliverer,
     type WebhookFetch
 } from '../src/webhooks/deliverer.ts';
@@ -536,7 +537,33 @@ describe('delivery', () => {
         p.clock.now = Date.now() + 1;
         await p.deliverer.tick();
         expect(p.requests).toHaveLength(0);
-        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Click was deleted' });
+        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Link was deleted' });
+    });
+
+    test("deleting a link leaves its delivered events' log as it was", async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [] });
+        p.click(raw(link.id));
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        const before = p.events();
+        p.links.delete(link.id);
+        expect(p.events()).toEqual(before.map(e => ({ ...e, click_id: null })));
+    });
+
+    test("a deleted link's events never send a click that reused its id", async () => {
+        const p = pipeline();
+        const a = p.links.create({ url: 'https://a.example' });
+        const b = p.links.create({ url: 'https://b.example' });
+        p.addEndpoint({ skip: [], links: [a.id] });
+        p.click(raw(a.id));
+        p.links.delete(a.id);
+        p.click(raw(b.id)); // gets the deleted click's id
+        p.clock.now = Date.now() + 1;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()).toMatchObject([{ click_id: null, status: 'skipped' }]);
     });
 
     test('failures retry with backoff, then give up', async () => {
@@ -661,7 +688,7 @@ describe('delivery', () => {
         expect(p.events()[0]).toMatchObject({ status: 'skipped', attempts: 0 });
     });
 
-    test('a success while another request is in flight ends the failure streak', async () => {
+    test('a success ends the failure streak', async () => {
         const p = pipeline();
         const link = p.links.create({ url: 'https://example.com' });
         const endpoint = p.addEndpoint({ skip: [] });
@@ -684,7 +711,6 @@ describe('delivery', () => {
         });
         const tick = deliverer.tick();
         await Bun.sleep(0);
-        expect(release).toHaveLength(2);
         release[0]?.(204);
         await Bun.sleep(0);
         release[1]?.(500);
@@ -717,12 +743,13 @@ describe('delivery', () => {
         expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Skipped: scraper' });
     });
 
-    test('at most `concurrency` requests are in flight', async () => {
+    test('at most `concurrency` requests are in flight, one per endpoint', async () => {
         const p = pipeline();
         const link = p.links.create({ url: 'https://example.com' });
-        p.addEndpoint({ skip: [] });
+        for (let i = 0; i < 3; i++) p.addEndpoint({ skip: [] });
         p.click(...Array.from({ length: 5 }, () => raw(link.id)));
         const release: (() => void)[] = [];
+        let answer = false;
         const deliverer = new WebhookDeliverer(p.db, {
             shortOrigin: SHORT,
             dashOrigin: DASH,
@@ -731,9 +758,11 @@ describe('delivery', () => {
             concurrency: 2,
             now: () => Date.now() + 1,
             fetch: () =>
-                new Promise(resolve => {
-                    release.push(() => resolve(new Response(null, { status: 204 })));
-                })
+                answer
+                    ? Promise.resolve(new Response(null, { status: 204 }))
+                    : new Promise(resolve => {
+                          release.push(() => resolve(new Response(null, { status: 204 })));
+                      })
         });
         const first = deliverer.tick();
         await Bun.sleep(0);
@@ -741,10 +770,63 @@ describe('delivery', () => {
         // A tick while full starts nothing.
         await deliverer.tick();
         expect(release).toHaveLength(2);
+        answer = true;
         for (const r of release.splice(0)) r();
         await first;
         await deliverer.stop();
-        expect(deliverer.stats.sent).toBe(2);
+        // Each of the two workers drained its endpoint; the third waits for a free slot.
+        expect(deliverer.stats.sent).toBe(10);
+    });
+
+    test('a busy endpoint hands its slot to the next one after a batch', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [], url: 'https://a.example/in' });
+        p.addEndpoint({ skip: [], url: 'https://b.example/in' });
+        p.click(...Array.from({ length: STANDARD_BATCH + 5 }, () => raw(link.id)));
+        const hosts: string[] = [];
+        const deliverer = new WebhookDeliverer(p.db, {
+            shortOrigin: SHORT,
+            dashOrigin: DASH,
+            abuseMinScore: 25,
+            allowPrivate: true,
+            concurrency: 1,
+            now: () => Date.now() + 1,
+            fetch: url => {
+                hosts.push(new URL(url).host);
+                return Promise.resolve(new Response(null, { status: 204 }));
+            }
+        });
+        await deliverer.tick();
+        await deliverer.tick();
+        expect(hosts).toHaveLength(2 * STANDARD_BATCH);
+        expect(new Set(hosts.slice(0, STANDARD_BATCH)).size).toBe(1);
+        expect(hosts[STANDARD_BATCH]).not.toBe(hosts[0]);
+    });
+
+    test('a slow endpoint holds one slot, not all of them', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [], url: 'https://slow.example/in' });
+        p.click(...Array.from({ length: 5 }, () => raw(link.id)));
+        p.addEndpoint({ skip: [], url: 'https://fast.example/in' });
+        p.click(raw(link.id));
+        const hosts: string[] = [];
+        const deliverer = new WebhookDeliverer(p.db, {
+            shortOrigin: SHORT,
+            dashOrigin: DASH,
+            abuseMinScore: 25,
+            allowPrivate: true,
+            concurrency: 4,
+            now: () => Date.now() + 1,
+            fetch: url => {
+                hosts.push(new URL(url).host);
+                return new Promise(() => {}); // never answers
+            }
+        });
+        void deliverer.tick();
+        await Bun.sleep(0);
+        expect(hosts.toSorted()).toEqual(['fast.example', 'slow.example']);
     });
 
     test('maintenance prunes old finished events and caps the pending ones', () => {
