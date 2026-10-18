@@ -91,7 +91,6 @@ export class WebhookDeliverer {
     #stopping = false;
     #lastMaintenance = 0;
     #sent = 0;
-    #failedAttempts = 0;
 
     constructor(db: Database, opts: DelivererOptions) {
         this.#db = db;
@@ -359,7 +358,6 @@ export class WebhookDeliverer {
                 })();
                 return;
             case 'failed': {
-                this.#failedAttempts++;
                 const delay = RETRY_DELAYS_MS[attempts - 1];
                 const error = outcome.error.slice(0, MAX_ERROR);
                 // Only while still pending: turning the endpoint off mid-request skipped it.
@@ -415,8 +413,7 @@ export class WebhookDeliverer {
     get stats() {
         return {
             inFlight: this.#inFlight.size + this.#discordBusy.size,
-            sent: this.#sent,
-            failedAttempts: this.#failedAttempts
+            sent: this.#sent
         };
     }
 }
