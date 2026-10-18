@@ -44,7 +44,7 @@ export interface DelivererOptions {
     resolve?: ResolveHost;
     now?: () => number;
     intervalMs?: number;
-    /** Requests in flight at once to standard endpoints (Discord endpoints get one each). */
+    /** Standard endpoints sent to at once, one request each (Discord endpoints get one each). */
     concurrency?: number;
     timeoutMs?: number;
     /** Pending events kept at most (default MAX_PENDING). */
@@ -81,13 +81,14 @@ export class WebhookDeliverer {
     readonly #opts: Required<Omit<DelivererOptions, 'resolve' | 'onDisable'>> &
         Pick<DelivererOptions, 'resolve' | 'onDisable'>;
     readonly #readClick: ClickReader;
-    /** Standard events being sent, by event id. */
+    /** Standard endpoints with an event being sent, by endpoint id. */
     readonly #inFlight = new Map<number, Promise<void>>();
     /** Discord endpoints with a message being sent, by endpoint id. */
     readonly #discordBusy = new Map<number, Promise<void>>();
     /** Earliest time each Discord endpoint may get its next message. */
     readonly #discordNext = new Map<number, number>();
     #timer: ReturnType<typeof setInterval> | null = null;
+    #stopping = false;
     #lastMaintenance = 0;
     #sent = 0;
     #failedAttempts = 0;
@@ -114,6 +115,7 @@ export class WebhookDeliverer {
     async stop(): Promise<void> {
         if (this.#timer) clearInterval(this.#timer);
         this.#timer = null;
+        this.#stopping = true;
         await Promise.all([...this.#inFlight.values(), ...this.#discordBusy.values()]);
     }
 
@@ -124,31 +126,49 @@ export class WebhookDeliverer {
         await Promise.all([...this.#startStandard(now), ...this.#startDiscord(now)]);
     }
 
+    /**
+     * One worker per standard endpoint with due events, up to `concurrency`. Each
+     * sends its endpoint's events one at a time, so a slow endpoint holds one slot.
+     */
     #startStandard(now: number): Promise<void>[] {
         const room = this.#opts.concurrency - this.#inFlight.size;
         if (room <= 0) return [];
-        const due = this.#dueQuery("e.kind = 'standard'")
-            .all(now, room + this.#inFlight.size)
-            .filter(row => !this.#inFlight.has(row.id))
+        const endpoints = this.#dueEndpoints('standard', now)
+            .filter(id => !this.#inFlight.has(id))
             .slice(0, room);
-        return due.map(row => {
-            const run = this.#attempt(row).finally(() => this.#inFlight.delete(row.id));
-            this.#inFlight.set(row.id, run);
+        return endpoints.map(id => {
+            const run = this.#drainStandard(id).finally(() => this.#inFlight.delete(id));
+            this.#inFlight.set(id, run);
             return run;
         });
     }
 
-    /** One batch per Discord endpoint that has due events, isn't busy and isn't paced. */
-    #startDiscord(now: number): Promise<void>[] {
-        const endpoints = this.#db
-            .query<{ id: number }, [number]>(
+    async #drainStandard(endpointId: number): Promise<void> {
+        const next = this.#dueQuery('ev.endpoint_id = ?');
+        while (!this.#stopping) {
+            const row = next.get(this.#opts.now(), endpointId, 1);
+            if (!row) return;
+            await this.#attempt(row);
+        }
+    }
+
+    /** Enabled endpoints of this kind with events due. */
+    #dueEndpoints(kind: WebhookKind, now: number): number[] {
+        return this.#db
+            .query<{ id: number }, [number, string]>(
                 `SELECT DISTINCT ev.endpoint_id AS id
                  FROM webhook_events ev JOIN webhook_endpoints e ON e.id = ev.endpoint_id
-                 WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1 AND e.kind = 'discord'`
+                 WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1 AND e.kind = ?`
             )
-            .all(now)
-            .map(r => r.id)
-            .filter(id => !this.#discordBusy.has(id) && (this.#discordNext.get(id) ?? 0) <= now);
+            .all(now, kind)
+            .map(r => r.id);
+    }
+
+    /** One batch per Discord endpoint that has due events, isn't busy and isn't paced. */
+    #startDiscord(now: number): Promise<void>[] {
+        const endpoints = this.#dueEndpoints('discord', now).filter(
+            id => !this.#discordBusy.has(id) && (this.#discordNext.get(id) ?? 0) <= now
+        );
         return endpoints.map(id => {
             const run = this.#discordBatch(id, now).finally(() => this.#discordBusy.delete(id));
             this.#discordBusy.set(id, run);

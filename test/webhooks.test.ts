@@ -675,7 +675,7 @@ describe('delivery', () => {
         expect(p.events()[0]).toMatchObject({ status: 'skipped', attempts: 0 });
     });
 
-    test('a success while another request is in flight ends the failure streak', async () => {
+    test('a success ends the failure streak', async () => {
         const p = pipeline();
         const link = p.links.create({ url: 'https://example.com' });
         const endpoint = p.addEndpoint({ skip: [] });
@@ -698,7 +698,6 @@ describe('delivery', () => {
         });
         const tick = deliverer.tick();
         await Bun.sleep(0);
-        expect(release).toHaveLength(2);
         release[0]?.(204);
         await Bun.sleep(0);
         release[1]?.(500);
@@ -731,12 +730,13 @@ describe('delivery', () => {
         expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Skipped: scraper' });
     });
 
-    test('at most `concurrency` requests are in flight', async () => {
+    test('at most `concurrency` requests are in flight, one per endpoint', async () => {
         const p = pipeline();
         const link = p.links.create({ url: 'https://example.com' });
-        p.addEndpoint({ skip: [] });
+        for (let i = 0; i < 3; i++) p.addEndpoint({ skip: [] });
         p.click(...Array.from({ length: 5 }, () => raw(link.id)));
         const release: (() => void)[] = [];
+        let answer = false;
         const deliverer = new WebhookDeliverer(p.db, {
             shortOrigin: SHORT,
             dashOrigin: DASH,
@@ -745,9 +745,11 @@ describe('delivery', () => {
             concurrency: 2,
             now: () => Date.now() + 1,
             fetch: () =>
-                new Promise(resolve => {
-                    release.push(() => resolve(new Response(null, { status: 204 })));
-                })
+                answer
+                    ? Promise.resolve(new Response(null, { status: 204 }))
+                    : new Promise(resolve => {
+                          release.push(() => resolve(new Response(null, { status: 204 })));
+                      })
         });
         const first = deliverer.tick();
         await Bun.sleep(0);
@@ -755,10 +757,37 @@ describe('delivery', () => {
         // A tick while full starts nothing.
         await deliverer.tick();
         expect(release).toHaveLength(2);
+        answer = true;
         for (const r of release.splice(0)) r();
         await first;
         await deliverer.stop();
-        expect(deliverer.stats.sent).toBe(2);
+        // Each of the two workers drained its endpoint; the third waits for a free slot.
+        expect(deliverer.stats.sent).toBe(10);
+    });
+
+    test('a slow endpoint holds one slot, not all of them', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [], url: 'https://slow.example/in' });
+        p.click(...Array.from({ length: 5 }, () => raw(link.id)));
+        p.addEndpoint({ skip: [], url: 'https://fast.example/in' });
+        p.click(raw(link.id));
+        const hosts: string[] = [];
+        const deliverer = new WebhookDeliverer(p.db, {
+            shortOrigin: SHORT,
+            dashOrigin: DASH,
+            abuseMinScore: 25,
+            allowPrivate: true,
+            concurrency: 4,
+            now: () => Date.now() + 1,
+            fetch: url => {
+                hosts.push(new URL(url).host);
+                return new Promise(() => {}); // never answers
+            }
+        });
+        void deliverer.tick();
+        await Bun.sleep(0);
+        expect(hosts.toSorted()).toEqual(['fast.example', 'slow.example']);
     });
 
     test('maintenance prunes old finished events and caps the pending ones', () => {
