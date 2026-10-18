@@ -27,6 +27,8 @@ export const KEEP_FINISHED_MS = 7 * 86_400_000;
 export const MAX_PENDING = 100_000;
 
 const MAINTENANCE_INTERVAL_MS = 60_000;
+/** Events a standard endpoint's worker sends before giving its slot to the next endpoint. */
+export const STANDARD_BATCH = 20;
 /** Due events read per Discord message; past 10 they are summarized. */
 const DISCORD_BATCH = 200;
 const MAX_ERROR = 300;
@@ -144,20 +146,21 @@ export class WebhookDeliverer {
 
     async #drainStandard(endpointId: number): Promise<void> {
         const next = this.#dueQuery('ev.endpoint_id = ?');
-        while (!this.#stopping) {
+        for (let sent = 0; sent < STANDARD_BATCH && !this.#stopping; sent++) {
             const row = next.get(this.#opts.now(), endpointId, 1);
             if (!row) return;
             await this.#attempt(row);
         }
     }
 
-    /** Enabled endpoints of this kind with events due. */
+    /** Enabled endpoints of this kind with events due, the longest-waiting first. */
     #dueEndpoints(kind: WebhookKind, now: number): number[] {
         return this.#db
             .query<{ id: number }, [number, string]>(
-                `SELECT DISTINCT ev.endpoint_id AS id
+                `SELECT ev.endpoint_id AS id
                  FROM webhook_events ev JOIN webhook_endpoints e ON e.id = ev.endpoint_id
-                 WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1 AND e.kind = ?`
+                 WHERE ev.status = 'pending' AND ev.due_at <= ? AND e.enabled = 1 AND e.kind = ?
+                 GROUP BY ev.endpoint_id ORDER BY MIN(ev.due_at), MIN(ev.id)`
             )
             .all(now, kind)
             .map(r => r.id);

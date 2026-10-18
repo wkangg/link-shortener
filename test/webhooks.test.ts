@@ -14,6 +14,7 @@ import {
     AUTO_DISABLE_AFTER_MS,
     KEEP_FINISHED_MS,
     RETRY_DELAYS_MS,
+    STANDARD_BATCH,
     WebhookDeliverer,
     type WebhookFetch
 } from '../src/webhooks/deliverer.ts';
@@ -763,6 +764,32 @@ describe('delivery', () => {
         await deliverer.stop();
         // Each of the two workers drained its endpoint; the third waits for a free slot.
         expect(deliverer.stats.sent).toBe(10);
+    });
+
+    test('a busy endpoint hands its slot to the next one after a batch', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [], url: 'https://a.example/in' });
+        p.addEndpoint({ skip: [], url: 'https://b.example/in' });
+        p.click(...Array.from({ length: STANDARD_BATCH + 5 }, () => raw(link.id)));
+        const hosts: string[] = [];
+        const deliverer = new WebhookDeliverer(p.db, {
+            shortOrigin: SHORT,
+            dashOrigin: DASH,
+            abuseMinScore: 25,
+            allowPrivate: true,
+            concurrency: 1,
+            now: () => Date.now() + 1,
+            fetch: url => {
+                hosts.push(new URL(url).host);
+                return Promise.resolve(new Response(null, { status: 204 }));
+            }
+        });
+        await deliverer.tick();
+        await deliverer.tick();
+        expect(hosts).toHaveLength(2 * STANDARD_BATCH);
+        expect(new Set(hosts.slice(0, STANDARD_BATCH)).size).toBe(1);
+        expect(hosts[STANDARD_BATCH]).not.toBe(hosts[0]);
     });
 
     test('a slow endpoint holds one slot, not all of them', async () => {
