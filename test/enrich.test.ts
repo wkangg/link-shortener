@@ -86,6 +86,11 @@ describe('extra click fields', () => {
         ).toMatchObject({ isBot: true, botName: 'Discordbot' });
         expect(
             parseUserAgent(
+                'visionheight.com/scan Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/126.0.0.0 Safari/537.36'
+            )
+        ).toMatchObject({ isBot: true, botName: 'visionheight.com' });
+        expect(
+            parseUserAgent(
                 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
             ).model
         ).toBe('Pixel 8');
