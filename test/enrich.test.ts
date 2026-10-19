@@ -82,6 +82,9 @@ describe('extra click fields', () => {
         });
         expect(parseUserAgent('curl/8.4.0').botName).toBe('curl');
         expect(
+            parseUserAgent('Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)')
+        ).toMatchObject({ isBot: true, botName: 'Discordbot' });
+        expect(
             parseUserAgent(
                 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
             ).model

@@ -65,10 +65,19 @@ export function parseUserAgent(ua: string): UaInfo {
 
 function botName(ua: string, known: string | undefined): string | null {
     if (known) return known;
-    // isbot's match is the matching fragment, e.g. "curl/8.4.0" or "python-requests/2.31".
+    // isbot's match is the matching fragment, e.g. "curl/8.4.0" or just "bot" in "Discordbot/2.0",
+    // so widen it to the whole word before dropping the version.
     const match = isbotMatch(ua);
-    return match ? match.split('/')[0]?.trim() || match : null;
+    if (!match) return null;
+    let start = ua.indexOf(match);
+    let end = start + match.length;
+    while (start > 0 && WORD_CHAR_RE.test(ua.charAt(start - 1))) start--;
+    while (end < ua.length && WORD_CHAR_RE.test(ua.charAt(end))) end++;
+    const token = ua.slice(start, end);
+    return token.split('/')[0]?.trim() || token;
 }
+
+const WORD_CHAR_RE = /[\w-]/;
 
 function deviceModel(ua: string, platform: { vendor?: string; model?: string }): string | null {
     if (platform.vendor === 'Apple') {
