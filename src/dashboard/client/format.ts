@@ -3,6 +3,18 @@ const whole = new Intl.NumberFormat();
 
 export const formatCount = (n: number) => (n >= 10_000 ? compact.format(n) : whole.format(n));
 
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+
+/** "512 B", "1.4 MB" (1 KB = 1024 B). */
+export function formatBytes(n: number): string {
+    let unit = 0;
+    while (n >= 1024 && unit < BYTE_UNITS.length - 1) {
+        n /= 1024;
+        unit++;
+    }
+    return `${unit === 0 ? n : n.toFixed(n < 10 ? 1 : 0)} ${BYTE_UNITS[unit]}`;
+}
+
 export function formatDelta(current: number, previous: number): string | null {
     if (previous === 0) return current === 0 ? null : 'new';
     const pct = Math.round(((current - previous) / previous) * 100);

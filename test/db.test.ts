@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { MIGRATIONS_DIR, openDatabase, pingDatabase } from '../src/db/client.ts';
+import { databaseInfo, MIGRATIONS_DIR, openDatabase, pingDatabase } from '../src/db/client.ts';
 import { migrate } from '../src/db/migrate.ts';
 import { createLinkLookup } from '../src/redirect/lookup.ts';
 
@@ -24,6 +24,20 @@ describe('database', () => {
             .map(r => r.name);
         expect(tables).toEqual(expect.arrayContaining(['_migrations', 'clicks', 'links']));
         expect(pingDatabase(db)).toBe(true);
+        db.close();
+    });
+
+    test('databaseInfo reads the file path, WAL size and counts', () => {
+        const file = path.join(tmp, 'info.db');
+        const db = openDatabase(file);
+        db.run(
+            "INSERT INTO links (slug, url, created_at, updated_at) VALUES ('a', 'https://a.example', 0, 0)"
+        );
+        db.run('INSERT INTO clicks (link_id, ts) VALUES (1, 1234)');
+        const info = databaseInfo(db);
+        expect(info).toMatchObject({ path: file, links: 1, clicks: 1, firstClickAt: 1234 });
+        expect(info.walBytes).toBeGreaterThan(0);
+        expect(info.sizeBytes % 4096).toBe(0);
         db.close();
     });
 

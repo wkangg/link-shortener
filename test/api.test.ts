@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import net from 'node:net';
 
 import type {
+    AboutResponse,
     ApiError,
     ClickHistoryResponse,
     ConfigResponse,
@@ -282,6 +283,24 @@ describe('detailed device tracking', () => {
             incognito: true,
             adBlocker: false
         });
+    });
+});
+
+describe('about', () => {
+    test('reports database size, counts and versions', async () => {
+        const about = await t.get<AboutResponse>('/api/about');
+        expect(about.version).toBe('test');
+        expect(about.bunVersion).toBe(Bun.version);
+        expect(about.startedAt).toBeLessThanOrEqual(Date.now());
+        expect(about.database).toMatchObject({
+            path: '',
+            walBytes: 0,
+            migration: '0001_init.sql',
+            sqliteVersion: expect.stringMatching(/^3\./)
+        });
+        expect(about.database.sizeBytes).toBeGreaterThan(0);
+        expect(about.database.links).toBeGreaterThan(0);
+        expect(await t.status('/api/about')).toBe(200);
     });
 });
 

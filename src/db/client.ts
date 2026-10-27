@@ -1,7 +1,8 @@
 import { Database } from 'bun:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
+import type { DatabaseInfo } from '../shared/types.ts';
 import { migrate } from './migrate.ts';
 
 export const MIGRATIONS_DIR = path.join(import.meta.dir, 'migrations');
@@ -28,6 +29,28 @@ export function openDatabase(file: string, opts: { log?: boolean } = {}): Databa
         console.log(`[db] applied migrations: ${applied.join(', ')}`);
 
     return db;
+}
+
+/** Size, versions and row counts for the dashboard's About section. */
+export function databaseInfo(db: Database): DatabaseInfo {
+    // A SELECT with no FROM always returns exactly one row.
+    const row = db
+        .query(
+            `SELECT
+                (SELECT page_count FROM pragma_page_count()) * (SELECT page_size FROM pragma_page_size()) AS sizeBytes,
+                (SELECT freelist_count FROM pragma_freelist_count()) * (SELECT page_size FROM pragma_page_size()) AS freeBytes,
+                sqlite_version() AS sqliteVersion,
+                (SELECT MAX(name) FROM _migrations) AS migration,
+                (SELECT COUNT(*) FROM links) AS links,
+                (SELECT COUNT(*) FROM clicks) AS clicks,
+                (SELECT COUNT(*) FROM webhook_endpoints) AS webhooks,
+                (SELECT COUNT(*) FROM webhook_events) AS webhookEvents,
+                (SELECT MIN(ts) FROM clicks) AS firstClickAt`
+        )
+        .get() as Omit<DatabaseInfo, 'path' | 'walBytes'>;
+    const file = db.filename === ':memory:' ? '' : db.filename;
+    const walBytes = file ? (statSync(`${file}-wal`, { throwIfNoEntry: false })?.size ?? 0) : 0;
+    return { path: file, walBytes, ...row };
 }
 
 export function pingDatabase(db: Database): boolean {

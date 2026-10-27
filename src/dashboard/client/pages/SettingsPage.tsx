@@ -1,9 +1,18 @@
 import { useEffect, useRef } from 'react';
 
+import { api } from '../api.ts';
 import { useToast } from '../components/Toast.tsx';
 import { WebhooksSection } from '../components/WebhooksSection.tsx';
 import { useConfig } from '../config.tsx';
-import { hostOf } from '../format.ts';
+import {
+    formatBytes,
+    formatCount,
+    formatDate,
+    formatDateTime,
+    formatRelative,
+    hostOf
+} from '../format.ts';
+import { useApi } from '../useApi.ts';
 
 export function SettingsPage() {
     const { dashOrigin, shortOrigin, version, reputation, abuseMinScore } = useConfig();
@@ -122,7 +131,57 @@ export function SettingsPage() {
                 <p>
                     Short links on <code>{shortOrigin}</code>, version {version}.
                 </p>
+                <AboutFacts />
             </section>
         </main>
+    );
+}
+
+function AboutFacts() {
+    const { data, error } = useApi('about', () => api.about());
+    if (error) return <p className="muted">Couldn’t load server details: {error.message}</p>;
+    if (!data) return <p className="muted">Loading…</p>;
+    const db = data.database;
+
+    return (
+        <dl className="facts">
+            <dt>Database size</dt>
+            <dd>
+                {formatBytes(db.sizeBytes)}
+                {db.freeBytes > 0 && (
+                    <span className="muted"> ({formatBytes(db.freeBytes)} unused)</span>
+                )}
+            </dd>
+            <dt>Write-ahead log</dt>
+            <dd>{formatBytes(db.walBytes)}</dd>
+            <dt>Database file</dt>
+            <dd>
+                <code>{db.path || 'in memory'}</code>
+            </dd>
+            <dt>Links</dt>
+            <dd>{formatCount(db.links)}</dd>
+            <dt>Clicks</dt>
+            <dd>
+                {formatCount(db.clicks)}
+                {db.firstClickAt !== null && (
+                    <span className="muted"> since {formatDate(db.firstClickAt)}</span>
+                )}
+            </dd>
+            <dt>Webhooks</dt>
+            <dd>
+                {formatCount(db.webhooks)}
+                <span className="muted"> ({formatCount(db.webhookEvents)} events in the log)</span>
+            </dd>
+            <dt>Schema</dt>
+            <dd>
+                <code>{db.migration ?? 'none'}</code>
+            </dd>
+            <dt>Running since</dt>
+            <dd title={formatDateTime(data.startedAt)}>{formatRelative(data.startedAt)}</dd>
+            <dt>Runtime</dt>
+            <dd>
+                Bun {data.bunVersion}, SQLite {db.sqliteVersion}
+            </dd>
+        </dl>
     );
 }

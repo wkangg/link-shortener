@@ -4,8 +4,9 @@ import type { BunRequest, Server } from 'bun';
 import { z } from 'zod/v4';
 
 import { BadQueryError, Stats } from '../analytics/stats.ts';
-import { pingDatabase } from '../db/client.ts';
+import { databaseInfo, pingDatabase } from '../db/client.ts';
 import type {
+    AboutResponse,
     ApiError,
     ConfigResponse,
     HealthResponse,
@@ -181,6 +182,18 @@ export function apiRoutes(deps: ApiDeps) {
                     version: deps.version,
                     reputation: deps.reputation,
                     abuseMinScore: deps.abuseMinScore
+                };
+                return json(body);
+            })
+        },
+
+        '/api/about': {
+            GET: guard(() => {
+                const body: AboutResponse = {
+                    version: deps.version,
+                    bunVersion: Bun.version,
+                    startedAt: Math.round(performance.timeOrigin),
+                    database: databaseInfo(deps.db)
                 };
                 return json(body);
             })

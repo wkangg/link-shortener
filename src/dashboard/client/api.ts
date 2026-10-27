@@ -1,4 +1,5 @@
 import type {
+    AboutResponse,
     ApiError,
     ClickHistoryResponse,
     ConfigResponse,
@@ -69,6 +70,7 @@ export interface WebhookInput {
 
 export const api = {
     config: () => getJson<ConfigResponse>('/api/config'),
+    about: () => getJson<AboutResponse>('/api/about'),
     links: (params: URLSearchParams) => getJson<LinkListResponse>(`/api/links?${params}`),
     link: (id: number) => getJson<Link>(`/api/links/${id}`),
     tags: () => getJson<{ tag: string; count: number }[]>('/api/tags'),

@@ -17,6 +17,34 @@ export interface ConfigResponse {
     abuseMinScore: number;
 }
 
+export interface DatabaseInfo {
+    /** File on disk; empty for an in-memory database. */
+    path: string;
+    /** Database pages (including any not yet checkpointed from the WAL), in bytes. */
+    sizeBytes: number;
+    /** Write-ahead log file on disk, in bytes. */
+    walBytes: number;
+    /** Unused pages that VACUUM would give back, in bytes. */
+    freeBytes: number;
+    sqliteVersion: string;
+    /** Latest applied migration file. */
+    migration: string | null;
+    links: number;
+    clicks: number;
+    webhooks: number;
+    webhookEvents: number;
+    /** Unix ms of the oldest click; null when there are none. */
+    firstClickAt: number | null;
+}
+
+export interface AboutResponse {
+    version: string;
+    bunVersion: string;
+    /** Unix ms the server process started. */
+    startedAt: number;
+    database: DatabaseInfo;
+}
+
 export type RedirectType = 301 | 302 | 307 | 308;
 
 export interface Link {
