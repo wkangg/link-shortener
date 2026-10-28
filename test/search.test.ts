@@ -95,8 +95,24 @@ describe('search', () => {
         expect(ips('is:mobile')).toEqual(['198.51.100.7']);
     });
 
+    test('query.<key>: matches one query parameter, keeping the key’s case', () => {
+        db.run(
+            `UPDATE clicks SET query = '{"ref":"twitter ads","Ref":"x"}' WHERE ip = '198.51.100.7'`
+        );
+        expect(tokenize('-Query.Ref:=x')).toEqual([
+            { negate: true, field: 'query.Ref', value: '=x' }
+        ]);
+        expect(ips('query.ref:twitter')).toEqual(['198.51.100.7']);
+        expect(ips('query.ref:="TWITTER ADS"')).toEqual(['198.51.100.7']);
+        expect(ips('query.ref:=twitter')).toEqual([]);
+        expect(ips('param.Ref:=x')).toEqual(['198.51.100.7']);
+        expect(ips('-query.ref:twitter')).toEqual(['203.0.113.5']);
+        expect(ips('example.com:8080')).toEqual([]); // still free text
+    });
+
     test('a field with nothing after it yet filters nothing', () => {
         expect(ips('ip:')).toEqual(ips(''));
+        expect(ips('query.ref:')).toEqual(ips(''));
         expect(ips('-ip:= is:')).toEqual(ips(''));
         expect(ips('isp:rogers has:')).toEqual(['198.51.100.7']);
     });

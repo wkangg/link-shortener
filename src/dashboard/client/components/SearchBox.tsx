@@ -38,7 +38,8 @@ export function clickSyntax(params: URLSearchParams): SearchSyntax {
         fields: SEARCH_FIELDS,
         flags: SEARCH_FLAGS,
         has: SEARCH_FIELDS.filter(f => !NO_VALUES.has(f.name)),
-        hasValues: field => !NO_VALUES.has(field),
+        // `query.<key>:` has no column to suggest from.
+        hasValues: field => !NO_VALUES.has(field) && !field.includes('.'),
         loadValues: async (field, text) => {
             const query = new URLSearchParams(params);
             query.set('field', field);
@@ -71,6 +72,11 @@ function termAt(text: string, caret: number) {
 
 function quoted(value: string): string {
     return /[\s"]/.test(value) ? `"${value.replaceAll('"', '')}"` : value;
+}
+
+/** `field:=value`, quoted when the value has spaces. */
+export function exactTerm(field: string, value: string): string {
+    return `${field}:=${quoted(value)}`;
 }
 
 /** What the term being typed is: a field name, or `field:` and the start of its value. */
@@ -150,7 +156,7 @@ export function SearchBox({ value, onChange, onCommit, syntax, count }: SearchBo
             .filter(v => v.value !== text)
             .slice(0, MAX_SUGGESTIONS)
             .map(v => ({
-                insert: `${negate}${field}:=${quoted(v.value)} `,
+                insert: `${negate}${exactTerm(field, v.value)} `,
                 label: v.value,
                 hint: v.hint
             }));

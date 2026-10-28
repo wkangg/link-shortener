@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import type { TopRow } from '../../../shared/types.ts';
 import { api, localTz } from '../api.ts';
 import { useConfig } from '../config.tsx';
-import { countryLabel, formatCount, formatDelta } from '../format.ts';
+import { formatCount, formatDelta } from '../format.ts';
 import { useApi } from '../useApi.ts';
 import { Chart } from './Chart.tsx';
 import { ClickHistory, type Toggle } from './ClickHistory.tsx';
+import { exactTerm } from './SearchBox.tsx';
 import { type Tab, TopList } from './TopList.tsx';
 
 const DAY = 86_400_000;
@@ -22,34 +23,6 @@ const PRESETS = [
 ] as const;
 
 type PresetId = (typeof PRESETS)[number]['id'];
-
-interface Filter {
-    dim: string;
-    /** Display text. */
-    label: string;
-    /** Value sent to the API as `dim:value`. */
-    value: string;
-}
-
-const DIM_NAMES: Record<string, string> = {
-    link: 'Link',
-    country: 'Country',
-    region: 'Region',
-    city: 'City',
-    referrer: 'Referrer',
-    source: 'Source',
-    os: 'OS',
-    browser: 'Browser',
-    device: 'Device',
-    utm_source: 'utm_source',
-    utm_medium: 'utm_medium',
-    utm_campaign: 'utm_campaign',
-    utm_term: 'utm_term',
-    utm_content: 'utm_content',
-    qr: 'Opened via',
-    ip: 'IP',
-    fingerprint: 'Device'
-};
 
 const PANELS: { title: string; tabs: Tab[]; drill?: boolean; linksOnly?: boolean }[] = [
     { title: 'Top links', tabs: [{ dim: 'link', label: 'Links' }], linksOnly: true },
@@ -91,24 +64,21 @@ const PANELS: { title: string; tabs: Tab[]; drill?: boolean; linksOnly?: boolean
     { title: 'QR codes vs links', tabs: [{ dim: 'qr', label: 'Opened via' }] }
 ];
 
-function filterFor(dim: string, row: TopRow): Filter {
-    const value = row.value ?? '';
-    if (dim.startsWith('param:')) {
-        const key = dim.slice('param:'.length);
-        return { dim: `param:${key}`, label: `?${key}=${value}`, value: `param:${key}=${value}` };
-    }
-    const shown =
-        dim === 'country' && row.value
-            ? countryLabel(row.value)
-            : dim === 'fingerprint' && row.value
-              ? row.value.slice(0, 10)
-              : row.label;
-    return { dim, label: `${DIM_NAMES[dim] ?? dim}: ${shown}`, value: `${dim}:${value}` };
+/** The search term that narrows to a panel row, e.g. `country:=CA` or `-has:utm_source`. */
+function searchTerm(dim: string, row: TopRow): string {
+    if (dim === 'qr') return row.value === 'QR' ? 'is:qr' : '-is:qr';
+    // The label is the slug, with the root link as "/".
+    if (dim === 'link') return exactTerm('link', row.label);
+    const field = dim.startsWith('param:')
+        ? `query.${dim.slice('param:'.length)}`
+        : dim === 'fingerprint'
+          ? 'fp'
+          : dim;
+    return row.value === null ? `-has:${field}` : exactTerm(field, row.value);
 }
 
 function statsParams(opts: {
     preset: PresetId;
-    filters: Filter[];
     bots: boolean;
     dc: boolean;
     scrapers: boolean;
@@ -132,7 +102,6 @@ function statsParams(opts: {
     if (opts.scrapers) params.set('scrapers', '1');
     if (!opts.vpn) params.set('vpn', '0');
     if (opts.abusive) params.set('abusive', '1');
-    for (const f of opts.filters) params.append('f', f.value);
     if (opts.search) params.set('q', opts.search);
     return params;
 }
@@ -143,7 +112,6 @@ interface AnalyticsProps {
 
 export function Analytics({ linkId }: AnalyticsProps) {
     const [preset, setPreset] = useState<PresetId>('30d');
-    const [filters, setFilters] = useState<Filter[]>([]);
     const [bots, setBots] = useState(false);
     const [dc, setDc] = useState(false);
     const [scrapers, setScrapers] = useState(false);
@@ -180,7 +148,6 @@ export function Analytics({ linkId }: AnalyticsProps) {
 
     const params = statsParams({
         preset,
-        filters,
         bots,
         dc,
         scrapers,
@@ -194,12 +161,9 @@ export function Analytics({ linkId }: AnalyticsProps) {
     const summary = useApi(`summary|${key}`, () => api.summary(params));
     const series = useApi(`series|${key}`, () => api.timeseries(params));
 
-    const addFilter = (dim: string, row: TopRow) => {
+    const selectRow = (dim: string, row: TopRow) => {
         if (dim === 'link' && linkId !== undefined) return;
-        const filter = filterFor(dim, row);
-        setFilters(current =>
-            current.some(f => f.value === filter.value) ? current : [...current, filter]
-        );
+        addTerm(searchTerm(dim, row));
     };
 
     const toggles: Toggle[] = [
@@ -280,21 +244,6 @@ export function Analytics({ linkId }: AnalyticsProps) {
                             </button>
                         </li>
                     )}
-                    {filters.map(f => (
-                        <li key={f.value}>
-                            <button
-                                type="button"
-                                className="chip"
-                                aria-label={`Remove filter ${f.label}`}
-                                onClick={() =>
-                                    setFilters(current => current.filter(c => c.value !== f.value))
-                                }
-                            >
-                                {f.label}
-                                <span aria-hidden="true">×</span>
-                            </button>
-                        </li>
-                    ))}
                 </ul>
                 <a className="text-button export" href={exportUrl} download>
                     Export CSV
@@ -322,7 +271,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
                         params={params}
                         refreshKey={String(tick)}
                         drill={panel.drill}
-                        onSelect={addFilter}
+                        onSelect={selectRow}
                     />
                 ))}
             </div>

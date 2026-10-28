@@ -8,6 +8,7 @@
  *   ram:>=8 battery:<20      numeric comparisons (=, >, >=, <, <=)
  *   is:bot is:datacenter     flags (also is:vpn, is:scraper, is:abusive, is:qr, ...)
  *   has:gpu                  the field is set
+ *   query.ref:=twitter       a query parameter (`?ref=twitter`)
  *   -os:windows -is:bot      a leading `-` negates any term
  *
  * Terms are AND-ed. Mentioning `is:bot`, `is:datacenter`, `is:scraper`, `is:vpn` or
@@ -97,6 +98,11 @@ const ALIASES: Record<string, string> = {
     adblocker: 'adblock'
 };
 
+/** A field name: a plain one, or `query.<key>` for one query parameter. */
+const FIELD = String.raw`(?:query|param)\.[\w.~-]+|[a-z_]+`;
+const UNFINISHED_RE = new RegExp(String.raw`^(?:${FIELD}):=?$`, 'i');
+const MAX_PARAM_KEY = 64;
+
 /** Every column free text is matched against. */
 const ALL_TEXT = [...new Set(Object.values(TEXT_FIELDS).flat())];
 const SLUG_LIKE = String.raw`c.link_id IN (SELECT id FROM links WHERE slug LIKE ? ESCAPE '\')`;
@@ -114,7 +120,7 @@ interface Term {
 /** Splits on whitespace, keeping "quoted phrases" (also as `field:"a value"`) together. */
 export function tokenize(q: string): Term[] {
     const terms: Term[] = [];
-    const re = /(-?)(?:([a-z_]+):)?(=?)(?:"([^"]*)"?|(\S+))/gi;
+    const re = new RegExp(String.raw`(-?)(?:(${FIELD}):)?(=?)(?:"([^"]*)"?|(\S+))`, 'gi');
     for (const m of q.matchAll(re)) {
         const [, minus, field, eq, quoted, bare] = m;
         const value = eq + (quoted ?? bare ?? '');
@@ -126,7 +132,8 @@ export function tokenize(q: string): Term[] {
         }
         terms.push({
             negate: minus === '-',
-            field: field ? field.toLowerCase() : null,
+            // Query parameter keys keep their case: `?Ref=` isn't `?ref=`.
+            field: field ? field.replace(/^[^.]*/, name => name.toLowerCase()) : null,
             value
         });
     }
@@ -212,6 +219,18 @@ function flagCondition(
     }
 }
 
+/** `query.<key>:value`: the click's `?key=` contains the value, or is it with `=`. */
+function paramCondition(key: string, value: string): Condition {
+    if (key.length > MAX_PARAM_KEY) throw new BadQueryError('Query parameter name is too long');
+    const path = `$."${key}"`;
+    return value.startsWith('=')
+        ? { sql: 'json_extract(c.query, ?) = ? COLLATE NOCASE', params: [path, value.slice(1)] }
+        : {
+              sql: String.raw`json_extract(c.query, ?) LIKE ? ESCAPE '\'`,
+              params: [path, likePattern(value)]
+          };
+}
+
 function termCondition(
     term: Term,
     abuseMinScore: number,
@@ -225,6 +244,8 @@ function termCondition(
             params: [...text.params, likePattern(term.value)]
         };
     }
+    const dot = term.field.indexOf('.');
+    if (dot !== -1) return paramCondition(term.field.slice(dot + 1), term.value);
     const name = ALIASES[term.field] ?? term.field;
     const value = ALIASES[term.value.toLowerCase()] ?? term.value.toLowerCase();
 
@@ -252,7 +273,7 @@ function termCondition(
  * (The tokenizer reads a bare `ip:` as text.)
  */
 function isUnfinished(term: Term): boolean {
-    return term.field ? term.value.replace(/^=/, '') === '' : /^[a-z_]+:=?$/i.test(term.value);
+    return term.field ? term.value.replace(/^=/, '') === '' : UNFINISHED_RE.test(term.value);
 }
 
 /** Compiles a search into one SQL condition over `clicks c`. */

@@ -13,7 +13,7 @@ import {
     screenLabel
 } from '../format.ts';
 import { useApi } from '../useApi.ts';
-import { clickSyntax, SearchBox } from './SearchBox.tsx';
+import { clickSyntax, exactTerm, SearchBox } from './SearchBox.tsx';
 
 /** "All" still pages, just in very large pages, so a huge history can't freeze the tab. */
 const ALL = 10_000;
@@ -147,7 +147,7 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['firefox', 'any field contains “firefox”'],
     ['"new york"', 'a phrase'],
     ['ip:203.0.113 isp:comcast', 'a field contains a value'],
-    ['ip:=203.0.113.5', 'a field is exactly a value (clicking a cell adds one)'],
+    ['ip:=203.0.113.5', 'a field is exactly a value (clicking a cell or bar adds one)'],
     ['os: browser: device: model: ua: bot:', 'technology', false],
     ['country: region: city: host: lang: tz:', 'location', false],
     ['source: referrer: link: utm: query:', 'traffic', false],
@@ -157,6 +157,7 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['vpn:tor scraper:', 'which VPN, or why a click looks automated'],
     ['is:private is:adblock is:qr is:mobile', 'other flags'],
     ['has:gpu', 'the field is set'],
+    ['query.ref:=twitter', 'a query parameter (?ref=twitter)'],
     ['-os:windows -is:bot', 'a leading - excludes']
 ];
 
@@ -166,11 +167,6 @@ function vpnBadge(vpn: string): string {
     if (vpn === 'iCloud Private Relay') return 'private relay';
     if (vpn === 'Cloudflare WARP') return 'warp';
     return 'vpn';
-}
-
-/** `field:=value`, quoted when the value has spaces. */
-function exactTerm(field: string, value: string): string {
-    return /[\s"]/.test(value) ? `${field}:="${value.replaceAll('"', '')}"` : `${field}:=${value}`;
 }
 
 interface IpCellProps {
