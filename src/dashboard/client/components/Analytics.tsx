@@ -7,7 +7,7 @@ import { formatCount, formatDelta } from '../format.ts';
 import { useApi } from '../useApi.ts';
 import { Chart } from './Chart.tsx';
 import { ClickHistory, type Toggle } from './ClickHistory.tsx';
-import { exactTerm } from './SearchBox.tsx';
+import { exactTerm, withTerm } from './SearchBox.tsx';
 import { type Tab, TopList } from './TopList.tsx';
 
 const DAY = 86_400_000;
@@ -130,10 +130,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
         setText(next);
         setSearch(next.trim());
     };
-    const addTerm = (term: string) => {
-        if (text.split(/\s+/).includes(term)) return;
-        applySearch(`${text.trim()} ${term}`.trim());
-    };
+    const addTerm = (term: string) => applySearch(withTerm(text, term));
     // Bumped every 30 s so open dashboards stay current.
     const [tick, setTick] = useState(0);
     const [now, setNow] = useState(() => Date.now());

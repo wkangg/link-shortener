@@ -1,7 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
 import { BadQueryError } from '../analytics/errors.ts';
-import { likePattern, tokenize } from '../analytics/search.ts';
+import {
+    compileTree,
+    type Condition,
+    likePattern,
+    parseSearch,
+    type Term
+} from '../analytics/search.ts';
 import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
 import type {
     Link,
@@ -347,72 +353,72 @@ const LINK_COLUMNS: Record<string, string> = {
  * The links search: words match the slug, destination or title;
  * `slug:`, `destination:` (or `url:`), `title:` and `tag:` match one of them
  * (`:=` for the whole value); `has:webhook`, `has:tag`, `has:tracking` and
- * `webhook:<name>` filter. Terms are AND-ed; a
- * leading `-` negates one; "quoted phrases" stay together.
+ * `webhook:<name>` filter. Terms are AND-ed; a leading `-` negates one; "quoted
+ * phrases" stay together; `||`, `&&` and brackets combine them as in the click search.
  */
-export function compileLinkSearch(q: string): { where: string[]; params: string[] } {
-    const where: string[] = [];
+export function compileLinkSearch(q: string): { where: string[]; params: (string | number)[] } {
+    const tree = parseSearch(q);
+    if (!tree) return { where: [], params: [] };
+    const { sql, params } = compileTree(tree, linkTermCondition);
+    return { where: [sql], params };
+}
+
+function linkTermCondition(term: Term): Condition {
+    const value = term.value.replace(/^=/, '');
     const params: string[] = [];
-    for (const term of tokenize(q).slice(0, 32)) {
-        const value = term.value.replace(/^=/, '');
-        // `has:` with nothing after it yet: the list filters as you type. (The
-        // tokenizer reads a bare `is:` as text.)
-        if (term.field ? value === '' : /^[a-z_]+:$/i.test(value)) continue;
-        let sql: string;
-        switch (term.field ?? '') {
-            case 'has':
-                if (/^webhooks?$/i.test(value)) sql = `EXISTS (${LINK_WEBHOOKS})`;
-                else if (/^tags?$/i.test(value)) {
-                    sql = 'EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id)';
-                } else if (value.toLowerCase() === 'tracking') sql = 'l.track_device = 1';
-                else {
-                    throw new BadQueryError(
-                        `Unknown has:${value}. Try has:webhook, has:tag or has:tracking.`
-                    );
-                }
-                break;
-            case 'tag': {
-                // Tags are stored lowercase, without the #.
-                const tag = value.replace(/^#/, '').toLowerCase();
-                const exact = term.value.startsWith('=');
-                sql = `EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id AND t.tag ${
-                    exact ? '= ?' : LIKE
-                })`;
-                params.push(exact ? tag : likePattern(tag));
-                break;
+    let sql: string;
+    switch (term.field ?? '') {
+        case 'has':
+            if (/^webhooks?$/i.test(value)) sql = `EXISTS (${LINK_WEBHOOKS})`;
+            else if (/^tags?$/i.test(value)) {
+                sql = 'EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id)';
+            } else if (value.toLowerCase() === 'tracking') sql = 'l.track_device = 1';
+            else {
+                throw new BadQueryError(
+                    `Unknown has:${value}. Try has:webhook, has:tag or has:tracking.`
+                );
             }
-            case 'webhook': {
-                // The name the dashboard shows: the description, "Discord", or the URL.
-                sql = `EXISTS (${LINK_WEBHOOKS} AND (e.description ${LIKE}
-                    OR (e.kind = 'discord' AND 'Discord' ${LIKE})
-                    OR (e.kind = 'standard' AND e.url ${LIKE})))`;
-                const pattern = likePattern(value);
-                params.push(pattern, pattern, pattern);
-                break;
-            }
-            case 'slug':
-            case 'destination':
-            case 'url':
-            case 'title': {
-                const column = LINK_COLUMNS[term.field ?? ''] ?? 'l.slug';
-                const exact = term.value.startsWith('=');
-                sql = exact
-                    ? `${column} = ?${column === 'l.url' ? '' : ' COLLATE NOCASE'}`
-                    : `${column} ${LIKE}`;
-                params.push(exact ? value : likePattern(value));
-                break;
-            }
-            default: {
-                // Plain words, and anything that isn't one of the fields above.
-                const text = term.field ? `${term.field}:${term.value}` : value;
-                sql = `(l.slug ${LIKE} OR l.url ${LIKE} OR l.title ${LIKE})`;
-                const pattern = likePattern(text);
-                params.push(pattern, pattern, pattern);
-            }
+            break;
+        case 'tag': {
+            // Tags are stored lowercase, without the #.
+            const tag = value.replace(/^#/, '').toLowerCase();
+            const exact = term.value.startsWith('=');
+            sql = `EXISTS (SELECT 1 FROM link_tags t WHERE t.link_id = l.id AND t.tag ${
+                exact ? '= ?' : LIKE
+            })`;
+            params.push(exact ? tag : likePattern(tag));
+            break;
         }
-        where.push(term.negate ? `NOT ${sql}` : sql);
+        case 'webhook': {
+            // The name the dashboard shows: the description, "Discord", or the URL.
+            sql = `EXISTS (${LINK_WEBHOOKS} AND (e.description ${LIKE}
+                OR (e.kind = 'discord' AND 'Discord' ${LIKE})
+                OR (e.kind = 'standard' AND e.url ${LIKE})))`;
+            const pattern = likePattern(value);
+            params.push(pattern, pattern, pattern);
+            break;
+        }
+        case 'slug':
+        case 'destination':
+        case 'url':
+        case 'title': {
+            const column = LINK_COLUMNS[term.field ?? ''] ?? 'l.slug';
+            const exact = term.value.startsWith('=');
+            sql = exact
+                ? `${column} = ?${column === 'l.url' ? '' : ' COLLATE NOCASE'}`
+                : `${column} ${LIKE}`;
+            params.push(exact ? value : likePattern(value));
+            break;
+        }
+        default: {
+            // Plain words, and anything that isn't one of the fields above.
+            const text = term.field ? `${term.field}:${term.value}` : value;
+            sql = `(l.slug ${LIKE} OR l.url ${LIKE} OR l.title ${LIKE})`;
+            const pattern = likePattern(text);
+            params.push(pattern, pattern, pattern);
+        }
     }
-    return { where, params };
+    return { sql, params };
 }
 
 function toLink(row: LinkRow, tags: string[]): Link {

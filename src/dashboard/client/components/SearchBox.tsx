@@ -63,15 +63,27 @@ interface Suggestion {
     partial?: boolean;
 }
 
-/** The whitespace-separated term around the caret: where it starts and ends in `text`. */
+/** The term around the caret, between whitespace, brackets and `||`/`&&`: where it starts and ends in `text`. */
 function termAt(text: string, caret: number) {
-    const start = text.slice(0, caret).search(/\S*$/);
-    const rest = text.slice(caret).search(/\s|$/);
+    const start = text.slice(0, caret).search(/[^\s()|&]*$/);
+    const rest = text.slice(caret).search(/[\s()|&]|$/);
     return { start, end: caret + rest, term: text.slice(start, caret) };
 }
 
+/** Quoted when it has spaces, quotes, brackets, `|` or `&`, which would end a bare value. */
 function quoted(value: string): string {
-    return /[\s"]/.test(value) ? `"${value.replaceAll('"', '')}"` : value;
+    return /[\s"()|&]/.test(value) ? `"${value.replaceAll('"', '')}"` : value;
+}
+
+/**
+ * `search` with `term` added (AND-ed), unless it's already there. A search with `||`
+ * is bracketed first, so the term applies to all of it.
+ */
+export function withTerm(search: string, term: string): string {
+    const current = search.trim();
+    if (current.split(/\s+/).includes(term)) return current;
+    if (current === '') return term;
+    return `${current.includes('||') ? `(${current})` : current} ${term}`;
 }
 
 /** `field:=value`, quoted when the value has spaces. */

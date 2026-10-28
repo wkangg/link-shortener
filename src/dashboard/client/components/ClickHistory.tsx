@@ -158,7 +158,10 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['is:private is:adblock is:qr is:mobile', 'other flags'],
     ['has:gpu', 'the field is set'],
     ['query.ref:=twitter', 'a query parameter (?ref=twitter)'],
-    ['-os:windows -is:bot', 'a leading - excludes']
+    ['-os:windows -is:bot', 'a leading - excludes'],
+    ['country:=CA || country:=US', 'either matches'],
+    ['(os:ios || os:android) && is:qr', 'brackets group; && is the same as a space'],
+    ['-(is:mobile is:private)', 'excludes a whole group']
 ];
 
 /** Short badge text for a VPN verdict: the service when it's a named one. */

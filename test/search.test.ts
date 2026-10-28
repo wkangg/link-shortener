@@ -110,6 +110,37 @@ describe('search', () => {
         expect(ips('example.com:8080')).toEqual([]); // still free text
     });
 
+    test('|| and && with brackets', () => {
+        expect(tokenize('-(os:ios||a&&b) "x (y)"')).toEqual([
+            { op: '-(' },
+            { negate: false, field: 'os', value: 'ios' },
+            { op: '||' },
+            { negate: false, field: null, value: 'a' },
+            { op: '&&' },
+            { negate: false, field: null, value: 'b' },
+            { op: ')' },
+            { negate: false, field: null, value: 'x (y)' }
+        ]);
+        expect(ips('os:windows || os:ios')).toEqual(['198.51.100.7', '203.0.113.5']);
+        expect(ips('os:windows && os:ios')).toEqual([]);
+        // AND binds tighter: windows, or (ios and comcast).
+        expect(ips('os:windows || os:ios isp:comcast')).toEqual(['203.0.113.5']);
+        expect(ips('(os:windows || os:ios) && isp:rogers')).toEqual(['198.51.100.7']);
+        expect(ips('-(os:windows || isp:comcast)')).toEqual(['198.51.100.7']);
+        expect(ips('-(os:ios is:mobile)')).toEqual(['203.0.113.5']);
+        expect(ips('((os:ios))')).toEqual(['198.51.100.7']);
+        expect(ips('is:bot || os:ios')).toEqual(['192.0.2.10', '198.51.100.7']);
+    });
+
+    test('|| and brackets are lenient while typing', () => {
+        expect(ips('os:ios ||')).toEqual(['198.51.100.7']);
+        expect(ips('os:ios || os:')).toEqual(['198.51.100.7']);
+        expect(ips('(os:ios || os:windows')).toEqual(['198.51.100.7', '203.0.113.5']);
+        expect(ips('() os:ios')).toEqual(['198.51.100.7']);
+        expect(() => stats.history(q('os:ios)'))).toThrow(BadQueryError);
+        expect(() => stats.history(q(`${'('.repeat(20)}os:ios`))).toThrow(BadQueryError);
+    });
+
     test('a field with nothing after it yet filters nothing', () => {
         expect(ips('ip:')).toEqual(ips(''));
         expect(ips('query.ref:')).toEqual(ips(''));
