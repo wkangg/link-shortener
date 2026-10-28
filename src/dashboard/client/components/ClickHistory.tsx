@@ -159,8 +159,10 @@ const SEARCH_HELP: [string, string, runnable?: false][] = [
     ['has:gpu', 'the field is set'],
     ['query.ref:=twitter', 'a query parameter (?ref=twitter)'],
     ['-os:windows -is:bot', 'a leading - excludes'],
-    ['country:=CA || country:=US', 'either matches'],
-    ['(os:ios || os:android) && is:qr', 'brackets group; && is the same as a space'],
+    ['country:=CA country:=US is:qr', 'the same field twice: either; different fields: both'],
+    ['os:ios || isp:rogers', 'either matches'],
+    ['utm:spring && utm:launch', 'both, even on the same field'],
+    ['(os:ios || isp:rogers) is:qr', 'brackets group'],
     ['-(is:mobile is:private)', 'excludes a whole group']
 ];
 

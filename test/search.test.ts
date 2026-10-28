@@ -132,7 +132,25 @@ describe('search', () => {
         expect(ips('is:bot || os:ios')).toEqual(['192.0.2.10', '198.51.100.7']);
     });
 
+    test('with only spaces, the same field twice is either; other terms are both', () => {
+        expect(ips('os:windows os:ios')).toEqual(['198.51.100.7', '203.0.113.5']);
+        expect(ips('os:windows OS:ios isp:rogers')).toEqual(['198.51.100.7']);
+        // Aliases are the same field.
+        expect(ips('memory:8 ram:4')).toEqual(['198.51.100.7', '203.0.113.5']);
+        // && keeps both; so do ranges, negations, flags and free text.
+        expect(ips('os:windows && os:ios')).toEqual([]);
+        expect(ips('ram:>=4 ram:<8')).toEqual(['198.51.100.7']);
+        expect(ips('-os:windows -os:ios')).toEqual([]);
+        expect(ips('is:mobile is:private')).toEqual(['198.51.100.7']);
+        expect(ips('is:mobile has:gpu')).toEqual([]);
+        expect(ips('firefox safari')).toEqual([]);
+        // Grouping happens within the brackets, not across them.
+        expect(ips('(os:windows) os:ios')).toEqual([]);
+        expect(ips('os:windows os:ios && isp:rogers')).toEqual(['198.51.100.7']);
+    });
+
     test('|| and brackets are lenient while typing', () => {
+        expect(ips('os:ios &&')).toEqual(['198.51.100.7']);
         expect(ips('os:ios ||')).toEqual(['198.51.100.7']);
         expect(ips('os:ios || os:')).toEqual(['198.51.100.7']);
         expect(ips('(os:ios || os:windows')).toEqual(['198.51.100.7', '203.0.113.5']);

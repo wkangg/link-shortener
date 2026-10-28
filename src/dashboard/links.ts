@@ -353,11 +353,12 @@ const LINK_COLUMNS: Record<string, string> = {
  * The links search: words match the slug, destination or title;
  * `slug:`, `destination:` (or `url:`), `title:` and `tag:` match one of them
  * (`:=` for the whole value); `has:webhook`, `has:tag`, `has:tracking` and
- * `webhook:<name>` filter. Terms are AND-ed; a leading `-` negates one; "quoted
- * phrases" stay together; `||`, `&&` and brackets combine them as in the click search.
+ * `webhook:<name>` filter. Terms are AND-ed, except the same field twice
+ * (`tag:a tag:b`) is either; a leading `-` negates one; "quoted phrases" stay
+ * together; `||`, `&&` and brackets combine them as in the click search.
  */
 export function compileLinkSearch(q: string): { where: string[]; params: (string | number)[] } {
-    const tree = parseSearch(q);
+    const tree = parseSearch(q, { url: 'destination' });
     if (!tree) return { where: [], params: [] };
     const { sql, params } = compileTree(tree, linkTermCondition);
     return { where: [sql], params };

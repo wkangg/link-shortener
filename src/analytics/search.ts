@@ -10,11 +10,14 @@
  *   has:gpu                  the field is set
  *   query.ref:=twitter       a query parameter (`?ref=twitter`)
  *   -os:windows -is:bot      a leading `-` negates any term
- *   os:ios || os:android     either side matches
- *   (a || b) && c, -(a b)    brackets group; `&&` is the same as a space
+ *   os:ios os:android        the same field twice: either (see `implicitRun`)
+ *   os:ios || isp:rogers     either side matches
+ *   os:ios && os:android     both, even on the same field
+ *   (a || b) c, -(a b)       brackets group
  *
- * Terms are AND-ed, and AND binds tighter than `||`. Mentioning `is:bot`, `is:datacenter`, `is:scraper`, `is:vpn` or
- * `is:abusive` (negated or not) takes over from the default that hides or shows them.
+ * Other terms are AND-ed, and AND binds tighter than `||`. Mentioning `is:bot`,
+ * `is:datacenter`, `is:scraper`, `is:vpn` or `is:abusive` (negated or not) takes over
+ * from the default that hides or shows them.
  */
 
 import { SEARCH_FLAGS } from '../shared/search.ts';
@@ -176,39 +179,92 @@ function joined(kind: 'and' | 'or', nodes: SearchNode[]): SearchNode | null {
 }
 
 /**
- * Parses a search into a tree, or null when it has no finished terms. Lenient while
- * typing: unfinished terms, a dangling `||` and an unclosed `(` are ignored.
+ * What a term is OR-ed with when only spaces separate them: terms on the same field
+ * (`country:=CA country:=US`), with `aliases` mapping a field to its usual name. Null
+ * for terms that are always AND-ed: free text, negations (`-os:a -os:b` excludes
+ * both), ranges (`ram:>=4 ram:<16`), and `is:`/`has:`, whose flags are independent.
  */
-export function parseSearch(q: string): SearchNode | null {
+function implicitKey(term: Term, aliases: Record<string, string>): string | null {
+    const { field } = term;
+    if (field === null || term.negate || /^[<>]/.test(term.value)) return null;
+    if (field === 'is' || field === 'has') return null;
+    return aliases[field] ?? field;
+}
+
+/** A space-separated item, with its `implicitKey` (null for a bracketed group). */
+interface RunItem {
+    node: SearchNode;
+    key: string | null;
+}
+
+/** Space-separated items: those with the same key OR-ed, then everything AND-ed. */
+function implicitRun(items: RunItem[]): SearchNode | null {
+    const groups: SearchNode[][] = [];
+    const byKey = new Map<string, SearchNode[]>();
+    for (const { node, key } of items) {
+        const same = key === null ? undefined : byKey.get(key);
+        if (same) same.push(node);
+        else {
+            const group = [node];
+            groups.push(group);
+            if (key !== null) byKey.set(key, group);
+        }
+    }
+    return joined(
+        'and',
+        groups.map(group => joined('or', group)).filter(node => node !== null)
+    );
+}
+
+/**
+ * Parses a search into a tree, or null when it has no finished terms. Lenient while
+ * typing: unfinished terms, a dangling `||` or `&&` and an unclosed `(` are ignored.
+ */
+export function parseSearch(q: string, aliases: Record<string, string> = {}): SearchNode | null {
     if (q.length > MAX_LENGTH) throw new BadQueryError('Search is too long');
     const tokens = tokenize(q);
     if (tokens.filter(t => !('op' in t)).length > MAX_TERMS)
         throw new BadQueryError(`Search has too many terms (max ${MAX_TERMS})`);
     let i = 0;
 
-    // Terms AND-ed into runs, the runs OR-ed; stops before a `)`.
+    // Space-separated runs, AND-ed by `&&` into chains, the chains OR-ed by `||`;
+    // stops before a `)`.
     const group = (depth: number): SearchNode | null => {
         if (depth > MAX_DEPTH) throw new BadQueryError('Search has too many nested brackets');
         const either: SearchNode[] = [];
-        let both: SearchNode[] = [];
+        let chain: SearchNode[] = [];
+        let run: RunItem[] = [];
         const endRun = () => {
-            const run = joined('and', both);
-            if (run) either.push(run);
-            both = [];
+            const node = implicitRun(run);
+            if (node) chain.push(node);
+            run = [];
+        };
+        const endChain = () => {
+            endRun();
+            const node = joined('and', chain);
+            if (node) either.push(node);
+            chain = [];
         };
         for (let token = tokens[i]; token && !isOp(token, ')'); token = tokens[i]) {
             i++;
             if (!('op' in token)) {
-                if (!isUnfinished(token)) both.push({ kind: 'term', term: token });
-            } else if (token.op === '||') endRun();
+                if (!isUnfinished(token)) {
+                    run.push({
+                        node: { kind: 'term', term: token },
+                        key: implicitKey(token, aliases)
+                    });
+                }
+            } else if (token.op === '&&') endRun();
+            else if (token.op === '||') endChain();
             else if (token.op === '(' || token.op === '-(') {
                 const inner = group(depth + 1);
                 if (isOp(tokens[i], ')')) i++;
-                if (inner) both.push(token.op === '-(' ? { kind: 'not', node: inner } : inner);
+                const node: SearchNode | null =
+                    inner && token.op === '-(' ? { kind: 'not', node: inner } : inner;
+                if (node) run.push({ node, key: null });
             }
-            // `&&` is the same as a space.
         }
-        endRun();
+        endChain();
         return joined('or', either);
     };
 
@@ -375,7 +431,7 @@ function isUnfinished(term: Term): boolean {
 /** Compiles a search into one SQL condition over `clicks c`. */
 export function compileSearch(q: string, abuseMinScore: number): CompiledSearch {
     const overrides = new Set<SearchOverride>();
-    const tree = parseSearch(q);
+    const tree = parseSearch(q, ALIASES);
     const condition =
         tree && compileTree(tree, term => termCondition(term, abuseMinScore, overrides));
     return { condition, overrides };
