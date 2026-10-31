@@ -1,6 +1,10 @@
 import { useState } from 'react';
 
-import { LINK_SEARCH_FIELDS, LINK_SEARCH_HAS } from '../../../shared/search.ts';
+import {
+    LINK_SEARCH_ALIASES,
+    LINK_SEARCH_FIELDS,
+    LINK_SEARCH_HAS
+} from '../../../shared/search.ts';
 import type { LinkWithStats } from '../../../shared/types.ts';
 import { api, localTz } from '../api.ts';
 import { CreateBar } from '../components/CreateBar.tsx';
@@ -148,6 +152,7 @@ const LINK_SYNTAX: SearchSyntax = {
     fields: LINK_SEARCH_FIELDS,
     flags: [],
     has: LINK_SEARCH_HAS,
+    aliases: LINK_SEARCH_ALIASES,
     hasValues: field => LINK_VALUE_FIELDS.has(field),
     loadValues: async (field, text) => {
         const typed = text.toLowerCase();

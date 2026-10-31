@@ -83,7 +83,8 @@ const NUMBER_FIELDS: Record<string, string> = {
     lon: 'c.longitude'
 };
 
-const ALIASES: Record<string, string> = {
+/** Other names for click search fields and flags. */
+export const ALIASES: Record<string, string> = {
     hostname: 'host',
     ref: 'referrer',
     useragent: 'ua',
@@ -271,6 +272,28 @@ export function parseSearch(q: string, aliases: Record<string, string> = {}): Se
     const tree = group(0);
     if (i < tokens.length) throw new BadQueryError('Search has a ) without a (');
     return tree;
+}
+
+/** A term as it would be typed, quoting a value a bare value couldn't hold. */
+function termText({ field, value }: Term): string {
+    const eq = value.startsWith('=') ? '=' : '';
+    const rest = value.slice(eq.length);
+    const shown = rest === '' || /[\s"()|&]/.test(rest) ? `"${rest}"` : rest;
+    return `${field ? `${field}:` : ''}${eq}${shown}`;
+}
+
+/**
+ * How a parsed search reads, with AND, OR and NOT spelled out and every group
+ * bracketed: `country:=CA country:=US is:qr` is `(country:=CA OR country:=US) AND is:qr`.
+ */
+export function describeSearch(node: SearchNode, nested = false): string {
+    if (node.kind === 'term')
+        return node.term.negate ? `NOT ${termText(node.term)}` : termText(node.term);
+    if (node.kind === 'not') return `NOT ${describeSearch(node.node, true)}`;
+    const text = node.nodes
+        .map(n => describeSearch(n, true))
+        .join(node.kind === 'and' ? ' AND ' : ' OR ');
+    return nested ? `(${text})` : text;
 }
 
 /** NOT over NULL is NULL, so a negation keeps rows where the field is missing. */

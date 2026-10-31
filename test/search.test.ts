@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 
-import { compileSearch, tokenize } from '../src/analytics/search.ts';
+import {
+    ALIASES,
+    compileSearch,
+    describeSearch,
+    parseSearch,
+    tokenize
+} from '../src/analytics/search.ts';
 import { BadQueryError, Stats } from '../src/analytics/stats.ts';
 import { openDatabase } from '../src/db/client.ts';
 import { SEARCH_FIELDS, SEARCH_FLAGS } from '../src/shared/search.ts';
@@ -215,5 +221,25 @@ describe('autocomplete', () => {
             '8'
         ]);
         expect(() => stats.suggest(q(''), 'utm', '')).toThrow(BadQueryError);
+    });
+});
+
+function described(q: string): string | null {
+    const tree = parseSearch(q, ALIASES);
+    return tree && describeSearch(tree);
+}
+
+describe('describeSearch', () => {
+    test('spells out how terms combine', () => {
+        expect(described('country:=CA country:=US is:qr')).toBe(
+            '(country:=CA OR country:=US) AND is:qr'
+        );
+        expect(described('ref:x referrer:y')).toBe('ref:x OR referrer:y');
+        expect(described('a b || c')).toBe('(a AND b) OR c');
+        expect(described('-os:windows -(is:bot || is:dc)')).toBe(
+            'NOT os:windows AND NOT (is:bot OR is:dc)'
+        );
+        expect(described('"san francisco" ip:')).toBe('"san francisco"');
+        expect(described('')).toBeNull();
     });
 });

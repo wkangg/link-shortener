@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
+import { ALIASES, describeSearch, parseSearch } from '../../../analytics/search.ts';
 import { SEARCH_FIELDS, SEARCH_FLAGS, type SearchField } from '../../../shared/search.ts';
 import { api } from '../api.ts';
 import { formatCount } from '../format.ts';
@@ -19,6 +20,8 @@ export interface SearchSyntax {
     flags: readonly SearchField[];
     /** The options after `has:`. */
     has: readonly SearchField[];
+    /** Other names for fields, so `implicitRun` ORs `ref:a referrer:b` like the server. */
+    aliases: Record<string, string>;
     /** Whether `field:` has value suggestions. */
     hasValues: (field: string) => boolean;
     /** Suggested values for `field:`, most useful first. */
@@ -38,6 +41,7 @@ export function clickSyntax(params: URLSearchParams): SearchSyntax {
         fields: SEARCH_FIELDS,
         flags: SEARCH_FLAGS,
         has: SEARCH_FIELDS.filter(f => !NO_VALUES.has(f.name)),
+        aliases: ALIASES,
         // `query.<key>:` has no column to suggest from.
         hasValues: field => !NO_VALUES.has(field) && !field.includes('.'),
         loadValues: async (field, text) => {
@@ -102,6 +106,16 @@ function parseTerm(term: string) {
         field: body.slice(0, colon).toLowerCase(),
         text: body.slice(colon + 1).replace(/^=?"?/, '')
     };
+}
+
+/** How the server will read `search`, or why it can't; null when there's nothing to explain. */
+function interpretation(search: string, aliases: Record<string, string>): string | null {
+    try {
+        const tree = parseSearch(search, aliases);
+        return tree && describeSearch(tree);
+    } catch (error) {
+        return error instanceof Error ? error.message : null;
+    }
 }
 
 interface SearchBoxProps {
@@ -174,6 +188,7 @@ export function SearchBox({ value, onChange, onCommit, syntax, count }: SearchBo
             }));
     }
     const shown = open && suggestions.length > 0;
+    const explained = interpretation(value, syntax.aliases);
     const highlighted = shown && active < suggestions.length ? active : -1;
 
     // Put the caret after an accepted suggestion once the new value has rendered.
@@ -217,6 +232,7 @@ export function SearchBox({ value, onChange, onCommit, syntax, count }: SearchBo
                 aria-expanded={shown}
                 aria-controls={listId}
                 aria-autocomplete="list"
+                aria-describedby={explained ? `${listId}-explain` : undefined}
                 aria-activedescendant={highlighted >= 0 ? `${listId}-${highlighted}` : undefined}
                 value={value}
                 placeholder={syntax.placeholder}
@@ -257,6 +273,11 @@ export function SearchBox({ value, onChange, onCommit, syntax, count }: SearchBo
                 <span className="search-count" role="status" data-stale={count.stale}>
                     {count.label}
                 </span>
+            )}
+            {explained && !shown && (
+                <div className="search-explain" id={`${listId}-explain`}>
+                    {explained}
+                </div>
             )}
             {shown && (
                 <ul

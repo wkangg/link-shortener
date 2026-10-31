@@ -8,6 +8,7 @@ import {
     parseSearch,
     type Term
 } from '../analytics/search.ts';
+import { LINK_SEARCH_ALIASES } from '../shared/search.ts';
 import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
 import type {
     Link,
@@ -358,7 +359,7 @@ const LINK_COLUMNS: Record<string, string> = {
  * together; `||`, `&&` and brackets combine them as in the click search.
  */
 export function compileLinkSearch(q: string): { where: string[]; params: (string | number)[] } {
-    const tree = parseSearch(q, { url: 'destination' });
+    const tree = parseSearch(q, LINK_SEARCH_ALIASES);
     if (!tree) return { where: [], params: [] };
     const { sql, params } = compileTree(tree, linkTermCondition);
     return { where: [sql], params };
