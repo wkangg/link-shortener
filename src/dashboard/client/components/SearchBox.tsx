@@ -1,6 +1,12 @@
 import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
-import { ALIASES, describeSearch, parseSearch } from '../../../analytics/search.ts';
+import {
+    CLICK_DIALECT,
+    describeSearch,
+    parseSearch,
+    quoteValue,
+    type SearchDialect
+} from '../../../analytics/search.ts';
 import { SEARCH_FIELDS, SEARCH_FLAGS, type SearchField } from '../../../shared/search.ts';
 import { api } from '../api.ts';
 import { formatCount } from '../format.ts';
@@ -20,8 +26,8 @@ export interface SearchSyntax {
     flags: readonly SearchField[];
     /** The options after `has:`. */
     has: readonly SearchField[];
-    /** Other names for fields, so `implicitRun` ORs `ref:a referrer:b` like the server. */
-    aliases: Record<string, string>;
+    /** How its fields read, so the hover explains a search the way the server runs it. */
+    dialect: SearchDialect;
     /** Whether `field:` has value suggestions. */
     hasValues: (field: string) => boolean;
     /** Suggested values for `field:`, most useful first. */
@@ -41,7 +47,7 @@ export function clickSyntax(params: URLSearchParams): SearchSyntax {
         fields: SEARCH_FIELDS,
         flags: SEARCH_FLAGS,
         has: SEARCH_FIELDS.filter(f => !NO_VALUES.has(f.name)),
-        aliases: ALIASES,
+        dialect: CLICK_DIALECT,
         // `query.<key>:` has no column to suggest from.
         hasValues: field => !NO_VALUES.has(field) && !field.includes('.'),
         loadValues: async (field, text) => {
@@ -74,11 +80,6 @@ function termAt(text: string, caret: number) {
     return { start, end: caret + rest, term: text.slice(start, caret) };
 }
 
-/** Quoted when it has spaces, quotes, brackets, `|` or `&`, which would end a bare value. */
-function quoted(value: string): string {
-    return /[\s"()|&]/.test(value) ? `"${value.replaceAll('"', '')}"` : value;
-}
-
 /**
  * `search` with `term` added (AND-ed), unless it's already there. A search with `||`
  * is bracketed first, so the term applies to all of it.
@@ -90,9 +91,9 @@ export function withTerm(search: string, term: string): string {
     return `${current.includes('||') ? `(${current})` : current} ${term}`;
 }
 
-/** `field:=value`, quoted when the value has spaces. */
+/** `field:=value`, quoted (and escaped) when a bare value couldn't hold it. */
 export function exactTerm(field: string, value: string): string {
-    return `${field}:=${quoted(value)}`;
+    return `${field}:=${quoteValue(value)}`;
 }
 
 /** What the term being typed is: a field name, or `field:` and the start of its value. */
@@ -109,9 +110,9 @@ function parseTerm(term: string) {
 }
 
 /** How the server will read `search`, or why it can't; null when there's nothing to explain. */
-function interpretation(search: string, aliases: Record<string, string>): string | null {
+function interpretation(search: string, dialect: SearchDialect): string | null {
     try {
-        const tree = parseSearch(search, aliases);
+        const tree = parseSearch(search, dialect);
         return tree && describeSearch(tree);
     } catch (error) {
         return error instanceof Error ? error.message : null;
@@ -188,7 +189,7 @@ export function SearchBox({ value, onChange, onCommit, syntax, count }: SearchBo
             }));
     }
     const shown = open && suggestions.length > 0;
-    const explained = interpretation(value, syntax.aliases);
+    const explained = interpretation(value, syntax.dialect);
     const highlighted = shown && active < suggestions.length ? active : -1;
 
     // Put the caret after an accepted suggestion once the new value has rendered.

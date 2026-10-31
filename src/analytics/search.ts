@@ -133,10 +133,10 @@ type Token = Term | Operator;
 
 /**
  * Operators, then terms. A bare value runs until whitespace, a bracket, `||` or `&&`;
- * quote it ("a (b)") to keep those.
+ * quote it ("a (b)") to keep those, with `\"` and `\\` for a quote or backslash inside.
  */
 const TOKEN_RE = new RegExp(
-    String.raw`(\|\||&&|-?\(|\))|(-?)(?:(${FIELD}):)?(=?)(?:"([^"]*)"?|((?:[^\s()|&]|\|(?!\|)|&(?!&))+))`,
+    String.raw`(\|\||&&|-?\(|\))|(-?)(?:(${FIELD}):)?(=?)(?:"((?:[^"\\]|\\[\s\S]?)*)"?|((?:[^\s()|&]|\|(?!\|)|&(?!&))+))`,
     'gi'
 );
 
@@ -149,7 +149,7 @@ export function tokenize(q: string): Token[] {
             tokens.push({ op: op as Operator['op'] });
             continue;
         }
-        const value = eq + (quoted ?? bare ?? '');
+        const value = eq + (quoted?.replaceAll(/\\(["\\])/g, '$1') ?? bare ?? '');
         if (!field && value === '') continue;
         // A URL ("https://…") or IPv6 address ("abcd:ef01::1") is text, not a field.
         if (field && bare !== undefined && looksLikeText(field, bare)) {
@@ -179,17 +179,28 @@ function joined(kind: 'and' | 'or', nodes: SearchNode[]): SearchNode | null {
     return nodes.length > 1 ? { kind, nodes } : (nodes[0] ?? null);
 }
 
+/** How a search's fields read: what `parseSearch` needs to group terms like the compiler. */
+export interface SearchDialect {
+    /** Other names for fields, mapped to their usual name. */
+    aliases?: Record<string, string>;
+    /** Numeric fields (by usual name), where `<` and `>` start a comparison. */
+    ranges?: ReadonlySet<string>;
+}
+
 /**
  * What a term is OR-ed with when only spaces separate them: terms on the same field
- * (`country:=CA country:=US`), with `aliases` mapping a field to its usual name. Null
- * for terms that are always AND-ed: free text, negations (`-os:a -os:b` excludes
- * both), ranges (`ram:>=4 ram:<16`), and `is:`/`has:`, whose flags are independent.
+ * (`country:=CA country:=US`), aliases included. Null for terms that are always
+ * AND-ed: free text, negations (`-os:a -os:b` excludes both), ranges on numeric fields
+ * (`ram:>=4 ram:<16`), and `is:`/`has:`, whose flags are independent.
  */
-function implicitKey(term: Term, aliases: Record<string, string>): string | null {
-    const { field } = term;
-    if (field === null || term.negate || /^[<>]/.test(term.value)) return null;
+function implicitKey(term: Term, { aliases = {}, ranges }: SearchDialect): string | null {
+    if (term.field === null || term.negate) return null;
+    // `param.ref` is `query.ref`.
+    const field = term.field.replace(/^param\./, 'query.');
     if (field === 'is' || field === 'has') return null;
-    return aliases[field] ?? field;
+    const name = aliases[field] ?? field;
+    if (ranges?.has(name) && /^[<>]/.test(term.value)) return null;
+    return name;
 }
 
 /** A space-separated item, with its `implicitKey` (null for a bracketed group). */
@@ -221,7 +232,7 @@ function implicitRun(items: RunItem[]): SearchNode | null {
  * Parses a search into a tree, or null when it has no finished terms. Lenient while
  * typing: unfinished terms, a dangling `||` or `&&` and an unclosed `(` are ignored.
  */
-export function parseSearch(q: string, aliases: Record<string, string> = {}): SearchNode | null {
+export function parseSearch(q: string, dialect: SearchDialect = {}): SearchNode | null {
     if (q.length > MAX_LENGTH) throw new BadQueryError('Search is too long');
     const tokens = tokenize(q);
     if (tokens.filter(t => !('op' in t)).length > MAX_TERMS)
@@ -252,7 +263,7 @@ export function parseSearch(q: string, aliases: Record<string, string> = {}): Se
                 if (!isUnfinished(token)) {
                     run.push({
                         node: { kind: 'term', term: token },
-                        key: implicitKey(token, aliases)
+                        key: implicitKey(token, dialect)
                     });
                 }
             } else if (token.op === '&&') endRun();
@@ -274,12 +285,17 @@ export function parseSearch(q: string, aliases: Record<string, string> = {}): Se
     return tree;
 }
 
-/** A term as it would be typed, quoting a value a bare value couldn't hold. */
+/** A value as typed: quoted (quotes and backslashes escaped) when a bare value couldn't hold it. */
+export function quoteValue(value: string): string {
+    return value === '' || /[\s"()|&]/.test(value)
+        ? `"${value.replaceAll(/["\\]/g, String.raw`\$&`)}"`
+        : value;
+}
+
+/** A term as it would be typed. */
 function termText({ field, value }: Term): string {
     const eq = value.startsWith('=') ? '=' : '';
-    const rest = value.slice(eq.length);
-    const shown = rest === '' || /[\s"()|&]/.test(rest) ? `"${rest}"` : rest;
-    return `${field ? `${field}:` : ''}${eq}${shown}`;
+    return `${field ? `${field}:` : ''}${eq}${quoteValue(value.slice(eq.length))}`;
 }
 
 /**
@@ -295,6 +311,12 @@ export function describeSearch(node: SearchNode, nested = false): string {
         .join(node.kind === 'and' ? ' AND ' : ' OR ');
     return nested ? `(${text})` : text;
 }
+
+/** How the click search's fields read. */
+export const CLICK_DIALECT: SearchDialect = {
+    aliases: ALIASES,
+    ranges: new Set(Object.keys(NUMBER_FIELDS))
+};
 
 /** NOT over NULL is NULL, so a negation keeps rows where the field is missing. */
 function not(c: Condition): Condition {
@@ -454,7 +476,7 @@ function isUnfinished(term: Term): boolean {
 /** Compiles a search into one SQL condition over `clicks c`. */
 export function compileSearch(q: string, abuseMinScore: number): CompiledSearch {
     const overrides = new Set<SearchOverride>();
-    const tree = parseSearch(q, ALIASES);
+    const tree = parseSearch(q, CLICK_DIALECT);
     const condition =
         tree && compileTree(tree, term => termCondition(term, abuseMinScore, overrides));
     return { condition, overrides };

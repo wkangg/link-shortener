@@ -10,8 +10,8 @@ export const LINK_SEARCH_FIELDS: readonly SearchField[] = [
     { name: 'has', hint: 'e.g. has:webhook' }
 ];
 
-/** Other names for links search fields. */
-export const LINK_SEARCH_ALIASES: Record<string, string> = { url: 'destination' };
+/** How the links search's fields read (a `SearchDialect`): `url:` is `destination:`. */
+export const LINK_SEARCH_DIALECT = { aliases: { url: 'destination' } };
 
 export const LINK_SEARCH_HAS: readonly SearchField[] = [
     { name: 'webhook', hint: 'sends clicks to a webhook' },

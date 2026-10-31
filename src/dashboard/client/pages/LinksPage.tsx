@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import {
-    LINK_SEARCH_ALIASES,
+    LINK_SEARCH_DIALECT,
     LINK_SEARCH_FIELDS,
     LINK_SEARCH_HAS
 } from '../../../shared/search.ts';
@@ -152,7 +152,7 @@ const LINK_SYNTAX: SearchSyntax = {
     fields: LINK_SEARCH_FIELDS,
     flags: [],
     has: LINK_SEARCH_HAS,
-    aliases: LINK_SEARCH_ALIASES,
+    dialect: LINK_SEARCH_DIALECT,
     hasValues: field => LINK_VALUE_FIELDS.has(field),
     loadValues: async (field, text) => {
         const typed = text.toLowerCase();

@@ -1,15 +1,16 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 
 import {
-    ALIASES,
+    CLICK_DIALECT,
     compileSearch,
     describeSearch,
     parseSearch,
+    quoteValue,
     tokenize
 } from '../src/analytics/search.ts';
 import { BadQueryError, Stats } from '../src/analytics/stats.ts';
 import { openDatabase } from '../src/db/client.ts';
-import { SEARCH_FIELDS, SEARCH_FLAGS } from '../src/shared/search.ts';
+import { LINK_SEARCH_DIALECT, SEARCH_FIELDS, SEARCH_FLAGS } from '../src/shared/search.ts';
 import type { StatsQuery } from '../src/shared/types.ts';
 
 const T = Date.UTC(2026, 9, 10);
@@ -225,7 +226,7 @@ describe('autocomplete', () => {
 });
 
 function described(q: string): string | null {
-    const tree = parseSearch(q, ALIASES);
+    const tree = parseSearch(q, CLICK_DIALECT);
     return tree && describeSearch(tree);
 }
 
@@ -241,5 +242,26 @@ describe('describeSearch', () => {
         );
         expect(described('"san francisco" ip:')).toBe('"san francisco"');
         expect(described('')).toBeNull();
+    });
+});
+
+describe('same-field OR edge cases', () => {
+    test('param.<key> and query.<key> are the same field', () => {
+        expect(described('query.ref:a param.ref:b')).toBe('query.ref:a OR param.ref:b');
+    });
+
+    test('< and > only make a range on numeric fields', () => {
+        expect(described('ram:>=4 ram:<8')).toBe('ram:>=4 AND ram:<8');
+        expect(described('os:>a os:<b')).toBe('os:>a OR os:<b');
+        expect(parseSearch('title:>draft title:<release', LINK_SEARCH_DIALECT)?.kind).toBe('or');
+    });
+
+    test('quotes and backslashes survive a round trip', () => {
+        const value = String.raw`say "hi" C:\ `;
+        const [term] = tokenize(`ua:=${quoteValue(value)}`);
+        expect(term).toEqual({ negate: false, field: 'ua', value: `=${value}` });
+        expect(tokenize(String.raw`"a\b"`)).toEqual([
+            { negate: false, field: null, value: String.raw`a\b` }
+        ]);
     });
 });
