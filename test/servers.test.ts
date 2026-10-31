@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 
+import { MAX_SIGNALS_BODY } from '../src/redirect/interstitial.ts';
 import { testApp } from './helpers.ts';
 
 const t = testApp();
@@ -39,8 +40,8 @@ describe('redirect server', () => {
     });
 
     test.each([
-        ['with a length', 'x'.repeat(5000)],
-        ['streamed', new Blob(['x'.repeat(5000)]).stream()]
+        ['with a length', 'x'.repeat(MAX_SIGNALS_BODY + 1)],
+        ['streamed', new Blob(['x'.repeat(MAX_SIGNALS_BODY + 1)]).stream()]
     ] as const)('signals bodies over the limit get 413 (%s)', async (_, body) => {
         const res = await fetch(new URL('/_/signals', t.app.short.url), { method: 'POST', body });
         expect(res.status).toBe(413);

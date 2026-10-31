@@ -259,7 +259,12 @@ describe('detailed device tracking', () => {
             codecs: '5500000020000000',
             fonts: '01',
             settings: '1001',
-            darkMode: true
+            darkMode: true,
+            webgl: { maxTexture: 4096, extensions: ['OES_texture_float'] },
+            languages: ['en-CA', 'fr-CA'],
+            voices: ['Samantha (en-US)'],
+            multiMonitor: false,
+            canvas: 'randomized'
         };
         const post = (body: unknown) =>
             fetch(new URL('/_/signals', t.app.short.url), {
@@ -293,7 +298,13 @@ describe('detailed device tracking', () => {
             codecs: ['H.264', 'HEVC', 'HLS'],
             fonts: ['Calibri'],
             settings: ['cookies on', 'PDF viewer'],
-            darkMode: true
+            darkMode: true,
+            webgl: { maxTexture: 4096, extensions: ['OES_texture_float'] },
+            languages: ['en-CA', 'fr-CA'],
+            voices: ['Samantha (en-US)'],
+            multiMonitor: false,
+            canvas: 'randomized',
+            intl: null
         });
     });
 });

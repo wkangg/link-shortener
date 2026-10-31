@@ -1101,6 +1101,34 @@ a.slug:hover {
     overflow-wrap: anywhere;
 }
 
+/* "More details" under a click: label / value rows, values wrapping within the column. */
+.trait-list {
+    display: grid;
+    gap: 0.15rem;
+    margin: 0.3rem 0 0;
+}
+
+.trait-list > div {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 0.5rem;
+}
+
+.trait-list dt {
+    color: var(--text-secondary);
+}
+
+.trait-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.trait-items {
+    margin: 0.2rem 0 0;
+    padding-left: 1rem;
+    overflow-wrap: anywhere;
+}
+
 /* Pager under the click history; wraps under the range on narrow screens. */
 .pager {
     display: flex;

@@ -318,13 +318,29 @@ export class Stats {
             params.push(ts, ts, id);
         }
         type Flags =
-            'qr' | 'bot' | 'isDatacenter' | 'charging' | 'incognito' | 'adBlocker' | 'darkMode';
+            | 'qr'
+            | 'bot'
+            | 'isDatacenter'
+            | 'charging'
+            | 'incognito'
+            | 'adBlocker'
+            | 'darkMode'
+            | 'multiMonitor';
         type Probes = 'codecs' | 'fonts' | 'settings';
+        type Json =
+            | 'webgl'
+            | 'intl'
+            | 'languages'
+            | 'mediaFeatures'
+            | 'voices'
+            | 'mediaDevices'
+            | 'permissions'
+            | 'webgpu';
         const rows = this.#db
             .query<
-                Omit<ClickHistoryRow, Flags | Probes> &
+                Omit<ClickHistoryRow, Flags | Probes | Json> &
                     Record<Flags, number | null> &
-                    Record<Probes, string | null>,
+                    Record<Probes | Json, string | null>,
                 Param[]
             >(
                 `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
@@ -337,7 +353,10 @@ export class Stats {
                         c.incognito, c.ad_blocker AS adBlocker, c.latitude, c.longitude,
                         c.memory, c.cpu_cores AS cpuCores, c.platform, c.touch_points AS touchPoints,
                         c.browser_version AS browserVersion, c.display, c.codecs, c.fonts, c.settings,
-                        c.dark_mode AS darkMode
+                        c.dark_mode AS darkMode, c.webgl, c.keyboard, c.intl, c.languages,
+                        c.canvas, c.audio, c.media_features AS mediaFeatures, c.voices, c.emoji,
+                        c.math, c.media_devices AS mediaDevices, c.permissions,
+                        c.multi_monitor AS multiMonitor, c.webgpu, c.viewport
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -355,6 +374,15 @@ export class Stats {
                 incognito: flag(r.incognito),
                 adBlocker: flag(r.adBlocker),
                 darkMode: flag(r.darkMode),
+                multiMonitor: flag(r.multiMonitor),
+                webgl: parseJson(r.webgl),
+                intl: parseJson(r.intl),
+                languages: parseJson(r.languages),
+                mediaFeatures: parseJson(r.mediaFeatures),
+                voices: parseJson(r.voices),
+                mediaDevices: parseJson(r.mediaDevices),
+                permissions: parseJson(r.permissions),
+                webgpu: parseJson(r.webgpu),
                 codecs: codecNames(r.codecs),
                 fonts: fontNames(r.fonts),
                 settings: settingNames(r.settings)
@@ -492,4 +520,14 @@ export function csvCell(
 /** A nullable 0/1 column as a boolean, keeping null for "not reported". */
 function flag(value: number | null): boolean | null {
     return value === null ? null : value === 1;
+}
+
+/** A JSON column written by parseSignals; null when empty or (impossibly) malformed. */
+function parseJson<T>(value: string | null): T | null {
+    if (value === null) return null;
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return null;
+    }
 }

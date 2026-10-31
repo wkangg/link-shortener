@@ -156,7 +156,22 @@ describe('extra click fields', () => {
             codecs: '50505000052222002222',
             fonts: '0110101',
             settings: '100100000',
-            dark_mode: 0
+            dark_mode: 0,
+            webgl: null,
+            keyboard: null,
+            intl: null,
+            languages: null,
+            canvas: null,
+            audio: null,
+            media_features: null,
+            voices: null,
+            emoji: null,
+            math: null,
+            media_devices: null,
+            permissions: null,
+            multi_monitor: null,
+            webgpu: null,
+            viewport: null
         });
         expect(
             parseSignals(
@@ -191,6 +206,82 @@ describe('extra click fields', () => {
         expect(parseSignals(JSON.stringify({ cores: 1.5 }))).toMatchObject({ cpu_cores: null });
         expect(parseSignals('not json')).toBeNull();
         expect(parseSignals('[1]')).toMatchObject({ screen: null });
+    });
+
+    test('structured browser traits keep known keys, in schema order, as JSON', () => {
+        const parsed = parseSignals(
+            JSON.stringify({
+                webgl: {
+                    extensions: ['ANGLE_instanced_arrays', 7, 'OES_texture_float'],
+                    maxTexture: 16_384,
+                    vendor: 'Google Inc. (NVIDIA)',
+                    antialias: true,
+                    evil: 'dropped'
+                },
+                keyboard: 'azertyuiop^$qsdfghjklmùwxcvbn,;:!',
+                intl: { locale: 'fr-FR', hourCycle: 'h23', number: '1 234 567,891' },
+                languages: ['fr-FR', 'en-US', '<b>'],
+                canvas: 'randomized',
+                audio: '124.04347527516074',
+                mediaFeatures: { gamut: 'p3', hdr: true, pointer: 'fine' },
+                voices: ['Thomas (fr-FR)', 'Samantha (en-US)'],
+                emoji: 15,
+                math: 'a1b2c3d4',
+                mediaDevices: { cameras: 1, microphones: 2, speakers: -1 },
+                permissions: { notifications: 'denied', 'persistent-storage': 'granted' },
+                multiMonitor: true,
+                webgpu: { vendor: 'nvidia', architecture: 'ada', device: '' },
+                viewport: '1280x720'
+            })
+        );
+        expect(parsed).toMatchObject({
+            webgl: JSON.stringify({
+                vendor: 'Google Inc. (NVIDIA)',
+                maxTexture: 16_384,
+                antialias: true,
+                extensions: ['ANGLE_instanced_arrays', 'OES_texture_float']
+            }),
+            keyboard: 'azertyuiop^$qsdfghjklmùwxcvbn,;:!',
+            intl: JSON.stringify({ locale: 'fr-FR', hourCycle: 'h23', number: '1 234 567,891' }),
+            languages: JSON.stringify(['fr-FR', 'en-US']),
+            canvas: 'randomized',
+            audio: '124.04347527516074',
+            media_features: JSON.stringify({ gamut: 'p3', hdr: true, pointer: 'fine' }),
+            voices: JSON.stringify(['Thomas (fr-FR)', 'Samantha (en-US)']),
+            emoji: 15,
+            math: 'a1b2c3d4',
+            media_devices: JSON.stringify({ cameras: 1, microphones: 2 }),
+            permissions: JSON.stringify({
+                notifications: 'denied',
+                'persistent-storage': 'granted'
+            }),
+            multi_monitor: 1,
+            webgpu: JSON.stringify({ vendor: 'nvidia', architecture: 'ada' }),
+            viewport: '1280x720'
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    webgl: [1],
+                    intl: {},
+                    languages: 'en',
+                    canvas: 'nothex!',
+                    audio: 'NaN',
+                    emoji: 1.5,
+                    viewport: '1x',
+                    keyboard: 42
+                })
+            )
+        ).toMatchObject({
+            webgl: null,
+            intl: null,
+            languages: null,
+            canvas: null,
+            audio: null,
+            emoji: null,
+            viewport: null,
+            keyboard: null
+        });
     });
 });
 

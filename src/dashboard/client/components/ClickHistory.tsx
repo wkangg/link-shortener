@@ -13,6 +13,7 @@ import {
     screenLabel
 } from '../format.ts';
 import { useApi } from '../useApi.ts';
+import { ClickDetails } from './ClickDetails.tsx';
 import { clickSyntax, exactTerm, SearchBox } from './SearchBox.tsx';
 
 /** "All" still pages, just in very large pages, so a huge history can't freeze the tab. */
@@ -563,6 +564,7 @@ export function ClickHistory({
                                             </span>
                                         )}
                                         <TraitList label="Fonts" items={c.fonts} />
+                                        <ClickDetails c={c} />
                                         {(c.incognito || c.adBlocker || c.fingerprint) && (
                                             <span className="history-tags">
                                                 {c.incognito && (

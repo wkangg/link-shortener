@@ -66,7 +66,8 @@ When a link has tracking turned on, visitors see a short page instead of a bare 
 
 - OS version, screen size, orientation, GPU, RAM, CPU cores, touch points, network type and battery
 - Private browsing and ad-blocker detection
-- A **device fingerprint** that groups one device's clicks across days and IP changes, built from the browser version, language, timezone, display, GPU, media codecs, installed fonts and browser settings
+- A **device fingerprint** that groups one device's clicks across days and IP changes, built from the browser version, languages, regional formats, timezone, display, GPU and WebGL details, keyboard layout, media codecs, installed fonts and browser settings
+- Per click: canvas, audio and math hashes, speech voices, emoji version, display features (HDR, color gamut, pointer), cameras and microphones, permissions, multiple monitors, WebGPU adapter and window size
 
 ### 🔳 QR codes
 

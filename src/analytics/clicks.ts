@@ -69,7 +69,22 @@ const SIGNAL_COLUMNS = [
     'codecs',
     'fonts',
     'settings',
-    'dark_mode'
+    'dark_mode',
+    'webgl',
+    'keyboard',
+    'intl',
+    'languages',
+    'canvas',
+    'audio',
+    'media_features',
+    'voices',
+    'emoji',
+    'math',
+    'media_devices',
+    'permissions',
+    'multi_monitor',
+    'webgpu',
+    'viewport'
 ] as const satisfies readonly (keyof DeviceSignals)[];
 
 /** Unused tokens are cleared (and their clicks reclassified) at most this often. */
@@ -263,7 +278,11 @@ export class ClickBuffer implements ClickSink {
                               display: parsed.display,
                               codecs: parsed.codecs,
                               fonts: parsed.fonts,
-                              settings: parsed.settings
+                              settings: parsed.settings,
+                              webgl: parsed.webgl,
+                              keyboard: parsed.keyboard,
+                              intl: parsed.intl,
+                              languages: parsed.languages
                           })
                         : null;
                     const apple = click

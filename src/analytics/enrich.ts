@@ -76,7 +76,103 @@ export interface DeviceSignals {
     fonts: string | null;
     /** One bit per probed browser setting. */
     settings: string | null;
+    // Also fingerprint traits. JSON columns are re-serialized in schema order, so
+    // the same browser always stores (and hashes) the same text.
+    /** JSON: WebGL limits, versions and extensions. */
+    webgl: string | null;
+    /** Characters on the letter and punctuation keys, in US QWERTY order (Chromium only). */
+    keyboard: string | null;
+    /** JSON: locale, calendar, numbering, hour cycle, sample date and number. */
+    intl: string | null;
+    /** JSON array: navigator.languages. */
+    languages: string | null;
+    // Shown per click, not part of the fingerprint.
+    /** Hash of a drawn canvas, or "randomized" when the browser adds noise. */
+    canvas: string | null;
+    /** Sum of an offline-rendered audio signal. */
+    audio: string | null;
+    /** JSON: color gamut, HDR, pointer and hover media features. */
+    media_features: string | null;
+    /** JSON array: speech synthesis voices, "Name (lang)". */
+    voices: string | null;
+    /** Newest emoji version the system draws in color. */
+    emoji: number | null;
+    /** Hash of Math function results. */
+    math: string | null;
+    /** JSON: counts of cameras, microphones and speakers. */
+    media_devices: string | null;
+    /** JSON: permission states, e.g. {"notifications":"denied"}. */
+    permissions: string | null;
+    /** screen.isExtended: more than one monitor (Chromium only). */
+    multi_monitor: 0 | 1 | null;
+    /** JSON: WebGPU adapter vendor, architecture, device, description. */
+    webgpu: string | null;
+    /** Window inner size, "WxH". */
+    viewport: string | null;
 }
+
+type TraitKind = 'str' | 'int' | 'bool' | 'strs';
+
+const WEBGL_SCHEMA: Record<string, TraitKind> = {
+    version: 'str',
+    shading: 'str',
+    vendor: 'str',
+    maxTexture: 'int',
+    maxCubeMap: 'int',
+    maxRenderbuffer: 'int',
+    maxViewport: 'str',
+    textureUnits: 'int',
+    vertexTextureUnits: 'int',
+    combinedTextureUnits: 'int',
+    vertexAttribs: 'int',
+    varyingVectors: 'int',
+    vertexUniforms: 'int',
+    fragmentUniforms: 'int',
+    lineWidth: 'str',
+    pointSize: 'str',
+    precision: 'str',
+    antialias: 'bool',
+    extensions: 'strs'
+};
+const INTL_SCHEMA: Record<string, TraitKind> = {
+    locale: 'str',
+    calendar: 'str',
+    numbering: 'str',
+    hourCycle: 'str',
+    date: 'str',
+    number: 'str'
+};
+const MEDIA_FEATURES_SCHEMA: Record<string, TraitKind> = {
+    gamut: 'str',
+    hdr: 'bool',
+    pointer: 'str',
+    anyPointer: 'str',
+    hover: 'bool',
+    anyHover: 'bool',
+    monochrome: 'bool'
+};
+const MEDIA_DEVICES_SCHEMA: Record<string, TraitKind> = {
+    cameras: 'int',
+    microphones: 'int',
+    speakers: 'int'
+};
+const PERMISSIONS_SCHEMA: Record<string, TraitKind> = {
+    geolocation: 'str',
+    notifications: 'str',
+    camera: 'str',
+    microphone: 'str',
+    'persistent-storage': 'str',
+    midi: 'str',
+    'clipboard-read': 'str'
+};
+const WEBGPU_SCHEMA: Record<string, TraitKind> = {
+    vendor: 'str',
+    architecture: 'str',
+    device: 'str',
+    description: 'str'
+};
+const MAX_TRAIT_TEXT = 120;
+const MAX_LIST = 100;
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
 type UtmKey = (typeof UTM_KEYS)[number];
@@ -97,6 +193,9 @@ const BROWSER_VERSION_RE = /^[\w .,;()-]{1,200}$/;
 const DISPLAY_RE = /^\d{1,5}x\d{1,5}x\d{1,2}$/;
 const CODECS_RE = /^[0-5]{1,64}$/;
 const BITS_RE = /^[01]{1,64}$/;
+const HASH_RE = /^(?:[0-9a-f]{1,16}|randomized)$/;
+const AUDIO_RE = /^\d{1,6}(?:\.\d{1,20})?(?:e-?\d{1,3})?$/;
+const VIEWPORT_RE = /^\d{1,5}x\d{1,5}$/;
 const ORIENTATIONS = new Set([
     'portrait-primary',
     'portrait-secondary',
@@ -226,8 +325,78 @@ export function parseSignals(body: string): DeviceSignals | null {
         display: match('display', DISPLAY_RE),
         codecs: match('codecs', CODECS_RE),
         fonts: match('fonts', BITS_RE),
-        settings: match('settings', BITS_RE)
+        settings: match('settings', BITS_RE),
+        webgl: traitRecord(s.webgl, WEBGL_SCHEMA),
+        keyboard: traitText(s.keyboard, 64),
+        intl: traitRecord(s.intl, INTL_SCHEMA),
+        languages: jsonOrNull(
+            traitList(s.languages, 20)
+                ?.map(l => language(l))
+                .filter(l => l !== null) ?? []
+        ),
+        canvas: match('canvas', HASH_RE),
+        audio: match('audio', AUDIO_RE),
+        media_features: traitRecord(s.mediaFeatures, MEDIA_FEATURES_SCHEMA),
+        voices: jsonOrNull(traitList(s.voices, MAX_LIST) ?? []),
+        emoji:
+            typeof s.emoji === 'number' &&
+            Number.isInteger(s.emoji) &&
+            s.emoji >= 0 &&
+            s.emoji <= 99
+                ? s.emoji
+                : null,
+        math: match('math', HASH_RE),
+        media_devices: traitRecord(s.mediaDevices, MEDIA_DEVICES_SCHEMA),
+        permissions: traitRecord(s.permissions, PERMISSIONS_SCHEMA),
+        multi_monitor: flag('multiMonitor'),
+        webgpu: traitRecord(s.webgpu, WEBGPU_SCHEMA),
+        viewport: match('viewport', VIEWPORT_RE)
     };
+}
+
+/** Printable text, trimmed and capped; null when empty or not a string. */
+function traitText(value: unknown, max = MAX_TRAIT_TEXT): string | null {
+    if (typeof value !== 'string') return null;
+    // eslint-disable-next-line no-control-regex
+    return clean(value.replaceAll(/[\u0000-\u001F\u007F]/g, '').slice(0, max));
+}
+
+/** A list of printable strings, capped; null when not an array. */
+function traitList(value: unknown, max: number): string[] | null {
+    if (!Array.isArray(value)) return null;
+    return value
+        .slice(0, max)
+        .map(v => traitText(v))
+        .filter(v => v !== null);
+}
+
+function jsonOrNull(list: string[]): string | null {
+    return list.length > 0 ? JSON.stringify(list) : null;
+}
+
+/** Keeps only the schema's keys, in schema order, with values of the right kind; JSON or null. */
+function traitRecord(value: unknown, schema: Record<string, TraitKind>): string | null {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+    const raw = value as Record<string, unknown>;
+    const out: Record<string, string | number | boolean | string[]> = {};
+    for (const [key, kind] of Object.entries(schema)) {
+        const v = traitValue(raw[key], kind);
+        if (v !== null) out[key] = v;
+    }
+    return Object.keys(out).length > 0 ? JSON.stringify(out) : null;
+}
+
+function traitValue(v: unknown, kind: TraitKind): string | number | boolean | string[] | null {
+    switch (kind) {
+        case 'str':
+            return traitText(v);
+        case 'int':
+            return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
+        case 'bool':
+            return typeof v === 'boolean' ? v : null;
+        case 'strs':
+            return traitList(v, MAX_LIST);
+    }
 }
 
 /** A latitude/longitude header as a number within ±limit, or null. */

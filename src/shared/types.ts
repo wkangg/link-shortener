@@ -222,6 +222,36 @@ export interface ClickHistoryRow {
     adBlocker: boolean | null;
     /** The browser prefers a dark color scheme. */
     darkMode: boolean | null;
+    /** WebGL limits, versions and extensions. */
+    webgl: TraitRecord | null;
+    /** Characters on the letter/punctuation keys in US QWERTY order, e.g. "azertyuiop^$qsdfghjklmù…". */
+    keyboard: string | null;
+    /** Locale, calendar, numbering system, hour cycle, sample date and number. */
+    intl: TraitRecord | null;
+    /** navigator.languages, preferred first. */
+    languages: string[] | null;
+    /** Hash of a drawn canvas, or "randomized" when the browser adds noise. */
+    canvas: string | null;
+    /** Sum of an offline-rendered audio signal. */
+    audio: string | null;
+    /** Color gamut, HDR, pointer and hover. */
+    mediaFeatures: TraitRecord | null;
+    /** Speech synthesis voices, "Name (lang)". */
+    voices: string[] | null;
+    /** Newest emoji version the system draws in color. */
+    emoji: number | null;
+    /** Hash of Math function results. */
+    math: string | null;
+    /** Camera, microphone and speaker counts. */
+    mediaDevices: TraitRecord | null;
+    /** Permission states, e.g. { notifications: "denied" }. */
+    permissions: TraitRecord | null;
+    /** More than one monitor (Chromium only). */
+    multiMonitor: boolean | null;
+    /** WebGPU adapter vendor, architecture, device and description. */
+    webgpu: TraitRecord | null;
+    /** Window inner size, "WxH". */
+    viewport: string | null;
     /** Approximate (city-level) position of the IP, from the edge. */
     latitude: number | null;
     longitude: number | null;
@@ -244,6 +274,9 @@ export interface ClickHistoryRow {
     /** Notable browser settings, e.g. ["cookies on", "Do Not Track"]. */
     settings: string[] | null;
 }
+
+/** A browser-reported trait made of named values, e.g. WebGL limits. */
+export type TraitRecord = Record<string, string | number | boolean | string[]>;
 
 export interface ClickHistoryResponse {
     clicks: ClickHistoryRow[];

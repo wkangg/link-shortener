@@ -34,6 +34,14 @@ export interface FingerprintParts {
     fonts?: string | null;
     /** One bit per probed browser setting (cookies, Do Not Track, reduced motion…). */
     settings?: string | null;
+    /** WebGL limits, versions and extensions (JSON). */
+    webgl?: string | null;
+    /** Keyboard layout characters (Chromium only). */
+    keyboard?: string | null;
+    /** Regional formats (JSON). */
+    intl?: string | null;
+    /** navigator.languages (JSON array). */
+    languages?: string | null;
 }
 
 const ORDER: (keyof FingerprintParts)[] = [
@@ -54,7 +62,11 @@ const EXTRA: (keyof FingerprintParts)[] = [
     'display',
     'codecs',
     'fonts',
-    'settings'
+    'settings',
+    'webgl',
+    'keyboard',
+    'intl',
+    'languages'
 ];
 
 /**
