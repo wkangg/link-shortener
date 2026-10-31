@@ -5,7 +5,8 @@ import {
     describeSearch,
     parseSearch,
     quoteValue,
-    type SearchDialect
+    type SearchDialect,
+    tokenize
 } from '../../../analytics/search.ts';
 import { SEARCH_FIELDS, SEARCH_FLAGS, type SearchField } from '../../../shared/search.ts';
 import { api } from '../api.ts';
@@ -73,10 +74,12 @@ interface Suggestion {
     partial?: boolean;
 }
 
-/** The term around the caret, between whitespace, brackets and `||`/`&&`: where it starts and ends in `text`. */
-function termAt(text: string, caret: number) {
-    const start = text.slice(0, caret).search(/[^\s()|&]*$/);
-    const rest = text.slice(caret).search(/[\s()|&]|$/);
+/** The term around the caret, between whitespace, brackets, `||` and `&&`: where it starts and ends in `text`. */
+export function termAt(text: string, caret: number) {
+    // A single `|` or `&` is part of a value (`?a=1&b=2`), as in the tokenizer.
+    let start = 0;
+    for (const m of text.slice(0, caret).matchAll(/[\s()]|\|\||&&/g)) start = m.index + m[0].length;
+    const rest = text.slice(caret).search(/[\s()]|\|\||&&|$/);
     return { start, end: caret + rest, term: text.slice(start, caret) };
 }
 
@@ -85,9 +88,16 @@ function termAt(text: string, caret: number) {
  * is bracketed first, so the term applies to all of it.
  */
 export function withTerm(search: string, term: string): string {
-    const current = search.trim();
+    let current = search.trim();
     if (current.split(/\s+/).includes(term)) return current;
     if (current === '') return term;
+    // Close brackets still open while typing (`-(is:bot`), so the term isn't added inside them.
+    let open = 0;
+    for (const token of tokenize(current)) {
+        if ('op' in token && token.op !== '||' && token.op !== '&&')
+            open = Math.max(0, open + (token.op === ')' ? -1 : 1));
+    }
+    current += ')'.repeat(open);
     return `${current.includes('||') ? `(${current})` : current} ${term}`;
 }
 

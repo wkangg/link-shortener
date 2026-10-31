@@ -136,19 +136,23 @@ type Token = Term | Operator;
  * quote it ("a (b)") to keep those, with `\"` and `\\` for a quote or backslash inside.
  */
 const TOKEN_RE = new RegExp(
-    String.raw`(\|\||&&|-?\(|\))|(-?)(?:(${FIELD}):)?(=?)(?:"((?:[^"\\]|\\[\s\S]?)*)"?|((?:[^\s()|&]|\|(?!\|)|&(?!&))+))`,
+    String.raw`(\|\||&&|-?\(|\))|(-?)(?:(${FIELD}):)?(=?)(?:"((?:[^"\\]|\\[\s\S]?)*)("?)|((?:[^\s()|&]|\|(?!\|)|&(?!&))+))`,
     'gi'
 );
 
-/** Splits into terms and operators, keeping "quoted phrases" (also as `field:"a value"`) together. */
+/**
+ * Splits into terms and operators, keeping "quoted phrases" (also as `field:"a value"`)
+ * together. `field:""` is an empty value; `field:"` with nothing after it yet is skipped.
+ */
 export function tokenize(q: string): Token[] {
     const tokens: Token[] = [];
     for (const m of q.matchAll(TOKEN_RE)) {
-        const [, op, minus, field, eq, quoted, bare] = m;
+        const [, op, minus, field, eq, quoted, closed, bare] = m;
         if (op) {
             tokens.push({ op: op as Operator['op'] });
             continue;
         }
+        if (quoted === '' && !closed) continue;
         const value = eq + (quoted?.replaceAll(/\\(["\\])/g, '$1') ?? bare ?? '');
         if (!field && value === '') continue;
         // A URL ("https://…") or IPv6 address ("abcd:ef01::1") is text, not a field.
@@ -185,20 +189,26 @@ export interface SearchDialect {
     aliases?: Record<string, string>;
     /** Numeric fields (by usual name), where `<` and `>` start a comparison. */
     ranges?: ReadonlySet<string>;
+    /**
+     * Known fields (by usual name), for a search that reads other `name:value` terms as
+     * text rather than rejecting them: those stay AND-ed like text.
+     */
+    fields?: ReadonlySet<string>;
 }
 
 /**
- * What a term is OR-ed with when only spaces separate them: terms on the same field
- * (`country:=CA country:=US`), aliases included. Null for terms that are always
+ * What a term is OR-ed with when only spaces separate them: terms on the same known
+ * field (`country:=CA country:=US`), aliases included. Null for terms that are always
  * AND-ed: free text, negations (`-os:a -os:b` excludes both), ranges on numeric fields
  * (`ram:>=4 ram:<16`), and `is:`/`has:`, whose flags are independent.
  */
-function implicitKey(term: Term, { aliases = {}, ranges }: SearchDialect): string | null {
+function implicitKey(term: Term, { aliases = {}, ranges, fields }: SearchDialect): string | null {
     if (term.field === null || term.negate) return null;
     // `param.ref` is `query.ref`.
     const field = term.field.replace(/^param\./, 'query.');
     if (field === 'is' || field === 'has') return null;
     const name = aliases[field] ?? field;
+    if (fields && !fields.has(name)) return null;
     if (ranges?.has(name) && /^[<>]/.test(term.value)) return null;
     return name;
 }
@@ -467,10 +477,10 @@ function termCondition(
 
 /**
  * A field with nothing after it yet (`ip:`, `ip:=`), so results filter as you type.
- * (The tokenizer reads a bare `ip:` as text.)
+ * The tokenizer reads these as text, and skips `ip:"`; `ip:=""` is an empty value.
  */
 function isUnfinished(term: Term): boolean {
-    return term.field ? term.value.replace(/^=/, '') === '' : UNFINISHED_RE.test(term.value);
+    return term.field === null && UNFINISHED_RE.test(term.value);
 }
 
 /** Compiles a search into one SQL condition over `clicks c`. */

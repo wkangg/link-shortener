@@ -9,6 +9,7 @@ import {
     tokenize
 } from '../src/analytics/search.ts';
 import { BadQueryError, Stats } from '../src/analytics/stats.ts';
+import { termAt, withTerm } from '../src/dashboard/client/components/SearchBox.tsx';
 import { openDatabase } from '../src/db/client.ts';
 import { LINK_SEARCH_DIALECT, SEARCH_FIELDS, SEARCH_FLAGS } from '../src/shared/search.ts';
 import type { StatsQuery } from '../src/shared/types.ts';
@@ -263,5 +264,33 @@ describe('same-field OR edge cases', () => {
         expect(tokenize(String.raw`"a\b"`)).toEqual([
             { negate: false, field: null, value: String.raw`a\b` }
         ]);
+    });
+});
+
+describe('second review', () => {
+    test('field:"" is an exact empty value; field:" is still being typed', () => {
+        expect(tokenize('query.ref:=""')).toEqual([
+            { negate: false, field: 'query.ref', value: '=' }
+        ]);
+        expect(tokenize('os:"')).toEqual([]);
+        expect(described('query.ref:="" is:qr')).toBe('query.ref:="" AND is:qr');
+    });
+
+    test('unknown links fields stay AND-ed', () => {
+        expect(parseSearch('color:red color:blue', LINK_SEARCH_DIALECT)?.kind).toBe('and');
+        expect(parseSearch('tag:a tag:b', LINK_SEARCH_DIALECT)?.kind).toBe('or');
+    });
+
+    test('a clicked term goes after open brackets', () => {
+        expect(withTerm('-(is:bot', 'country:=CA')).toBe('-(is:bot) country:=CA');
+        expect(withTerm('(a || (b', 'c')).toBe('((a || (b))) c');
+        expect(withTerm('os:"a (b"', 'c')).toBe('os:"a (b" c');
+    });
+
+    test('autocomplete splits only at && and ||', () => {
+        const text = 'destination:https://x/?a=1&b';
+        expect(termAt(text, text.length).term).toBe(text);
+        expect(termAt('a&&os:i', 7).term).toBe('os:i');
+        expect(termAt('(a||os:i)', 8)).toEqual({ start: 4, end: 8, term: 'os:i' });
     });
 });
