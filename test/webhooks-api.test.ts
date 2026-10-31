@@ -331,6 +331,13 @@ describe('webhook endpoints API', () => {
         // Plain words still match slug, destination and title.
         expect(await slugs('b.example')).toEqual(['sb']);
         expect(await slugs('https://c.example')).toEqual(['sc']);
+        // || and brackets combine terms.
+        expect(await slugs('slug:=sa || slug:=sc')).toEqual(['sa', 'sc']);
+        expect(await slugs('(has:tag || has:tracking) && -slug:=sa')).toEqual(['sb']);
+        // The same field twice is either; url: is destination:.
+        expect(await slugs('slug:=sa slug:=sc')).toEqual(['sa', 'sc']);
+        expect(await slugs('url:a.example destination:c.example')).toEqual(['sa', 'sc']);
+        expect(await slugs('slug:=sa slug:=sc has:tracking')).toEqual(['sa']);
 
         const bad = await send<ApiError>('GET', '/api/links?q=has:nope');
         expect(bad.status).toBe(400);
