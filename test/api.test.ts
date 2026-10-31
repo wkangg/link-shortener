@@ -253,7 +253,13 @@ describe('detailed device tracking', () => {
             gpu: 'Apple GPU',
             incognito: true,
             adBlocker: false,
-            timezone: 'America/Vancouver'
+            timezone: 'America/Vancouver',
+            browserVersion: 'Safari 18.6',
+            display: '390x844x24',
+            codecs: '5500000020000000',
+            fonts: '01',
+            settings: '1001',
+            darkMode: true
         };
         const post = (body: unknown) =>
             fetch(new URL('/_/signals', t.app.short.url), {
@@ -281,7 +287,13 @@ describe('detailed device tracking', () => {
             connection: '4g',
             gpu: 'Apple GPU',
             incognito: true,
-            adBlocker: false
+            adBlocker: false,
+            browserVersion: 'Safari 18.6',
+            display: '390x844x24',
+            codecs: ['H.264', 'HEVC', 'HLS'],
+            fonts: ['Calibri'],
+            settings: ['cookies on', 'PDF viewer'],
+            darkMode: true
         });
     });
 });
@@ -295,7 +307,7 @@ describe('about', () => {
         expect(about.database).toMatchObject({
             path: '',
             walBytes: 0,
-            migration: '0001_init.sql',
+            migration: '0002_fingerprint_traits.sql',
             sqliteVersion: expect.stringMatching(/^3\./)
         });
         expect(about.database.sizeBytes).toBeGreaterThan(0);

@@ -66,7 +66,7 @@ When a link has tracking turned on, visitors see a short page instead of a bare 
 
 - OS version, screen size, orientation, GPU, RAM, CPU cores, touch points, network type and battery
 - Private browsing and ad-blocker detection
-- A coarse **device fingerprint** that groups one device's clicks across days and IP changes
+- A **device fingerprint** that groups one device's clicks across days and IP changes, built from the browser version, language, timezone, display, GPU, media codecs, installed fonts and browser settings
 
 ### 🔳 QR codes
 
@@ -293,7 +293,7 @@ This is an analytics tool, and it records a lot about each click. Know what's st
 - **IP addresses are stored** with each click, along with ISP, reverse DNS hostname and abuse score, for the click history and reputation checks.
 - **Unique visitors** are counted with a hash of your `VISITOR_SALT`, the IP and the user agent. The same IP and browser count as one visitor across any date range.
 - **Location** comes from Cloudflare's headers. There's no GeoIP database.
-- **Device signals and fingerprints** are collected only on links with detailed tracking turned on. A fingerprint is a coarse hash of browser properties, not an identifier for a person.
+- **Device signals and fingerprints** are collected only on links with detailed tracking turned on. A fingerprint is a hash of browser properties for grouping clicks, not an identifier for a person.
 - Every click lives in one SQLite file you control. No data goes to third parties, except IP lookups to AbuseIPDB when you configure a key, and the webhooks you add yourself.
 - **Webhooks** send coarse location, device, source and the visitor hash by default. IP addresses and user agents go only to endpoints you turn that on for.
 

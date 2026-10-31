@@ -3,6 +3,8 @@
 // then replaces itself with the destination. Never waits more than ~0.5 s for
 // slow APIs, and a meta refresh forwards anyway if the script fails or JS is off.
 
+import { CODECS, FONTS } from '../shared/probes.ts';
+
 /** Where the page posts its signals. Not a valid slug, so it can't shadow a link. */
 export const SIGNALS_PATH = '/_/signals';
 
@@ -12,11 +14,13 @@ export const MAX_SIGNALS_BODY = 4096;
 // Runs in the visitor's browser. `D` is the destination, `T` the click token.
 // Every probe is optional: an API that's missing or throws just leaves its field out.
 const SCRIPT = String.raw`(function(){
+var CODECS=${JSON.stringify(CODECS.map(([mime]) => mime))},FONTS=${JSON.stringify(FONTS)};
 var n=navigator,s={t:T},done=false;
 function go(){if(!done){done=true;location.replace(D)}}
 function tryit(f){try{return f()}catch(e){}}
 setTimeout(go,1500);
 s.screen=screen.width+'x'+screen.height+'@'+(Math.round(devicePixelRatio*100)/100);
+s.display=screen.availWidth+'x'+screen.availHeight+'x'+screen.colorDepth;
 s.orientation=tryit(function(){return screen.orientation.type});
 s.timezone=tryit(function(){return Intl.DateTimeFormat().resolvedOptions().timeZone});
 s.language=n.language;
@@ -30,6 +34,37 @@ s.gpu=tryit(function(){
   var g=document.createElement('canvas').getContext('webgl');
   var x=g.getExtension('WEBGL_debug_renderer_info');
   return g.getParameter(x?x.UNMASKED_RENDERER_WEBGL:g.RENDERER);
+});
+s.codecs=tryit(function(){
+  var v=document.createElement('video'),a=document.createElement('audio'),M=window.MediaSource;
+  return CODECS.map(function(t){
+    var p=(t.indexOf('audio/')===0?a:v).canPlayType(t);
+    return (p==='probably'?2:p==='maybe'?1:0)+(M&&M.isTypeSupported&&M.isTypeSupported(t)?3:0);
+  }).join('');
+});
+s.fonts=tryit(function(){
+  var x=document.createElement('canvas').getContext('2d'),base=['monospace','sans-serif','serif'],w={};
+  function m(f){x.font='72px '+f;return x.measureText('mmmmmmmmmmlli10OQ@#').width}
+  base.forEach(function(b){w[b]=m(b)});
+  return FONTS.map(function(f){
+    return base.some(function(b){return m("'"+f+"',"+b)!==w[b]})?1:0;
+  }).join('');
+});
+// Dark mode is reported on its own, outside the fingerprint: auto dark mode flips it by time of day.
+s.darkMode=tryit(function(){return matchMedia('(prefers-color-scheme: dark)').matches});
+s.settings=tryit(function(){
+  function q(m){return matchMedia(m).matches?1:0}
+  return [
+    n.cookieEnabled?1:0,
+    n.doNotTrack==='1'||window.doNotTrack==='1'?1:0,
+    n.globalPrivacyControl?1:0,
+    n.pdfViewerEnabled?1:0,
+    q('(prefers-reduced-motion: reduce)'),
+    q('(prefers-contrast: more)'),
+    q('(forced-colors: active)'),
+    q('(prefers-reduced-transparency: reduce)'),
+    q('(inverted-colors: inverted)')
+  ].join('');
 });
 var bait=document.createElement('div');
 // Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
@@ -47,18 +82,21 @@ function incognito(){
   if(st.getDirectory)return st.getDirectory().then(function(){return false},function(){return true});
   return Promise.resolve(null);
 }
-function platform(){
+function hints(){
   var u=n.userAgentData;
-  if(!u||!u.getHighEntropyValues)return Promise.resolve(null);
-  return u.getHighEntropyValues(['platformVersion']).then(function(h){
+  if(!u||!u.getHighEntropyValues)return null;
+  return u.getHighEntropyValues(['platformVersion','fullVersionList']).then(function(h){
     var v=parseInt(h.platformVersion,10)||0;
     // Windows reports 13+ for Windows 11 and 1-10 for Windows 10.
-    if(u.platform==='Windows')return v>=13?'Windows 11':'Windows 10';
-    return u.platform+(h.platformVersion?' '+h.platformVersion:'');
+    var p=u.platform==='Windows'?(v>=13?'Windows 11':'Windows 10'):u.platform+(h.platformVersion?' '+h.platformVersion:'');
+    if(p)s.platform=p;
+    // The User-Agent header only has the major version; this has the full one.
+    var b=(h.fullVersionList||[]).filter(function(x){return !/Not.?A.?Brand/i.test(x.brand)});
+    if(b.length)s.browserVersion=b.map(function(x){return x.brand+' '+x.version}).join(', ');
   });
 }
 var tasks=[
-  platform().then(function(v){if(v)s.platform=v}),
+  hints(),
   n.getBattery?n.getBattery().then(function(b){s.battery=Math.round(b.level*100);s.charging=b.charging}):0,
   incognito().then(function(v){if(v!==null)s.incognito=v}),
   new Promise(function(r){setTimeout(r,30)}).then(function(){

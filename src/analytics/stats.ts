@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
+import { codecNames, fontNames, settingNames } from '../shared/probes.ts';
 import type {
     ClickHistoryResponse,
     ClickHistoryRow,
@@ -316,9 +317,16 @@ export class Stats {
             sql += ' AND (c.ts < ? OR (c.ts = ? AND c.id < ?))';
             params.push(ts, ts, id);
         }
-        type Flags = 'qr' | 'bot' | 'isDatacenter' | 'charging' | 'incognito' | 'adBlocker';
+        type Flags =
+            'qr' | 'bot' | 'isDatacenter' | 'charging' | 'incognito' | 'adBlocker' | 'darkMode';
+        type Probes = 'codecs' | 'fonts' | 'settings';
         const rows = this.#db
-            .query<Omit<ClickHistoryRow, Flags> & Record<Flags, number | null>, Param[]>(
+            .query<
+                Omit<ClickHistoryRow, Flags | Probes> &
+                    Record<Flags, number | null> &
+                    Record<Probes, string | null>,
+                Param[]
+            >(
                 `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
                         c.device, c.browser, c.os, c.os_version AS osVersion, c.is_bot AS bot, c.bot_name AS botName,
@@ -327,7 +335,9 @@ export class Stats {
                         c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
                         c.screen, c.orientation, c.battery, c.charging, c.connection, c.gpu,
                         c.incognito, c.ad_blocker AS adBlocker, c.latitude, c.longitude,
-                        c.memory, c.cpu_cores AS cpuCores, c.platform, c.touch_points AS touchPoints
+                        c.memory, c.cpu_cores AS cpuCores, c.platform, c.touch_points AS touchPoints,
+                        c.browser_version AS browserVersion, c.display, c.codecs, c.fonts, c.settings,
+                        c.dark_mode AS darkMode
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -343,7 +353,11 @@ export class Stats {
                 isDatacenter: r.isDatacenter === 1,
                 charging: flag(r.charging),
                 incognito: flag(r.incognito),
-                adBlocker: flag(r.adBlocker)
+                adBlocker: flag(r.adBlocker),
+                darkMode: flag(r.darkMode),
+                codecs: codecNames(r.codecs),
+                fonts: fontNames(r.fonts),
+                settings: settingNames(r.settings)
             })),
             next: more && last ? `${last.ts}_${last.id}` : null,
             total

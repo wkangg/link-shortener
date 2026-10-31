@@ -220,6 +220,8 @@ export interface ClickHistoryRow {
     gpu: string | null;
     incognito: boolean | null;
     adBlocker: boolean | null;
+    /** The browser prefers a dark color scheme. */
+    darkMode: boolean | null;
     /** Approximate (city-level) position of the IP, from the edge. */
     latitude: number | null;
     longitude: number | null;
@@ -231,6 +233,16 @@ export interface ClickHistoryRow {
     platform: string | null;
     /** Max simultaneous touches; 0 = no touch screen. */
     touchPoints: number | null;
+    /** Full browser version(s) from client hints, e.g. "Google Chrome 130.0.6723.92". */
+    browserVersion: string | null;
+    /** Usable screen size and color depth, e.g. "1920x1032x24". */
+    display: string | null;
+    /** Playable media formats, e.g. ["H.264", "VP9", "Opus (WebM)"]. */
+    codecs: string[] | null;
+    /** Detected installed fonts (from a fixed list of common ones). */
+    fonts: string[] | null;
+    /** Notable browser settings, e.g. ["cookies on", "Do Not Track"]. */
+    settings: string[] | null;
 }
 
 export interface ClickHistoryResponse {

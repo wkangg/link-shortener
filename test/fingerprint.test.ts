@@ -44,6 +44,19 @@ describe('computeFingerprint', () => {
         expect(withSignals).not.toBe(headersOnly);
     });
 
+    test('newer traits refine the hash without changing header-only values', () => {
+        // Hashed the way it was before browserVersion..settings existed.
+        const legacy = Bun.hash([CHROME_WIN, 'en-US', 'UTC', '', '', '', '', ''].join('')).toString(
+            36
+        );
+        const headersOnly = { ua: CHROME_WIN, language: 'en-US', timezone: 'UTC' };
+        expect(computeFingerprint(headersOnly)).toBe(legacy);
+        const fonts = computeFingerprint({ ...headersOnly, fonts: '0110' });
+        expect(fonts).not.toBe(legacy);
+        expect(computeFingerprint({ ...headersOnly, fonts: '0111' })).not.toBe(fonts);
+        expect(computeFingerprint({ ...headersOnly, codecs: '0110' })).not.toBe(fonts);
+    });
+
     test('nothing identifying yields null', () => {
         expect(computeFingerprint({})).toBeNull();
         expect(computeFingerprint({ ua: '', language: null, timezone: undefined })).toBeNull();

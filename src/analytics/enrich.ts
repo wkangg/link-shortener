@@ -61,8 +61,21 @@ export interface DeviceSignals {
     touch_points: number | null;
     /** navigator.webdriver: the browser is driven by automation. */
     webdriver: 0 | 1 | null;
+    /** prefers-color-scheme: dark. Shown per click, not part of the fingerprint. */
+    dark_mode: 0 | 1 | null;
     timezone: string | null;
     language: string | null;
+    // Fingerprint traits; shared/probes.ts reads codecs, fonts and settings.
+    /** Full browser version(s) from client hints. */
+    browser_version: string | null;
+    /** "availWidth x availHeight x colorDepth". */
+    display: string | null;
+    /** One digit (0-5) per probed media type. */
+    codecs: string | null;
+    /** One bit per probed font. */
+    fonts: string | null;
+    /** One bit per probed browser setting. */
+    settings: string | null;
 }
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
@@ -80,6 +93,10 @@ const LANGUAGE_RE = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
 const TIMEZONE_RE = /^[A-Za-z][\w+-]*(?:\/[\w+-]+){0,2}$/;
 const SCREEN_RE = /^[1-9]\d{0,4}x[1-9]\d{0,4}(?:@\d{1,2}(?:\.\d{1,2})?)?$/;
 const PLATFORM_RE = /^[\w .-]{1,40}$/;
+const BROWSER_VERSION_RE = /^[\w .,;()-]{1,200}$/;
+const DISPLAY_RE = /^\d{1,5}x\d{1,5}x\d{1,2}$/;
+const CODECS_RE = /^[0-5]{1,64}$/;
+const BITS_RE = /^[01]{1,64}$/;
 const ORIENTATIONS = new Set([
     'portrait-primary',
     'portrait-secondary',
@@ -167,6 +184,7 @@ export function parseSignals(body: string): DeviceSignals | null {
     if (typeof raw !== 'object' || raw === null) return null;
     const s = raw as Record<string, unknown>;
     const str = (key: string) => (typeof s[key] === 'string' ? s[key] : '');
+    const match = (key: string, re: RegExp) => (re.test(str(key)) ? str(key) : null);
     const flag = (key: string) => (typeof s[key] === 'boolean' ? (s[key] ? 1 : 0) : null);
     const battery = s.battery;
     return {
@@ -201,8 +219,14 @@ export function parseSignals(body: string): DeviceSignals | null {
                 ? s.touch
                 : null,
         webdriver: flag('webdriver'),
+        dark_mode: flag('darkMode'),
         timezone: timezone(str('timezone')),
-        language: language(str('language'))
+        language: language(str('language')),
+        browser_version: match('browserVersion', BROWSER_VERSION_RE),
+        display: match('display', DISPLAY_RE),
+        codecs: match('codecs', CODECS_RE),
+        fonts: match('fonts', BITS_RE),
+        settings: match('settings', BITS_RE)
     };
 }
 

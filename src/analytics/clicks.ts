@@ -63,7 +63,13 @@ const SIGNAL_COLUMNS = [
     'cpu_cores',
     'platform',
     'touch_points',
-    'webdriver'
+    'webdriver',
+    'browser_version',
+    'display',
+    'codecs',
+    'fonts',
+    'settings',
+    'dark_mode'
 ] as const satisfies readonly (keyof DeviceSignals)[];
 
 /** Unused tokens are cleared (and their clicks reclassified) at most this often. */
@@ -252,7 +258,12 @@ export class ClickBuffer implements ClickSink {
                               gpu: parsed.gpu,
                               platform: parsed.platform,
                               memory: parsed.memory,
-                              touchPoints: parsed.touch_points
+                              touchPoints: parsed.touch_points,
+                              browserVersion: parsed.browser_version,
+                              display: parsed.display,
+                              codecs: parsed.codecs,
+                              fonts: parsed.fonts,
+                              settings: parsed.settings
                           })
                         : null;
                     const apple = click

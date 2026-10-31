@@ -95,6 +95,31 @@ function specs(c: ClickHistoryRow): (string | null)[] {
     ];
 }
 
+/** Usable screen area and color depth, e.g. "1920×1032 usable · 24-bit color". */
+function displayLabel(display: string | null): string | null {
+    const m = display && /^(\d+)x(\d+)x(\d+)$/.exec(display);
+    return m ? `${m[1]}×${m[2]} usable · ${m[3]}-bit color` : null;
+}
+
+/** Browser settings plus the color scheme, e.g. ["dark mode", "cookies on"]. */
+function browserSettings(c: ClickHistoryRow): string[] {
+    const scheme = c.darkMode === null ? [] : [c.darkMode ? 'dark mode' : 'light mode'];
+    return [...scheme, ...(c.settings ?? [])];
+}
+
+/** A collapsed list, e.g. "Fonts (12)", for traits too long to show inline. */
+function TraitList({ label, items }: { label: string; items: string[] | null }) {
+    if (items === null) return null;
+    return (
+        <details className="history-raw">
+            <summary>
+                {label} ({items.length})
+            </summary>
+            {items.length > 0 ? <Dotted items={items} /> : <span className="muted">none</span>}
+        </details>
+    );
+}
+
 /**
  * Items separated by middots. Each item is an inline block, so lines break between items,
  * and an item wider than the column wraps inside itself instead of widening the table.
@@ -522,11 +547,22 @@ export function ClickHistory({
                                         <span className="history-sub">
                                             <Dotted items={specs(c)} />
                                         </span>
+                                        {displayLabel(c.display) && (
+                                            <span className="history-sub">
+                                                {displayLabel(c.display)}
+                                            </span>
+                                        )}
                                         {c.gpu && (
                                             <span className="history-sub" title={c.gpu}>
                                                 {gpuName(c.gpu)}
                                             </span>
                                         )}
+                                        {browserSettings(c).length > 0 && (
+                                            <span className="history-sub" title="Browser settings">
+                                                <Dotted items={browserSettings(c)} />
+                                            </span>
+                                        )}
+                                        <TraitList label="Fonts" items={c.fonts} />
                                         {(c.incognito || c.adBlocker || c.fingerprint) && (
                                             <span className="history-tags">
                                                 {c.incognito && (
@@ -563,6 +599,15 @@ export function ClickHistory({
                                                 {c.botName ? `bot: ${c.botName}` : 'bot'}
                                             </span>
                                         )}
+                                        {c.browserVersion && (
+                                            <span
+                                                className="history-sub"
+                                                title="Full version, from client hints"
+                                            >
+                                                {c.browserVersion}
+                                            </span>
+                                        )}
+                                        <TraitList label="Codecs" items={c.codecs} />
                                         {c.userAgent && (
                                             <details className="history-raw">
                                                 <summary>User agent</summary>

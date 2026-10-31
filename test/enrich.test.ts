@@ -126,7 +126,13 @@ describe('extra click fields', () => {
                     cores: 12,
                     platform: 'Windows 11',
                     touch: 10,
-                    webdriver: false
+                    webdriver: false,
+                    browserVersion: 'Chromium 130.0.6723.92, Google Chrome 130.0.6723.92',
+                    display: '1920x1032x24',
+                    codecs: '50505000052222002222',
+                    fonts: '0110101',
+                    settings: '100100000',
+                    darkMode: false
                 })
             )
         ).toEqual({
@@ -144,7 +150,30 @@ describe('extra click fields', () => {
             touch_points: 10,
             webdriver: 0,
             timezone: 'Europe/Paris',
-            language: 'en-GB'
+            language: 'en-GB',
+            browser_version: 'Chromium 130.0.6723.92, Google Chrome 130.0.6723.92',
+            display: '1920x1032x24',
+            codecs: '50505000052222002222',
+            fonts: '0110101',
+            settings: '100100000',
+            dark_mode: 0
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    browserVersion: '<script>',
+                    display: '1920x1080',
+                    codecs: '0129',
+                    fonts: '012',
+                    settings: 7
+                })
+            )
+        ).toMatchObject({
+            browser_version: null,
+            display: null,
+            codecs: null,
+            fonts: null,
+            settings: null
         });
         expect(
             parseSignals(
