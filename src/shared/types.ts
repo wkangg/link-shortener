@@ -183,6 +183,19 @@ export interface ClickHistoryRow {
     country: string | null;
     region: string | null;
     city: string | null;
+    /** Continent code from Cloudflare, e.g. "NA". */
+    continent: string | null;
+    /** ISO subdivision code, e.g. "NY". */
+    regionCode: string | null;
+    postalCode: string | null;
+    /** US DMA / metro code. */
+    metroCode: string | null;
+    /** Cloudflare edge datacenter that served the click, e.g. "EWR". */
+    edgeColo: string | null;
+    /** The IP's autonomous system number. */
+    asn: number | null;
+    /** The IP's network / AS organization. */
+    asOrg: string | null;
     referrer: string | null;
     source: string;
     qr: boolean;
@@ -363,6 +376,20 @@ export interface RawClick {
     country: string;
     region: string;
     city: string;
+    /** CF-IPContinent header, e.g. "NA". */
+    continent: string;
+    /** CF-Region-Code header (ISO subdivision), e.g. "NY". */
+    regionCode: string;
+    /** CF-Postal-Code header. */
+    postalCode: string;
+    /** CF-Metro-Code header (US DMA). */
+    metroCode: string;
+    /** CF-RAY header; its suffix is the edge datacenter, e.g. "...-EWR". */
+    ray: string;
+    /** ASN, from a Cloudflare Transform Rule that sets a header to ip.src.asnum. */
+    asn: string;
+    /** AS organization name, from a Transform Rule / Worker header. */
+    asOrg: string;
     qr: boolean;
     /** Query string from the short URL, without the leading `?` and without `qr`. */
     query: string;

@@ -22,6 +22,13 @@ const base: RawClick = {
     country: 'CA',
     region: 'Ontario',
     city: 'Toronto',
+    continent: '',
+    regionCode: '',
+    postalCode: '',
+    metroCode: '',
+    ray: '',
+    asn: '',
+    asOrg: '',
     qr: false,
     query: '',
     language: '',
@@ -428,6 +435,48 @@ describe('extra click fields', () => {
             emoji: null,
             viewport: null,
             keyboard: null
+        });
+    });
+});
+
+describe('Cloudflare edge fields', () => {
+    test('parsed, validated and the edge colo is pulled from CF-RAY', () => {
+        expect(
+            enrichClick(
+                {
+                    ...base,
+                    continent: 'na',
+                    regionCode: 'NY',
+                    postalCode: '10001',
+                    metroCode: '501',
+                    ray: '8a1b2c3d4e5f6a7b-EWR',
+                    asn: 'AS13335',
+                    asOrg: 'Cloudflare, Inc.'
+                },
+                opts
+            )
+        ).toMatchObject({
+            continent: 'NA',
+            region_code: 'NY',
+            postal_code: '10001',
+            metro_code: '501',
+            edge_colo: 'EWR',
+            asn: 13_335,
+            as_org: 'Cloudflare, Inc.'
+        });
+    });
+
+    test('junk values are dropped', () => {
+        expect(
+            enrichClick(
+                { ...base, continent: 'North', metroCode: 'abc', ray: 'nodash', asn: 'AS0' },
+                opts
+            )
+        ).toMatchObject({
+            continent: null,
+            metro_code: null,
+            edge_colo: null,
+            asn: null
         });
     });
 });

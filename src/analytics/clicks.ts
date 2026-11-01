@@ -49,7 +49,14 @@ const COLUMNS = [
     'is_datacenter',
     'js',
     'accept_language',
-    'ip_timezone'
+    'ip_timezone',
+    'continent',
+    'region_code',
+    'postal_code',
+    'metro_code',
+    'edge_colo',
+    'asn',
+    'as_org'
 ] as const satisfies readonly (keyof ClickRow)[];
 
 const SIGNAL_COLUMNS = [

@@ -46,6 +46,20 @@ export interface ClickRow {
     accept_language: string | null;
     /** CF-Timezone: the IP's zone. Kept when the browser later reports its own. */
     ip_timezone: string | null;
+    /** CF-IPContinent, e.g. "NA". */
+    continent: string | null;
+    /** CF-Region-Code (ISO subdivision), e.g. "NY". */
+    region_code: string | null;
+    /** CF-Postal-Code. */
+    postal_code: string | null;
+    /** CF-Metro-Code (US DMA). */
+    metro_code: string | null;
+    /** The Cloudflare edge datacenter that served the click, e.g. "EWR" (from CF-RAY). */
+    edge_colo: string | null;
+    /** The IP's autonomous system number (set by a Transform Rule). */
+    asn: number | null;
+    /** The IP's network/AS organization name. */
+    as_org: string | null;
 }
 
 /** Browser-side signals from the device-signals page, validated. Null means not reported. */
@@ -342,7 +356,14 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         is_datacenter: 0,
         js: click.token ? 0 : null,
         accept_language: clean(click.language.slice(0, MAX_ACCEPT_LANGUAGE)),
-        ip_timezone: tz
+        ip_timezone: tz,
+        continent: code(click.continent, 2),
+        region_code: clean(decodeHeader(click.regionCode).slice(0, 8)),
+        postal_code: clean(decodeHeader(click.postalCode).slice(0, 16)),
+        metro_code: /^\d{1,4}$/.test(click.metroCode.trim()) ? click.metroCode.trim() : null,
+        edge_colo: code(click.ray.split('-').at(-1) ?? '', 3),
+        asn: asNumber(click.asn),
+        as_org: clean(decodeHeader(click.asOrg).slice(0, 80))
     };
 }
 
@@ -521,6 +542,18 @@ function traitValue(v: unknown, kind: TraitKind): string | number | boolean | st
         case 'strs':
             return traitList(v, MAX_LIST);
     }
+}
+
+/** An uppercased letter code of exactly `length` letters (e.g. "NA", "EWR"), or null. */
+function code(value: string, length: number): string | null {
+    const upper = value.trim().toUpperCase();
+    return new RegExp(`^[A-Z]{${length}}$`).test(upper) ? upper : null;
+}
+
+/** A public ASN (1 … 4294967295), or null. */
+function asNumber(value: string): number | null {
+    const n = Number(value.trim().replace(/^AS/i, ''));
+    return Number.isInteger(n) && n >= 1 && n <= 4_294_967_295 ? n : null;
 }
 
 /** A latitude/longitude header as a number within ±limit, or null. */

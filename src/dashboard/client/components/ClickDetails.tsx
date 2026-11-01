@@ -432,6 +432,23 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                     ]}
                 />
                 <Section
+                    title="Network"
+                    rows={[
+                        [
+                            'Network',
+                            c.asn || c.asOrg
+                                ? [c.asn && `AS${c.asn}`, c.asOrg].filter(Boolean).join(' · ')
+                                : null
+                        ],
+                        [
+                            'Place',
+                            [c.postalCode, c.regionCode, c.continent].filter(Boolean).join(' · ')
+                        ],
+                        ['US metro', c.metroCode],
+                        ['Edge', c.edgeColo && `Cloudflare ${c.edgeColo}`]
+                    ]}
+                />
+                <Section
                     title="Display"
                     rows={[
                         ['Screen', c.screen && screenLabel(c.screen)],

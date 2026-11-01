@@ -343,7 +343,7 @@ describe('about', () => {
         expect(about.database).toMatchObject({
             path: '',
             walBytes: 0,
-            migration: '0004_click_context.sql',
+            migration: '0005_cloudflare_geo.sql',
             sqliteVersion: expect.stringMatching(/^3\./)
         });
         expect(about.database.sizeBytes).toBeGreaterThan(0);

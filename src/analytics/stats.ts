@@ -366,6 +366,8 @@ export class Stats {
                         c.dark_mode AS darkMode, c.webgl, c.keyboard, c.intl, c.languages,
                         c.canvas, c.audio, c.media_features AS mediaFeatures, c.voices, c.emoji,
                         c.math, c.media_devices AS mediaDevices, c.permissions,
+                        c.continent, c.region_code AS regionCode, c.postal_code AS postalCode,
+                        c.metro_code AS metroCode, c.edge_colo AS edgeColo, c.asn, c.as_org AS asOrg,
                         c.multi_monitor AS multiMonitor, c.webgpu, c.viewport,
                         c.webdriver, c.js, c.visitor_hash AS visitorHash, c.query,
                         json_object('source', c.utm_source, 'medium', c.utm_medium,
