@@ -125,7 +125,11 @@ export function startApp(opts: AppOptions) {
         dashOrigin: config.dashOrigin,
         shortOrigin: config.shortOrigin,
         reputation: reputation !== null,
-        abuseMinScore: config.abuseMinScore
+        abuseMinScore: config.abuseMinScore,
+        flushClicks: () => {
+            clicks.flush();
+            return clicks.pending === 0;
+        }
     });
 
     return {

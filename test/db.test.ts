@@ -1,9 +1,16 @@
+import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { databaseInfo, MIGRATIONS_DIR, openDatabase, pingDatabase } from '../src/db/client.ts';
+import {
+    copyDatabase,
+    databaseInfo,
+    MIGRATIONS_DIR,
+    openDatabase,
+    pingDatabase
+} from '../src/db/client.ts';
 import { migrate } from '../src/db/migrate.ts';
 import { createLinkLookup } from '../src/redirect/lookup.ts';
 
@@ -11,6 +18,26 @@ const tmp = mkdtempSync(path.join(tmpdir(), 'shortener-db-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
 describe('database', () => {
+    test('copies a file database in a worker, including unflushed WAL writes', async () => {
+        const db = openDatabase(path.join(tmp, 'export.db'));
+        db.run(
+            "INSERT INTO links (slug, url, created_at, updated_at) VALUES ('copied', 'https://example.com/', 1, 1)"
+        );
+        const target = path.join(tmp, 'export-copy.db');
+        await copyDatabase(db, target);
+        db.close();
+
+        const copy = new Database(target, { readonly: true });
+        expect(copy.query('SELECT url FROM links WHERE slug = ?').get('copied')).toEqual({
+            url: 'https://example.com/'
+        });
+        expect(copy.query('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'delete' });
+        copy.close();
+
+        // VACUUM INTO refuses to overwrite; the worker's error reaches the caller.
+        await expect(copyDatabase(db, target)).rejects.toThrow();
+    });
+
     test('creates the file, enables WAL and applies migrations', () => {
         const db = openDatabase(path.join(tmp, 'nested', 'links.db'));
         expect(

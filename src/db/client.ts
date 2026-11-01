@@ -3,6 +3,7 @@ import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 import type { DatabaseInfo } from '../shared/types.ts';
+import type { ExportRequest, ExportResult } from './export-worker.ts';
 import { migrate } from './migrate.ts';
 
 export const MIGRATIONS_DIR = path.join(import.meta.dir, 'migrations');
@@ -51,6 +52,33 @@ export function databaseInfo(db: Database): DatabaseInfo {
     const file = db.filename === ':memory:' ? '' : db.filename;
     const walBytes = file ? (statSync(`${file}-wal`, { throwIfNoEntry: false })?.size ?? 0) : 0;
     return { path: file, walBytes, ...row };
+}
+
+/**
+ * Writes a compact, standalone copy of the database to `target` with VACUUM
+ * INTO. File databases are copied in a Worker so redirects aren't held up;
+ * an in-memory one (tests) can't be opened from another thread, so it's
+ * copied here.
+ */
+export function copyDatabase(db: Database, target: string): Promise<void> {
+    if (db.filename === ':memory:' || db.filename === '') {
+        db.query('VACUUM INTO ?').run(target);
+        return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+        const worker = new Worker(new URL('export-worker.ts', import.meta.url));
+        worker.addEventListener('message', (event: MessageEvent<ExportResult>) => {
+            worker.terminate();
+            if (event.data.ok) resolve();
+            else reject(new Error(event.data.error));
+        });
+        worker.addEventListener('error', event => {
+            worker.terminate();
+            reject(new Error(event.message));
+        });
+        const request: ExportRequest = { source: db.filename, target };
+        worker.postMessage(request);
+    });
 }
 
 export function pingDatabase(db: Database): boolean {
