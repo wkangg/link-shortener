@@ -11,10 +11,9 @@ ALTER TABLE clicks ADD COLUMN metro_code  TEXT;  -- CF-Metro-Code (US DMA)
 -- (always present), e.g. "EWR". A coarse routing/location hint.
 ALTER TABLE clicks ADD COLUMN edge_colo   TEXT;
 
--- The IP's network. Not a default header: add a Transform Rule (Rules ->
--- Transform Rules -> Modify Request Header) that sets, on the redirect host,
---   cf-asn    = ip.src.asnum
---   cf-as-org = ip.src.as_org   (needs a Worker on some plans; harmless if absent)
--- ASN names the network directly (datacenter/VPN/ISP) without an AbuseIPDB call.
+-- The IP's network. Not a default header (and Cloudflare won't let rules set
+-- cf-* names), so a Worker on the redirect host sets x-asn from request.cf.asn
+-- and x-as-org from request.cf.asOrganization. A Transform Rule setting
+-- x-asn = ip.src.asnum also works for the number alone; the name needs the Worker.
 ALTER TABLE clicks ADD COLUMN asn         INTEGER;
 ALTER TABLE clicks ADD COLUMN as_org      TEXT;

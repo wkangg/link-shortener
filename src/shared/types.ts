@@ -386,9 +386,9 @@ export interface RawClick {
     metroCode: string;
     /** CF-RAY header; its suffix is the edge datacenter, e.g. "...-EWR". */
     ray: string;
-    /** ASN, from a Cloudflare Transform Rule that sets a header to ip.src.asnum. */
+    /** ASN, from the x-asn header a Cloudflare Worker or Transform Rule sets. */
     asn: string;
-    /** AS organization name, from a Transform Rule / Worker header. */
+    /** AS organization name, from the x-as-org header a Cloudflare Worker sets. */
     asOrg: string;
     qr: boolean;
     /** Query string from the short URL, without the leading `?` and without `qr`. */

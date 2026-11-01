@@ -117,9 +117,9 @@ export function createRedirectHandler(opts: RedirectHandlerOptions) {
                 postalCode: h.get('cf-postal-code') ?? '',
                 metroCode: h.get('cf-metro-code') ?? '',
                 ray: h.get('cf-ray') ?? '',
-                // Set by a Transform Rule; see migrations/0005.
-                asn: h.get('cf-asn') ?? '',
-                asOrg: h.get('cf-as-org') ?? '',
+                // Set by a Cloudflare Worker or Transform Rule; see migrations/0005.
+                asn: h.get('x-asn') ?? '',
+                asOrg: h.get('x-as-org') ?? '',
                 qr,
                 query,
                 language: h.get('accept-language') ?? '',

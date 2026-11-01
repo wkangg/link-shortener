@@ -218,6 +218,73 @@ function yesNo(value: boolean | null, yes = 'yes', no = 'no'): string | null {
     return value === null ? null : value ? yes : no;
 }
 
+/** Words that say nothing about which company a network belongs to. */
+const NETWORK_FILLER = new Set([
+    'inc',
+    'llc',
+    'ltd',
+    'limited',
+    'corp',
+    'corporation',
+    'co',
+    'company',
+    'gmbh',
+    'sa',
+    'ag',
+    'bv',
+    'plc',
+    'srl',
+    'the',
+    'and',
+    'of',
+    'communications',
+    'communication',
+    'telecom',
+    'telecommunications',
+    'network',
+    'networks',
+    'internet',
+    'services',
+    'service',
+    'cable',
+    'broadband',
+    'online',
+    'holdings',
+    'group',
+    'as',
+    'isp',
+    'net'
+]);
+
+/** The distinctive words of a network name: "Comcast Cable Communications, LLC" -> comcast. */
+function networkWords(name: string): Set<string> {
+    return new Set(
+        name
+            .toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .filter(w => w.length >= 3 && !NETWORK_FILLER.has(w) && !/^\d+$/.test(w))
+    );
+}
+
+/** Whether two network names plausibly name the same operator (they share a distinctive word). */
+export function sameNetwork(a: string, b: string): boolean {
+    const wa = networkWords(a);
+    const wb = networkWords(b);
+    if (wa.size === 0 || wb.size === 0) return true;
+    for (const w of wa) {
+        for (const v of wb) {
+            if (
+                w === v ||
+                (w.length >= 4 && v.startsWith(w)) ||
+                (v.length >= 4 && w.startsWith(v))
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /**
  * Traits that contradict each other: common with VPNs, spoofed user agents and
  * automation, though each has innocent causes too (travel, desktop mode, a wrong clock).
@@ -263,6 +330,9 @@ export function inconsistencies(c: ClickHistoryRow): string[] {
     // Every iOS browser is Safari's engine underneath, so its vendor is always Apple's.
     if (c.navVendor !== null && vendor !== null && uaOs !== 'ios' && c.navVendor !== vendor) {
         out.push(`${c.browser ?? ''} should report vendor "${vendor}", got "${c.navVendor}"`);
+    }
+    if (c.isp && c.asOrg && !sameNetwork(c.isp, c.asOrg)) {
+        out.push(`AbuseIPDB says ISP ${c.isp}, Cloudflare says network ${c.asOrg}`);
     }
     if (c.clockSkew !== null && Math.abs(c.clockSkew) > CLOCK_TOLERANCE_MS) {
         out.push(`Device clock ${duration(c.clockSkew)} ${c.clockSkew > 0 ? 'ahead' : 'behind'}`);

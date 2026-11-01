@@ -1344,6 +1344,11 @@ a.slug:hover {
     color: var(--danger);
 }
 
+.badge-warn {
+    border-color: var(--warn);
+    color: var(--warn);
+}
+
 a.badge {
     text-decoration: none;
 }

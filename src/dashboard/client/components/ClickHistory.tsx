@@ -12,7 +12,7 @@ import {
     screenLabel
 } from '../format.ts';
 import { useApi } from '../useApi.ts';
-import { ClickDetails, hasDetails } from './ClickDetails.tsx';
+import { ClickDetails, hasDetails, sameNetwork } from './ClickDetails.tsx';
 import { clickSyntax, exactTerm, SearchBox } from './SearchBox.tsx';
 
 /** "All" still pages, just in very large pages, so a huge history can't freeze the tab. */
@@ -179,11 +179,22 @@ interface IpCellProps {
     /** AbuseIPDB abuse confidence, or null when not checked. */
     abuseScore: number | null;
     isp: string | null;
+    /** The network name Cloudflare reports for the IP (AS organization). */
+    asOrg: string | null;
     onAddTerm: (term: string) => void;
 }
 
 /** An IP address: a filter button, an external ISP lookup, and a datacenter badge. */
-function IpCell({ ip, isDatacenter, vpn, scraper, abuseScore, isp, onAddTerm }: IpCellProps) {
+function IpCell({
+    ip,
+    isDatacenter,
+    vpn,
+    scraper,
+    abuseScore,
+    isp,
+    asOrg,
+    onAddTerm
+}: IpCellProps) {
     const { abuseMinScore } = useConfig();
     const reported = abuseScore !== null && abuseScore > 0;
     const abusive = reported && abuseScore >= abuseMinScore;
@@ -269,8 +280,17 @@ function IpCell({ ip, isDatacenter, vpn, scraper, abuseScore, isp, onAddTerm }: 
                     >
                         {isp}
                     </button>
+                    {asOrg && !sameNetwork(isp, asOrg) && (
+                        <span
+                            className="badge badge-warn"
+                            title={`AbuseIPDB says the ISP is ${isp}; Cloudflare says the network is ${asOrg}`}
+                        >
+                            network mismatch
+                        </span>
+                    )}
                 </span>
             )}
+            {!isp && asOrg && <span className="history-sub">{asOrg}</span>}
         </span>
     );
 }
@@ -475,6 +495,7 @@ export function ClickHistory({
                                                     scraper={c.scraper}
                                                     abuseScore={c.abuseScore}
                                                     isp={c.isp}
+                                                    asOrg={c.asOrg}
                                                     onAddTerm={onAddTerm}
                                                 />
                                             )}
