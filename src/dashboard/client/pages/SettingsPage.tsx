@@ -136,10 +136,7 @@ export function SettingsPage() {
 
             <section>
                 <h2>Export</h2>
-                <p>
-                    Download a copy of the whole SQLite database: links, clicks and webhooks. It
-                    includes visitor IP addresses and webhook secrets, so keep it somewhere safe.
-                </p>
+                <p>Download a copy of the whole SQLite database: links, clicks and webhooks.</p>
                 <p>
                     <a className="button" href="/api/export" download>
                         Download database
