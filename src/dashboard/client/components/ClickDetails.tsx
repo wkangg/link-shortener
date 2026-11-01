@@ -405,7 +405,7 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                         ['In-app browser', inAppBrowser(c.userAgent)],
                         ['Opened by', c.navType && (NAV_TYPES[c.navType] ?? c.navType)],
                         [
-                            'Tab history',
+                            'Back history',
                             c.historyLength === null
                                 ? null
                                 : c.historyLength <= 1
