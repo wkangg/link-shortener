@@ -1091,10 +1091,6 @@ a.slug:hover {
     cursor: pointer;
 }
 
-.history-raw summary:hover {
-    color: var(--text-secondary);
-}
-
 .history-raw .mono {
     display: block;
     width: 0;
@@ -1105,18 +1101,57 @@ a.slug:hover {
 
 /* Details toggle in the Device column, and the full-width row it opens under the click. */
 .details-toggle {
-    margin-top: 0.3rem;
+    display: block;
+    margin-top: 0.2rem;
     padding: 0;
     border: 0;
     background: none;
     font: inherit;
     font-size: 0.78rem;
-    color: var(--accent);
     cursor: pointer;
 }
 
-.details-toggle:hover {
+/* Every expander is accent blue: the Details button and all <summary> toggles. */
+.details-toggle,
+.history-raw summary,
+.click-details-list summary {
+    color: var(--accent);
+}
+
+.details-toggle:hover,
+.history-raw summary:hover,
+.click-details-list summary:hover {
+    color: var(--accent);
     text-decoration: underline;
+}
+
+/* One disclosure arrow for every expander (<summary> and the Details button), so they
+   match: the browser's built-in marker differs in size and color from text arrows. */
+.history-raw summary,
+.click-details-list summary {
+    list-style: none;
+}
+
+.history-raw summary::-webkit-details-marker,
+.click-details-list summary::-webkit-details-marker {
+    display: none;
+}
+
+.history-raw summary::before,
+.click-details-list summary::before,
+.details-toggle::before {
+    content: '▶';
+    display: inline-block;
+    width: 1em;
+    margin-right: 0.45em;
+    font-size: 0.75em;
+    vertical-align: 0.08em;
+}
+
+.history-raw[open] > summary::before,
+.click-details-list[open] > summary::before,
+.details-toggle[aria-expanded='true']::before {
+    content: '▼';
 }
 
 .history-table tr.history-open > td {
@@ -1188,7 +1223,6 @@ a.slug:hover {
 .click-details-list summary {
     width: fit-content;
     cursor: pointer;
-    color: var(--text-secondary);
 }
 
 .click-details-chips {

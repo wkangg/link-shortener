@@ -537,7 +537,7 @@ export function ClickHistory({
                                                     aria-expanded={open.has(c.id)}
                                                     onClick={() => toggle(c.id)}
                                                 >
-                                                    {open.has(c.id) ? '▾' : '▸'} Details
+                                                    Details
                                                 </button>
                                             )}
                                             {(c.incognito || c.adBlocker || c.fingerprint) && (
