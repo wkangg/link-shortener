@@ -9,11 +9,10 @@ import {
     formatCount,
     formatDateTime,
     formatRelative,
-    gpuName,
     screenLabel
 } from '../format.ts';
 import { useApi } from '../useApi.ts';
-import { ClickDetails } from './ClickDetails.tsx';
+import { ClickDetails, hasDetails } from './ClickDetails.tsx';
 import { clickSyntax, exactTerm, SearchBox } from './SearchBox.tsx';
 
 /** "All" still pages, just in very large pages, so a huge history can't freeze the tab. */
@@ -84,41 +83,13 @@ function technology(c: ClickHistoryRow): (string | null)[] {
     return [c.browser, os, c.deviceModel ?? c.device];
 }
 
-/** Memory, CPU cores, touch, battery and connection, as reported by the browser. */
+/** Memory, CPU cores and touch, as reported by the browser; the rest is under Details. */
 function specs(c: ClickHistoryRow): (string | null)[] {
     return [
         c.memory === null ? null : `${c.memory} GB RAM`,
         c.cpuCores === null ? null : `${c.cpuCores} ${c.cpuCores === 1 ? 'core' : 'cores'}`,
-        c.touchPoints === null ? null : c.touchPoints > 0 ? 'touch' : 'no touch',
-        c.battery === null ? null : `${c.battery}% battery`,
-        c.charging ? 'charging' : null,
-        c.connection
+        c.touchPoints === null ? null : c.touchPoints > 0 ? 'touch' : 'no touch'
     ];
-}
-
-/** Usable screen area and color depth, e.g. "1920×1032 usable · 24-bit color". */
-function displayLabel(display: string | null): string | null {
-    const m = display && /^(\d+)x(\d+)x(\d+)$/.exec(display);
-    return m ? `${m[1]}×${m[2]} usable · ${m[3]}-bit color` : null;
-}
-
-/** Browser settings plus the color scheme, e.g. ["dark mode", "cookies on"]. */
-function browserSettings(c: ClickHistoryRow): string[] {
-    const scheme = c.darkMode === null ? [] : [c.darkMode ? 'dark mode' : 'light mode'];
-    return [...scheme, ...(c.settings ?? [])];
-}
-
-/** A collapsed list, e.g. "Fonts (12)", for traits too long to show inline. */
-function TraitList({ label, items }: { label: string; items: string[] | null }) {
-    if (items === null) return null;
-    return (
-        <details className="history-raw">
-            <summary>
-                {label} ({items.length})
-            </summary>
-            {items.length > 0 ? <Dotted items={items} /> : <span className="muted">none</span>}
-        </details>
-    );
 }
 
 /**
@@ -319,6 +290,14 @@ export function ClickHistory({
 
     // Re-render each minute so "3 minutes ago" doesn't go stale.
     const [now, setNow] = useState(Date.now);
+    // Clicks whose details row is expanded.
+    const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+    const toggle = (id: number) =>
+        setOpen(prev => {
+            const next = new Set(prev);
+            if (!next.delete(id)) next.add(id);
+            return next;
+        });
     useEffect(() => {
         const id = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(id);
@@ -452,172 +431,178 @@ export function ClickHistory({
                         </thead>
                         <tbody>
                             {clicks.map(c => (
-                                <tr key={c.id}>
-                                    <td className="nowrap" title={new Date(c.ts).toISOString()}>
-                                        {formatDateTime(c.ts)}
-                                        <div className="history-ago">
-                                            {formatRelative(c.ts, now)}
-                                        </div>
-                                    </td>
-                                    {showLink && (
-                                        <td className="mono">
-                                            {c.slug === null ? (
-                                                <span className="muted">deleted</span>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    className="cell-filter"
-                                                    title="Search for this link"
-                                                    onClick={() =>
-                                                        onAddTerm(
-                                                            exactTerm(
-                                                                'link',
-                                                                c.slug === '' ? '/' : (c.slug ?? '')
-                                                            )
-                                                        )
-                                                    }
-                                                >
-                                                    {c.slug === '' ? '/' : c.slug}
-                                                </button>
-                                            )}
+                                <Fragment key={c.id}>
+                                    <tr className={open.has(c.id) ? 'history-open' : undefined}>
+                                        <td className="nowrap" title={new Date(c.ts).toISOString()}>
+                                            {formatDateTime(c.ts)}
+                                            <div className="history-ago">
+                                                {formatRelative(c.ts, now)}
+                                            </div>
                                         </td>
-                                    )}
-                                    <td className="mono">
-                                        {c.ip === null ? (
-                                            <span className="muted">–</span>
-                                        ) : (
-                                            <IpCell
-                                                ip={c.ip}
-                                                isDatacenter={c.isDatacenter}
-                                                vpn={c.vpn}
-                                                scraper={c.scraper}
-                                                abuseScore={c.abuseScore}
-                                                isp={c.isp}
-                                                onAddTerm={onAddTerm}
-                                            />
-                                        )}
-                                    </td>
-                                    <td className="history-location">
-                                        {place(c) ||
-                                            (c.country ? countryLabel(c.country) : null) || (
-                                                <span className="muted">–</span>
-                                            )}
-                                        <span className="history-sub">
-                                            <Dotted
-                                                items={[
-                                                    place(c) && c.country
-                                                        ? countryLabel(c.country)
-                                                        : null,
-                                                    c.timezone,
-                                                    c.language
-                                                ]}
-                                            />
-                                        </span>
-                                        {coordinates(c) && (
-                                            <span
-                                                className="history-sub numeric"
-                                                title="Approximate, from the IP address"
-                                            >
-                                                {coordinates(c)}
-                                            </span>
-                                        )}
-                                        {c.hostname && (
-                                            <span className="history-sub">{c.hostname}</span>
-                                        )}
-                                    </td>
-                                    <td className="history-source">
-                                        {c.source}
-                                        {c.referrer && (
-                                            <span className="history-sub">{c.referrer}</span>
-                                        )}
-                                    </td>
-                                    <td className="history-device">
-                                        {c.screen ? (
-                                            <span
-                                                title={
-                                                    c.orientation
-                                                        ? `${c.orientation.split('-')[0]} screen`
-                                                        : undefined
-                                                }
-                                            >
-                                                {screenLabel(c.screen)}
-                                            </span>
-                                        ) : (
-                                            <span className="muted">–</span>
-                                        )}
-                                        <span className="history-sub">
-                                            <Dotted items={specs(c)} />
-                                        </span>
-                                        {displayLabel(c.display) && (
-                                            <span className="history-sub">
-                                                {displayLabel(c.display)}
-                                            </span>
-                                        )}
-                                        {c.gpu && (
-                                            <span className="history-sub" title={c.gpu}>
-                                                {gpuName(c.gpu)}
-                                            </span>
-                                        )}
-                                        {browserSettings(c).length > 0 && (
-                                            <span className="history-sub" title="Browser settings">
-                                                <Dotted items={browserSettings(c)} />
-                                            </span>
-                                        )}
-                                        <TraitList label="Fonts" items={c.fonts} />
-                                        <ClickDetails c={c} />
-                                        {(c.incognito || c.adBlocker || c.fingerprint) && (
-                                            <span className="history-tags">
-                                                {c.incognito && (
-                                                    <span className="badge">private</span>
-                                                )}
-                                                {c.adBlocker && (
-                                                    <span className="badge">ad blocker</span>
-                                                )}
-                                                {c.fingerprint && (
+                                        {showLink && (
+                                            <td className="mono">
+                                                {c.slug === null ? (
+                                                    <span className="muted">deleted</span>
+                                                ) : (
                                                     <button
                                                         type="button"
-                                                        className="cell-filter mono"
-                                                        title="Search for this device fingerprint"
+                                                        className="cell-filter"
+                                                        title="Search for this link"
                                                         onClick={() =>
                                                             onAddTerm(
-                                                                exactTerm('fp', c.fingerprint ?? '')
+                                                                exactTerm(
+                                                                    'link',
+                                                                    c.slug === ''
+                                                                        ? '/'
+                                                                        : (c.slug ?? '')
+                                                                )
                                                             )
                                                         }
                                                     >
-                                                        ⚷ {c.fingerprint.slice(0, 10)}
+                                                        {c.slug === '' ? '/' : c.slug}
                                                     </button>
                                                 )}
+                                            </td>
+                                        )}
+                                        <td className="mono">
+                                            {c.ip === null ? (
+                                                <span className="muted">–</span>
+                                            ) : (
+                                                <IpCell
+                                                    ip={c.ip}
+                                                    isDatacenter={c.isDatacenter}
+                                                    vpn={c.vpn}
+                                                    scraper={c.scraper}
+                                                    abuseScore={c.abuseScore}
+                                                    isp={c.isp}
+                                                    onAddTerm={onAddTerm}
+                                                />
+                                            )}
+                                        </td>
+                                        <td className="history-location">
+                                            {place(c) ||
+                                                (c.country ? countryLabel(c.country) : null) || (
+                                                    <span className="muted">–</span>
+                                                )}
+                                            <span className="history-sub">
+                                                <Dotted
+                                                    items={[
+                                                        place(c) && c.country
+                                                            ? countryLabel(c.country)
+                                                            : null,
+                                                        c.timezone,
+                                                        c.language
+                                                    ]}
+                                                />
                                             </span>
-                                        )}
-                                    </td>
-                                    <td className="history-ua">
-                                        {technology(c).some(Boolean) ? (
-                                            <Dotted items={technology(c)} />
-                                        ) : (
-                                            'Unknown'
-                                        )}
-                                        {c.bot && (
-                                            <span className="badge">
-                                                {c.botName ? `bot: ${c.botName}` : 'bot'}
+                                            {coordinates(c) && (
+                                                <span
+                                                    className="history-sub numeric"
+                                                    title="Approximate, from the IP address"
+                                                >
+                                                    {coordinates(c)}
+                                                </span>
+                                            )}
+                                            {c.hostname && (
+                                                <span className="history-sub">{c.hostname}</span>
+                                            )}
+                                        </td>
+                                        <td className="history-source">
+                                            {c.source}
+                                            {c.referrer && (
+                                                <span className="history-sub">{c.referrer}</span>
+                                            )}
+                                        </td>
+                                        <td className="history-device">
+                                            {c.screen ? (
+                                                <span
+                                                    title={
+                                                        c.orientation
+                                                            ? `${c.orientation.split('-')[0]} screen`
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {screenLabel(c.screen)}
+                                                </span>
+                                            ) : (
+                                                <span className="muted">–</span>
+                                            )}
+                                            <span className="history-sub">
+                                                <Dotted items={specs(c)} />
                                             </span>
-                                        )}
-                                        {c.browserVersion && (
-                                            <span
-                                                className="history-sub"
-                                                title="Full version, from client hints"
-                                            >
-                                                {c.browserVersion}
-                                            </span>
-                                        )}
-                                        <TraitList label="Codecs" items={c.codecs} />
-                                        {c.userAgent && (
-                                            <details className="history-raw">
-                                                <summary>User agent</summary>
-                                                <span className="mono">{c.userAgent}</span>
-                                            </details>
-                                        )}
-                                    </td>
-                                </tr>
+                                            {hasDetails(c) && (
+                                                <button
+                                                    type="button"
+                                                    className="details-toggle"
+                                                    aria-expanded={open.has(c.id)}
+                                                    onClick={() => toggle(c.id)}
+                                                >
+                                                    {open.has(c.id) ? '▾' : '▸'} Details
+                                                </button>
+                                            )}
+                                            {(c.incognito || c.adBlocker || c.fingerprint) && (
+                                                <span className="history-tags">
+                                                    {c.incognito && (
+                                                        <span className="badge">private</span>
+                                                    )}
+                                                    {c.adBlocker && (
+                                                        <span className="badge">ad blocker</span>
+                                                    )}
+                                                    {c.fingerprint && (
+                                                        <button
+                                                            type="button"
+                                                            className="cell-filter mono"
+                                                            title="Search for this device fingerprint"
+                                                            onClick={() =>
+                                                                onAddTerm(
+                                                                    exactTerm(
+                                                                        'fp',
+                                                                        c.fingerprint ?? ''
+                                                                    )
+                                                                )
+                                                            }
+                                                        >
+                                                            ⚷ {c.fingerprint.slice(0, 10)}
+                                                        </button>
+                                                    )}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="history-ua">
+                                            {technology(c).some(Boolean) ? (
+                                                <Dotted items={technology(c)} />
+                                            ) : (
+                                                'Unknown'
+                                            )}
+                                            {c.bot && (
+                                                <span className="badge">
+                                                    {c.botName ? `bot: ${c.botName}` : 'bot'}
+                                                </span>
+                                            )}
+                                            {c.browserVersion && (
+                                                <span
+                                                    className="history-sub"
+                                                    title="Full version, from client hints"
+                                                >
+                                                    {c.browserVersion}
+                                                </span>
+                                            )}
+                                            {c.userAgent && (
+                                                <details className="history-raw">
+                                                    <summary>User agent</summary>
+                                                    <span className="mono">{c.userAgent}</span>
+                                                </details>
+                                            )}
+                                        </td>
+                                    </tr>
+                                    {open.has(c.id) && (
+                                        <tr className="history-details-row">
+                                            <td colSpan={showLink ? 7 : 6}>
+                                                <ClickDetails c={c} />
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
                             ))}
                         </tbody>
                     </table>

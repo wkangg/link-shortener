@@ -1097,36 +1097,114 @@ a.slug:hover {
 
 .history-raw .mono {
     display: block;
+    width: 0;
+    min-width: 100%;
     margin-top: 0.2rem;
     overflow-wrap: anywhere;
 }
 
-/* "More details" under a click: label / value rows, values wrapping within the column. */
-.trait-list {
+/* Details toggle in the Device column, and the full-width row it opens under the click. */
+.details-toggle {
+    margin-top: 0.3rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.78rem;
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.details-toggle:hover {
+    text-decoration: underline;
+}
+
+.history-table tr.history-open > td {
+    border-bottom-color: transparent;
+}
+
+.history-table tr.history-details-row > td {
+    padding-top: 0;
+}
+
+/* Zero width with min-width 100% (like .history-sub): the panel fills the row but never
+   feeds its content back into the column widths, so opening a list doesn't shift columns. */
+.click-details {
+    box-sizing: border-box;
+    width: 0;
+    min-width: 100%;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--bg);
+    font-size: 0.82rem;
+}
+
+.click-details-grid {
     display: grid;
-    gap: 0.15rem;
-    margin: 0.3rem 0 0;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem 2rem;
 }
 
-.trait-list > div {
+.click-details-section h4 {
+    margin: 0 0 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.click-details-section dl {
     display: grid;
-    grid-template-columns: 5.5rem minmax(0, 1fr);
-    gap: 0.5rem;
+    gap: 0.25rem;
+    margin: 0;
 }
 
-.trait-list dt {
-    color: var(--text-secondary);
+.click-details-section dl > div {
+    display: grid;
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: 0.75rem;
 }
 
-.trait-list dd {
+.click-details-section dt {
+    color: var(--muted);
+}
+
+.click-details-section dd {
     margin: 0;
     overflow-wrap: anywhere;
 }
 
-.trait-items {
-    margin: 0.2rem 0 0;
-    padding-left: 1rem;
-    overflow-wrap: anywhere;
+.click-details-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--line);
+}
+
+.click-details-list summary {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.click-details-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0.5rem 0 0.3rem;
+}
+
+.chip {
+    padding: 0.05rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
 }
 
 /* Pager under the click history; wraps under the range on narrow screens. */
