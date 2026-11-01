@@ -9,6 +9,7 @@ import {
     createClickReader,
     type LinkClickedEvent,
     linkClickedEvent,
+    lookupVerdictAt,
     scraperVerdictAt,
     skipReason,
     testEvent,
@@ -53,6 +54,8 @@ export interface DelivererOptions {
     maxPending?: number;
     /** Called after an endpoint is turned off automatically. */
     onDisable?: () => void;
+    /** Whether the IP's reputation lookup is still to come; such clicks wait for it. */
+    lookupPending?: (ip: string) => boolean;
 }
 
 /** A due event and the endpoint it goes to. */
@@ -80,9 +83,10 @@ type Outcome =
 
 export class WebhookDeliverer {
     readonly #db: Database;
-    readonly #opts: Required<Omit<DelivererOptions, 'resolve' | 'onDisable'>> &
+    readonly #opts: Required<Omit<DelivererOptions, 'resolve' | 'onDisable' | 'lookupPending'>> &
         Pick<DelivererOptions, 'resolve' | 'onDisable'>;
     readonly #readClick: ClickReader;
+    readonly #lookupPending: (ip: string) => boolean;
     /** Standard endpoints with an event being sent, by endpoint id. */
     readonly #inFlight = new Map<number, Promise<void>>();
     /** Discord endpoints with a message being sent, by endpoint id. */
@@ -106,6 +110,7 @@ export class WebhookDeliverer {
             maxPending: opts.maxPending ?? MAX_PENDING
         };
         this.#readClick = createClickReader(db);
+        this.#lookupPending = opts.lookupPending ?? (() => false);
     }
 
     start(): void {
@@ -290,6 +295,8 @@ export class WebhookDeliverer {
         const skip = new Set(JSON.parse(row.skip) as WebhookSkipCategory[]);
         const reason = skipReason(click, skip, this.#opts.abuseMinScore);
         if (reason) return { reason: `Skipped: ${reason}` };
+        const lookupAt = lookupVerdictAt(click, skip, this.#lookupPending, now);
+        if (lookupAt !== null) return { dueAt: lookupAt };
         const verdictAt = scraperVerdictAt(click, skip);
         if (verdictAt !== null && verdictAt > now) return { dueAt: verdictAt };
         return linkClickedEvent(

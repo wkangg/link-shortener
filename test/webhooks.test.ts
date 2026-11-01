@@ -31,6 +31,8 @@ import {
     createClickReader,
     type LinkClickedEvent,
     linkClickedEvent,
+    LOOKUP_RECHECK_MS,
+    LOOKUP_WAIT_MS,
     osVersionOf,
     skipReason
 } from '../src/webhooks/payload.ts';
@@ -262,7 +264,12 @@ type Reply = number | Error | Response;
 
 /** A database with links, the outbox and a deliverer on a fake clock and a fake fetch. */
 function pipeline(
-    opts: { allowPrivate?: boolean; resolve?: ResolveHost; maxPending?: number } = {}
+    opts: {
+        allowPrivate?: boolean;
+        resolve?: ResolveHost;
+        maxPending?: number;
+        lookupPending?: (ip: string) => boolean;
+    } = {}
 ) {
     const { db, links } = setup();
     const clock = { now: 1_000_000 };
@@ -295,6 +302,7 @@ function pipeline(
         allowPrivate: opts.allowPrivate ?? true,
         resolve: opts.resolve,
         maxPending: opts.maxPending,
+        lookupPending: opts.lookupPending,
         now: () => clock.now,
         onDisable: () => {
             disabled++;
@@ -741,6 +749,57 @@ describe('delivery', () => {
         await p.deliverer.tick();
         expect(p.requests).toHaveLength(0);
         expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Skipped: scraper' });
+    });
+
+    test('clicks wait for a pending reputation lookup before skip rules apply', async () => {
+        const pending = new Set(['203.0.113.5']);
+        const p = pipeline({ lookupPending: ip => pending.has(ip) });
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: ['datacenter'] });
+        p.click(raw(link.id));
+
+        p.clock.now = Date.now() + SETTLE_DELAY_MS;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()[0]).toMatchObject({
+            status: 'pending',
+            attempts: 0,
+            due_at: p.clock.now + LOOKUP_RECHECK_MS
+        });
+
+        // The lookup lands: a hosting IP.
+        pending.clear();
+        p.db.query('UPDATE clicks SET is_datacenter = 1, abuse_score = 0').run();
+        p.clock.now += LOOKUP_RECHECK_MS;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(0);
+        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Skipped: datacenter' });
+    });
+
+    test('a lookup that never comes holds a click for LOOKUP_WAIT_MS at most', async () => {
+        const p = pipeline({ lookupPending: () => true });
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: ['abusive'] });
+        p.click(raw(link.id));
+        const ts = p.db.query<{ ts: number }, []>('SELECT ts FROM clicks').get()?.ts ?? 0;
+
+        p.clock.now = ts + LOOKUP_WAIT_MS - 1000;
+        await p.deliverer.tick();
+        expect(p.events()[0]).toMatchObject({ status: 'pending', due_at: ts + LOOKUP_WAIT_MS });
+
+        p.clock.now = ts + LOOKUP_WAIT_MS;
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
+    });
+
+    test('endpoints that skip nothing the lookup decides do not wait for it', async () => {
+        const p = pipeline({ lookupPending: () => true });
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: ['bot'] });
+        p.click(raw(link.id));
+        p.clock.now = Date.now();
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
     });
 
     test('at most `concurrency` requests are in flight, one per endpoint', async () => {

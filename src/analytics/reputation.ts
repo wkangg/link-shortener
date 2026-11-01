@@ -238,6 +238,11 @@ export class IpReputation implements ClickAnnotator {
         return queued;
     }
 
+    /** Whether a lookup for the IP is waiting or running. */
+    pending(ip: string): boolean {
+        return this.#queued.has(ip) || this.#inFlight.has(ip);
+    }
+
     stop(): void {
         this.#stopped = true;
         this.#queued.clear();

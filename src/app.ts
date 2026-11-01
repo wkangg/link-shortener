@@ -86,7 +86,8 @@ export function startApp(opts: AppOptions) {
         fetch: opts.webhookFetch,
         resolve: opts.resolveHost,
         intervalMs: opts.webhookIntervalMs,
-        onDisable: () => outbox.refresh()
+        onDisable: () => outbox.refresh(),
+        lookupPending: reputation ? ip => reputation.pending(ip) : undefined
     });
     webhooks.start();
 
