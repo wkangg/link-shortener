@@ -144,7 +144,7 @@ function interstitial(destination: string, token: string): Response {
             'Cache-Control': NO_STORE,
             'X-Robots-Tag': 'noindex',
             'Content-Security-Policy':
-                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'"
+                "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; connect-src 'self'"
         }
     });
 }

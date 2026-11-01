@@ -385,6 +385,24 @@ Promise.race([
 });
 })();`;
 
+const XOR_KEY = 'k7Qd';
+
+function cloak(src: string): string {
+    const min = new Bun.Transpiler({ loader: 'js', minifyWhitespace: true }).transformSync(src);
+    const bytes = Uint8Array.from(
+        Buffer.from(min, 'utf8'),
+        (byte, i) => byte ^ XOR_KEY.charCodeAt(i % XOR_KEY.length)
+    );
+    const blob = Buffer.from(bytes).toString('base64');
+    return (
+        `(function(k,e){var b=atob(e),s="",i=0;` +
+        `for(;i<b.length;i++)s+=String.fromCharCode(b.charCodeAt(i)^k.charCodeAt(i%k.length));` +
+        `(0,eval)(decodeURIComponent(escape(s)))})(${JSON.stringify(XOR_KEY)},${JSON.stringify(blob)})`
+    );
+}
+
+const CLOAKED_SCRIPT = cloak(SCRIPT);
+
 function escapeHtml(value: string): string {
     return value
         .replaceAll('&', '&amp;')
@@ -411,7 +429,7 @@ export function interstitialHtml(destination: string, token: string): string {
 <style>body{font:15px system-ui,sans-serif;color:#666;display:grid;place-items:center;min-height:90vh;margin:0}a{color:inherit}</style>
 </head><body>
 <p>Redirecting to <a href="${href}">${escapeHtml(hostOf(destination))}</a>…</p>
-<script>var D=${jsString(destination)},T=${jsString(token)},P=${jsString(SIGNALS_PATH)};${SCRIPT}</script>
+<script>var D=${jsString(destination)},T=${jsString(token)},P=${jsString(SIGNALS_PATH)};${CLOAKED_SCRIPT}</script>
 </body></html>`;
 }
 
