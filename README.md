@@ -279,13 +279,13 @@ A `link.clicked` event looks like this:
 ## Architecture
 
 ```text
-             ┌────────────────────── one Bun process ──────────────────────┐
- visitor ──▶ │ :3000 redirect ─▶ LRU cache ─▶ SQLite ─▶ 302 / tracking page │
-             │        │                                                    │
-             │        └─▶ in-memory click queue ─▶ enrich ─▶ batch write   │
-             │                                                (1 s)       │
- you ──────▶ │ :3001 dashboard ─▶ Cloudflare Access JWT ─▶ JSON API + SPA  │
-             └─────────────────────────────────────────────────────────────┘
+             ┌─────────────────────── one Bun process ───────────────────────┐
+ visitor ──> │ :3000 redirect ─> LRU cache ─> SQLite ─> 302 / tracking page  │
+             │        │                                                      │
+             │        └─> in-memory click queue ─> enrich ─> batch write     │
+             │                                                 (1 s)         │
+ you ──────> │ :3001 dashboard ─> Cloudflare Access JWT ─> JSON API + SPA    │
+             └───────────────────────────────────────────────────────────────┘
 ```
 
 | Module                             | Responsibility                                                                                                                                                                                          |
