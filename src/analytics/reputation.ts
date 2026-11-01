@@ -217,6 +217,14 @@ export class IpReputation implements ClickAnnotator {
                  WHERE r.ip = clicks.ip AND clicks.abuse_score IS NULL`
             )
             .run(...DATACENTER_USAGE);
+        // Restores flags that reverse DNS used to overwrite after the lookup had set them.
+        this.#db
+            .query(
+                `UPDATE clicks SET is_datacenter = 1
+                 WHERE is_datacenter = 0 AND ip IN
+                    (SELECT ip FROM ip_reputation WHERE usage_type IN (${marks}))`
+            )
+            .run(...DATACENTER_USAGE);
         const rows = this.#db
             .query<{ ip: string }, [number, number, number]>(
                 `SELECT c.ip FROM clicks c LEFT JOIN ip_reputation r ON r.ip = c.ip

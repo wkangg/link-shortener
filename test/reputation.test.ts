@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { ClickBuffer } from '../src/analytics/clicks.ts';
+import { ClickBuffer, type ReverseDns } from '../src/analytics/clicks.ts';
 import { backfillDatacenterHostnames } from '../src/analytics/datacenter.ts';
 import {
     createAbuseIpdb,
@@ -53,7 +53,9 @@ const click = (ip: string, ts = T0): RawClick => ({
     longitude: ''
 });
 
-function setup(opts: { dailyLimit?: number; now?: () => number } = {}) {
+function setup(
+    opts: { dailyLimit?: number; now?: () => number; reverseDns?: ReverseDns } = {}
+) {
     const db = openDatabase(':memory:');
     db.run(
         "INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://a.com', 0, 0)"
@@ -74,7 +76,12 @@ function setup(opts: { dailyLimit?: number; now?: () => number } = {}) {
         now: opts.now ?? (() => T0),
         dailyLimit: opts.dailyLimit
     });
-    const clicks = new ClickBuffer(db, { shortHost: 's.example', salt: 'salt', reputation });
+    const clicks = new ClickBuffer(db, {
+        shortHost: 's.example',
+        salt: 'salt',
+        reputation,
+        reverseDns: opts.reverseDns
+    });
     const rows = () =>
         db
             .query<{ ip: string; abuse_score: number | null; isp: string | null; dc: number }, []>(
@@ -249,6 +256,26 @@ describe('IpReputation', () => {
         expect(t.rows().map(r => r.abuse_score)).toEqual([87, 87, 0, null, null]);
         // Nothing left to do.
         expect(t.reputation.backfill()).toBe(0);
+    });
+
+    test('a later reverse-DNS answer keeps the datacenter flag from the lookup', async () => {
+        // A scanner with its own rDNS name, not on the hostname list.
+        const t = setup({ reverseDns: () => Promise.resolve('joy.probe.scanner.example') });
+        t.clicks.push(click(HOSTING));
+        t.clicks.flush();
+        await settle();
+        t.clicks.flush(); // writes the hostname
+        expect(t.rows()).toEqual([{ ip: HOSTING, abuse_score: 0, isp: 'Example Cloud', dc: 1 }]);
+    });
+
+    test('backfill restores datacenter flags that reverse DNS overwrote', async () => {
+        const t = setup();
+        t.clicks.push(click(HOSTING));
+        t.clicks.flush();
+        await settle();
+        t.db.run('UPDATE clicks SET is_datacenter = 0');
+        t.reputation.backfill();
+        expect(t.rows()[0]?.dc).toBe(1);
     });
 });
 

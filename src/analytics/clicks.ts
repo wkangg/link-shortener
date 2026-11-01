@@ -163,7 +163,8 @@ export class ClickBuffer implements ClickSink {
              WHERE token = ? AND ts >= ?`
         );
         this.#setHostname = db.query(
-            'UPDATE clicks SET hostname = ?, is_datacenter = ? WHERE id = ?'
+            // Only ever adds the flag: AbuseIPDB may have set it before reverse DNS answered.
+            'UPDATE clicks SET hostname = ?, is_datacenter = MAX(is_datacenter, ?) WHERE id = ?'
         );
         this.#expireTokens = db.query<{ id: number }, [number]>(
             'UPDATE clicks SET token = NULL WHERE token IS NOT NULL AND ts < ? RETURNING id'
