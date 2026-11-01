@@ -103,6 +103,37 @@ export function scraperVerdictAt(
     return click.ts + SIGNALS_WINDOW_MS + EXPIRE_INTERVAL_MS;
 }
 
+/** How long a click may wait on its IP's reputation lookup before it is sent anyway. */
+export const LOOKUP_WAIT_MS = 10 * 60_000;
+/** How often a click waiting on its lookup is looked at again. */
+export const LOOKUP_RECHECK_MS = 5000;
+
+// Verdicts the reputation lookup can change: the datacenter flag and abuse
+// score, and through the datacenter flag the scraper and VPN labels.
+const LOOKUP_CATEGORIES: readonly WebhookSkipCategory[] = [
+    'datacenter',
+    'abusive',
+    'scraper',
+    'vpn'
+];
+
+/**
+ * When to look at a click again because its IP's reputation lookup hasn't
+ * answered yet, or null to go ahead. Gives up LOOKUP_WAIT_MS after the click,
+ * e.g. when the daily quota has run out.
+ */
+export function lookupVerdictAt(
+    click: Pick<ClickSnapshot, 'ts' | 'ip'>,
+    skip: ReadonlySet<WebhookSkipCategory>,
+    lookupPending: (ip: string) => boolean,
+    now: number
+): number | null {
+    if (!click.ip || !LOOKUP_CATEGORIES.some(c => skip.has(c))) return null;
+    const deadline = click.ts + LOOKUP_WAIT_MS;
+    if (now >= deadline || !lookupPending(click.ip)) return null;
+    return Math.min(now + LOOKUP_RECHECK_MS, deadline);
+}
+
 export interface WebhookLink {
     id: number;
     slug: string;

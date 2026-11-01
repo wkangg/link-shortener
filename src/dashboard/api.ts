@@ -1,10 +1,13 @@
 import type { Database } from 'bun:sqlite';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import type { BunRequest, Server } from 'bun';
 import { z } from 'zod/v4';
 
 import { BadQueryError, Stats } from '../analytics/stats.ts';
-import { databaseInfo, pingDatabase } from '../db/client.ts';
+import { copyDatabase, databaseInfo, pingDatabase } from '../db/client.ts';
 import type {
     AboutResponse,
     ApiError,
@@ -33,6 +36,8 @@ export interface ApiDeps {
     /** AbuseIPDB lookups are on. */
     reputation: boolean;
     abuseMinScore: number;
+    /** Writes buffered clicks to the database; false if some couldn't be. */
+    flushClicks: () => boolean;
 }
 
 type Handler<Path extends string> = (
@@ -72,6 +77,60 @@ export function json(body: unknown, status = 200, headers?: HeadersInit): Respon
 function error(message: string, status: number, issues?: ApiError['issues']): Response {
     const body: ApiError = issues ? { error: message, issues } : { error: message };
     return json(body, status);
+}
+
+/**
+ * A compact, consistent copy of the database as a `.db` download. The copy is
+ * made in a private (0700) temporary directory and streamed, so a large
+ * database isn't held in memory; the directory goes once the download ends.
+ */
+async function exportDatabase(deps: ApiDeps): Promise<Response> {
+    // Clicks still buffered in memory belong in the copy; don't hand out one without them.
+    if (!deps.flushClicks()) {
+        return error('Couldn’t save recent clicks before exporting; try again', 503);
+    }
+    const dir = mkdtempSync(path.join(tmpdir(), 'links-export-'));
+    const cleanup = () => {
+        try {
+            rmSync(dir, { recursive: true, force: true });
+        } catch (error) {
+            console.error('[export] could not remove', dir, error);
+        }
+    };
+    try {
+        const file = path.join(dir, 'links.db');
+        await copyDatabase(deps.db, file);
+        const reader = Bun.file(file).stream().getReader();
+        const body = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+                try {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        controller.close();
+                        cleanup();
+                    } else controller.enqueue(value);
+                } catch (error) {
+                    controller.error(error);
+                    cleanup();
+                }
+            },
+            async cancel(reason) {
+                await reader.cancel(reason);
+                cleanup();
+            }
+        });
+        const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
+        return new Response(body, {
+            headers: {
+                'Content-Type': 'application/vnd.sqlite3',
+                'Content-Disposition': `attachment; filename="links-${stamp}.db"`,
+                'Cache-Control': 'no-store'
+            }
+        });
+    } catch (error) {
+        cleanup();
+        throw error;
+    }
 }
 
 function zodIssues(err: z.ZodError): NonNullable<ApiError['issues']> {
@@ -197,6 +256,10 @@ export function apiRoutes(deps: ApiDeps) {
                 };
                 return json(body);
             })
+        },
+
+        '/api/export': {
+            GET: guard(() => exportDatabase(deps))
         },
 
         '/api/links': {
