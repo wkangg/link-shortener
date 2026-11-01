@@ -42,6 +42,10 @@ export interface ClickRow {
     is_datacenter: 0 | 1;
     /** 0 when the device-signals page was served (1 once it reports back), else null. */
     js: 0 | null;
+    /** The whole Accept-Language header, capped. */
+    accept_language: string | null;
+    /** CF-Timezone: the IP's zone. Kept when the browser later reports its own. */
+    ip_timezone: string | null;
 }
 
 /** Browser-side signals from the device-signals page, validated. Null means not reported. */
@@ -109,6 +113,22 @@ export interface DeviceSignals {
     webgpu: string | null;
     /** Window inner size, "WxH". */
     viewport: string | null;
+    /** Device model from client hints (Android phones; empty elsewhere). */
+    hint_model: string | null;
+    /** CPU architecture and bitness from client hints, e.g. "x86 64-bit". */
+    cpu_arch: string | null;
+    /** Form factors from client hints, e.g. "Desktop" or "Mobile, Tablet". */
+    form_factors: string | null;
+    /** navigator.storage quota in bytes: roughly a share of free disk space. */
+    quota: number | null;
+    /** Estimated bandwidth in Mbps. */
+    downlink: number | null;
+    /** Estimated round-trip time in ms. */
+    rtt: number | null;
+    /** The Data Saver setting. */
+    save_data: 0 | 1 | null;
+    /** The device's Date.now() when it sent the report; not stored, see ClickBuffer. */
+    client_clock: number | null;
 }
 
 type TraitKind = 'str' | 'int' | 'bool' | 'strs';
@@ -196,6 +216,9 @@ const BITS_RE = /^[01]{1,64}$/;
 const HASH_RE = /^(?:[0-9a-f]{1,16}|randomized)$/;
 const AUDIO_RE = /^\d{1,6}(?:\.\d{1,20})?(?:e-?\d{1,3})?$/;
 const VIEWPORT_RE = /^\d{1,5}x\d{1,5}$/;
+const ARCH_RE = /^[\w-]{1,16}$/;
+const BITNESS_RE = /^\d{2}$/;
+const MAX_ACCEPT_LANGUAGE = 200;
 const ORIENTATIONS = new Set([
     'portrait-primary',
     'portrait-secondary',
@@ -268,7 +291,9 @@ export function enrichClick(click: RawClick, opts: EnrichOptions): ClickRow {
         // Browser signals (if any) refine this later; see ClickBuffer.
         fingerprint: computeFingerprint({ ua: click.ua, language: lang, timezone: tz }),
         is_datacenter: 0,
-        js: click.token ? 0 : null
+        js: click.token ? 0 : null,
+        accept_language: clean(click.language.slice(0, MAX_ACCEPT_LANGUAGE)),
+        ip_timezone: tz
     };
 }
 
@@ -350,8 +375,32 @@ export function parseSignals(body: string): DeviceSignals | null {
         permissions: traitRecord(s.permissions, PERMISSIONS_SCHEMA),
         multi_monitor: flag('multiMonitor'),
         webgpu: traitRecord(s.webgpu, WEBGPU_SCHEMA),
-        viewport: match('viewport', VIEWPORT_RE)
+        viewport: match('viewport', VIEWPORT_RE),
+        hint_model: traitText(s.model, 60),
+        cpu_arch: cpuArch(s),
+        form_factors: traitList(s.formFactors, 5)?.join(', ') || null,
+        quota: number(s.quota, 1e16, true),
+        downlink: number(s.downlink, 100_000, false),
+        rtt: number(s.rtt, 60_000, true),
+        save_data: flag('saveData'),
+        client_clock: number(s.clock, 1e14, true)
     };
+}
+
+/** A finite number in [0, max], optionally whole; else null. */
+function number(value: unknown, max: number, integer: boolean): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max)
+        return null;
+    return integer ? Math.round(value) : value;
+}
+
+/** "x86 64-bit" / "arm 64-bit", noting a 32-bit browser on 64-bit Windows. */
+function cpuArch(s: Record<string, unknown>): string | null {
+    const arch =
+        typeof s.architecture === 'string' && ARCH_RE.test(s.architecture) ? s.architecture : null;
+    const bits = typeof s.bitness === 'string' && BITNESS_RE.test(s.bitness) ? s.bitness : null;
+    if (!arch) return null;
+    return `${arch}${bits ? ` ${bits}-bit` : ''}${s.wow64 === true ? ' (32-bit browser)' : ''}`;
 }
 
 /** Printable text, trimmed and capped; null when empty or not a string. */

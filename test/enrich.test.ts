@@ -171,7 +171,15 @@ describe('extra click fields', () => {
             permissions: null,
             multi_monitor: null,
             webgpu: null,
-            viewport: null
+            viewport: null,
+            hint_model: null,
+            cpu_arch: null,
+            form_factors: null,
+            quota: null,
+            downlink: null,
+            rtt: null,
+            save_data: null,
+            client_clock: null
         });
         expect(
             parseSignals(
@@ -206,6 +214,54 @@ describe('extra click fields', () => {
         expect(parseSignals(JSON.stringify({ cores: 1.5 }))).toMatchObject({ cpu_cores: null });
         expect(parseSignals('not json')).toBeNull();
         expect(parseSignals('[1]')).toMatchObject({ screen: null });
+    });
+
+    test('client hints, network, storage and clock', () => {
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    model: 'Pixel 8',
+                    architecture: 'arm',
+                    bitness: '64',
+                    formFactors: ['Mobile'],
+                    quota: 123_456_789.4,
+                    downlink: 9.5,
+                    rtt: 50,
+                    saveData: false,
+                    clock: 1_800_000_000_000
+                })
+            )
+        ).toMatchObject({
+            hint_model: 'Pixel 8',
+            cpu_arch: 'arm 64-bit',
+            form_factors: 'Mobile',
+            quota: 123_456_789,
+            downlink: 9.5,
+            rtt: 50,
+            save_data: 0,
+            client_clock: 1_800_000_000_000
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    architecture: 'x86',
+                    bitness: '64',
+                    wow64: true,
+                    formFactors: [],
+                    quota: -1,
+                    downlink: Number.MAX_VALUE,
+                    rtt: 'fast',
+                    clock: '1'
+                })
+            )
+        ).toMatchObject({
+            cpu_arch: 'x86 64-bit (32-bit browser)',
+            form_factors: null,
+            quota: null,
+            downlink: null,
+            rtt: null,
+            client_clock: null
+        });
     });
 
     test('structured browser traits keep known keys, in schema order, as JSON', () => {

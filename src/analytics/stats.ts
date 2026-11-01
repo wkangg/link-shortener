@@ -325,7 +325,10 @@ export class Stats {
             | 'incognito'
             | 'adBlocker'
             | 'darkMode'
-            | 'multiMonitor';
+            | 'multiMonitor'
+            | 'webdriver'
+            | 'js'
+            | 'saveData';
         type Probes = 'codecs' | 'fonts' | 'settings';
         type Json =
             | 'webgl'
@@ -335,7 +338,9 @@ export class Stats {
             | 'voices'
             | 'mediaDevices'
             | 'permissions'
-            | 'webgpu';
+            | 'webgpu'
+            | 'utm'
+            | 'query';
         const rows = this.#db
             .query<
                 Omit<ClickHistoryRow, Flags | Probes | Json> &
@@ -356,7 +361,15 @@ export class Stats {
                         c.dark_mode AS darkMode, c.webgl, c.keyboard, c.intl, c.languages,
                         c.canvas, c.audio, c.media_features AS mediaFeatures, c.voices, c.emoji,
                         c.math, c.media_devices AS mediaDevices, c.permissions,
-                        c.multi_monitor AS multiMonitor, c.webgpu, c.viewport
+                        c.multi_monitor AS multiMonitor, c.webgpu, c.viewport,
+                        c.webdriver, c.js, c.visitor_hash AS visitorHash, c.query,
+                        json_object('source', c.utm_source, 'medium', c.utm_medium,
+                                    'campaign', c.utm_campaign, 'term', c.utm_term,
+                                    'content', c.utm_content) AS utm,
+                        c.accept_language AS acceptLanguage, c.ip_timezone AS ipTimezone,
+                        c.cpu_arch AS cpuArch, c.form_factors AS formFactors, c.quota,
+                        c.downlink, c.rtt, c.save_data AS saveData,
+                        c.clock_skew AS clockSkew, c.report_ms AS reportMs
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -375,6 +388,11 @@ export class Stats {
                 adBlocker: flag(r.adBlocker),
                 darkMode: flag(r.darkMode),
                 multiMonitor: flag(r.multiMonitor),
+                webdriver: flag(r.webdriver),
+                js: flag(r.js),
+                saveData: flag(r.saveData),
+                utm: withoutNulls(parseJson(r.utm)),
+                query: parseJson(r.query),
                 webgl: parseJson(r.webgl),
                 intl: parseJson(r.intl),
                 languages: parseJson(r.languages),
@@ -530,4 +548,13 @@ function parseJson<T>(value: string | null): T | null {
     } catch {
         return null;
     }
+}
+
+/** The record without its null values; null when nothing is left. */
+function withoutNulls(record: Record<string, string | null> | null): Record<string, string> | null {
+    if (!record) return null;
+    const entries = Object.entries(record).filter(
+        (entry): entry is [string, string] => entry[1] !== null
+    );
+    return entries.length > 0 ? Object.fromEntries(entries) : null;
 }

@@ -47,7 +47,9 @@ const COLUMNS = [
     'longitude',
     'fingerprint',
     'is_datacenter',
-    'js'
+    'js',
+    'accept_language',
+    'ip_timezone'
 ] as const satisfies readonly (keyof ClickRow)[];
 
 const SIGNAL_COLUMNS = [
@@ -84,7 +86,14 @@ const SIGNAL_COLUMNS = [
     'permissions',
     'multi_monitor',
     'webgpu',
-    'viewport'
+    'viewport',
+    'hint_model',
+    'cpu_arch',
+    'form_factors',
+    'quota',
+    'downlink',
+    'rtt',
+    'save_data'
 ] as const satisfies readonly (keyof DeviceSignals)[];
 
 /** Unused tokens are cleared (and their clicks reclassified) at most this often. */
@@ -180,7 +189,8 @@ export class ClickBuffer implements ClickSink {
                 timezone = COALESCE(?, timezone), language = COALESCE(?, language),
                 fingerprint = COALESCE(?, fingerprint), os = COALESCE(?, os),
                 os_version = COALESCE(?, os_version), device = COALESCE(?, device),
-                device_model = COALESCE(?, device_model), js = 1, token = NULL
+                device_model = COALESCE(?, device_model), clock_skew = ?, report_ms = ? - ts,
+                js = 1, token = NULL
              WHERE token = ? AND ts >= ?`
         );
         this.#setHostname = db.query(
@@ -299,7 +309,9 @@ export class ClickBuffer implements ClickSink {
                         apple?.os ?? null,
                         apple?.osVersion ?? null,
                         apple?.device ?? null,
-                        apple?.model ?? null,
+                        apple?.model ?? parsed.hint_model,
+                        parsed.client_clock === null ? null : parsed.client_clock - s.ts,
+                        s.ts,
                         s.token,
                         since
                     );

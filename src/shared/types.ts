@@ -252,6 +252,34 @@ export interface ClickHistoryRow {
     webgpu: TraitRecord | null;
     /** Window inner size, "WxH". */
     viewport: string | null;
+    /** navigator.webdriver: the browser said it's automated. */
+    webdriver: boolean | null;
+    /** Device-signals page: null = not served, false = no report (yet), true = reported. */
+    js: boolean | null;
+    visitorHash: string | null;
+    /** UTM tags by name without the prefix, e.g. { source: "newsletter" }. */
+    utm: Record<string, string> | null;
+    /** Other query parameters on the short link. */
+    query: Record<string, string> | null;
+    /** The whole Accept-Language header. */
+    acceptLanguage: string | null;
+    /** The IP's timezone (CF-Timezone); `timezone` is the browser's once it reports. */
+    ipTimezone: string | null;
+    /** e.g. "x86 64-bit" (Chromium only). */
+    cpuArch: string | null;
+    /** e.g. "Desktop" (Chromium only). */
+    formFactors: string | null;
+    /** Storage quota in bytes. */
+    quota: number | null;
+    /** Estimated bandwidth, Mbps. */
+    downlink: number | null;
+    /** Estimated round trip, ms. */
+    rtt: number | null;
+    saveData: boolean | null;
+    /** Device clock minus server clock, ms. */
+    clockSkew: number | null;
+    /** ms from the click to the page's report arriving. */
+    reportMs: number | null;
     /** Approximate (city-level) position of the IP, from the edge. */
     latitude: number | null;
     longitude: number | null;

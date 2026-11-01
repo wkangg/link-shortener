@@ -44,7 +44,12 @@ s.cores=n.hardwareConcurrency;
 s.touch=n.maxTouchPoints;
 if(typeof n.webdriver==='boolean')s.webdriver=n.webdriver;
 var c=n.connection;
-if(c)s.connection=c.type&&c.type!=='unknown'?c.type:c.effectiveType;
+if(c){
+  s.connection=c.type&&c.type!=='unknown'?c.type:c.effectiveType;
+  s.downlink=c.downlink;
+  s.rtt=c.rtt;
+  if(typeof c.saveData==='boolean')s.saveData=c.saveData;
+}
 s.gpu=tryit(function(){
   var g=document.createElement('canvas').getContext('webgl');
   var x=g.getExtension('WEBGL_debug_renderer_info');
@@ -190,7 +195,7 @@ function incognito(){
 function hints(){
   var u=n.userAgentData;
   if(!u||!u.getHighEntropyValues)return null;
-  return u.getHighEntropyValues(['platformVersion','fullVersionList']).then(function(h){
+  return u.getHighEntropyValues(['platformVersion','fullVersionList','model','architecture','bitness','wow64','formFactors']).then(function(h){
     var v=parseInt(h.platformVersion,10)||0;
     // Windows reports 13+ for Windows 11 and 1-10 for Windows 10.
     var p=u.platform==='Windows'?(v>=13?'Windows 11':'Windows 10'):u.platform+(h.platformVersion?' '+h.platformVersion:'');
@@ -198,6 +203,12 @@ function hints(){
     // The User-Agent header only has the major version; this has the full one.
     var b=(h.fullVersionList||[]).filter(function(x){return !/Not.?A.?Brand/i.test(x.brand)});
     if(b.length)s.browserVersion=b.map(function(x){return x.brand+' '+x.version}).join(', ');
+    // The User-Agent header no longer names Android phones; client hints still do.
+    if(h.model)s.model=h.model;
+    s.architecture=h.architecture;
+    s.bitness=h.bitness;
+    s.wow64=h.wow64;
+    s.formFactors=h.formFactors;
   });
 }
 function keyboard(){
@@ -267,6 +278,7 @@ var tasks=[
   tryit(webgpu),
   n.getBattery?n.getBattery().then(function(b){s.battery=Math.round(b.level*100);s.charging=b.charging}):0,
   incognito().then(function(v){if(v!==null)s.incognito=v}),
+  n.storage&&n.storage.estimate?n.storage.estimate().then(function(e){s.quota=e.quota}):0,
   new Promise(function(r){setTimeout(r,30)}).then(function(){
     var cs=getComputedStyle(bait);
     s.adBlocker=!bait.offsetHeight||cs.display==='none'||cs.visibility==='hidden';
@@ -276,6 +288,8 @@ Promise.race([
   Promise.all(tasks.map(function(p){return Promise.resolve(p).catch(function(){})})),
   new Promise(function(r){setTimeout(r,500)})
 ]).then(function(){
+  // Compared with the server's clock when the report arrives.
+  s.clock=Date.now();
   var body=JSON.stringify(s);
   if(!(n.sendBeacon&&n.sendBeacon(P,body)))fetch(P,{method:'POST',body:body,keepalive:true}).catch(function(){});
   go();

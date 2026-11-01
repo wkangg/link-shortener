@@ -264,7 +264,10 @@ describe('detailed device tracking', () => {
             languages: ['en-CA', 'fr-CA'],
             voices: ['Samantha (en-US)'],
             multiMonitor: false,
-            canvas: 'randomized'
+            canvas: 'randomized',
+            rtt: 100,
+            // Five minutes fast.
+            clock: Date.now() + 5 * 60_000
         };
         const post = (body: unknown) =>
             fetch(new URL('/_/signals', t.app.short.url), {
@@ -304,8 +307,15 @@ describe('detailed device tracking', () => {
             voices: ['Samantha (en-US)'],
             multiMonitor: false,
             canvas: 'randomized',
-            intl: null
+            intl: null,
+            js: true,
+            rtt: 100,
+            acceptLanguage: 'en-CA,en;q=0.9',
+            ipTimezone: 'America/Toronto'
         });
+        const click = history.clicks[0];
+        expect(click?.clockSkew).toBeGreaterThan(4 * 60_000);
+        expect(click?.reportMs).toBeGreaterThanOrEqual(0);
     });
 });
 
@@ -318,7 +328,7 @@ describe('about', () => {
         expect(about.database).toMatchObject({
             path: '',
             walBytes: 0,
-            migration: '0002_fingerprint_traits.sql',
+            migration: '0003_request_signals.sql',
             sqliteVersion: expect.stringMatching(/^3\./)
         });
         expect(about.database.sizeBytes).toBeGreaterThan(0);
