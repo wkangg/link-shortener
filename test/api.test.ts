@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
 import net from 'node:net';
 
@@ -301,6 +302,28 @@ describe('about', () => {
         expect(about.database.sizeBytes).toBeGreaterThan(0);
         expect(about.database.links).toBeGreaterThan(0);
         expect(await t.status('/api/about')).toBe(200);
+    });
+});
+
+describe('export', () => {
+    test('downloads a standalone copy of the database', async () => {
+        await send('POST', '/api/links', { url: 'https://example.com/', slug: 'exported' });
+        const res = await t.api('/api/export');
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe('application/vnd.sqlite3');
+        expect(res.headers.get('content-disposition')).toMatch(
+            /^attachment; filename="links-.+\.db"$/
+        );
+
+        const copy = Database.deserialize(new Uint8Array(await res.arrayBuffer()));
+        expect(copy.query('SELECT url FROM links WHERE slug = ?').get('exported')).toEqual({
+            url: 'https://example.com/'
+        });
+        copy.close();
+
+        t.auth.identity = null;
+        expect(await t.status('/api/export')).toBe(401);
+        t.auth.identity = { subject: 'me@example.com' };
     });
 });
 

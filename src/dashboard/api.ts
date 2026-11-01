@@ -1,4 +1,8 @@
 import type { Database } from 'bun:sqlite';
+import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import type { BunRequest, Server } from 'bun';
 import { z } from 'zod/v4';
@@ -72,6 +76,29 @@ export function json(body: unknown, status = 200, headers?: HeadersInit): Respon
 function error(message: string, status: number, issues?: ApiError['issues']): Response {
     const body: ApiError = issues ? { error: message, issues } : { error: message };
     return json(body, status);
+}
+
+/**
+ * A compact, consistent copy of the database as a `.db` download. VACUUM INTO
+ * writes a standalone file (no WAL) without blocking writers, but it runs on
+ * this thread, so redirects wait while a large database is copied.
+ */
+async function exportDatabase(db: Database): Promise<Response> {
+    const file = path.join(tmpdir(), `links-export-${randomUUID()}.db`);
+    try {
+        db.query('VACUUM INTO ?').run(file);
+        const bytes = await Bun.file(file).bytes();
+        const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
+        return new Response(bytes, {
+            headers: {
+                'Content-Type': 'application/vnd.sqlite3',
+                'Content-Disposition': `attachment; filename="links-${stamp}.db"`,
+                'Cache-Control': 'no-store'
+            }
+        });
+    } finally {
+        rmSync(file, { force: true });
+    }
 }
 
 function zodIssues(err: z.ZodError): NonNullable<ApiError['issues']> {
@@ -197,6 +224,10 @@ export function apiRoutes(deps: ApiDeps) {
                 };
                 return json(body);
             })
+        },
+
+        '/api/export': {
+            GET: guard(() => exportDatabase(deps.db))
         },
 
         '/api/links': {
