@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import net from 'node:net';
 
+import { inconsistencies } from '../src/dashboard/client/components/ClickDetails.tsx';
 import type {
     AboutResponse,
     ApiError,
@@ -316,6 +317,10 @@ describe('detailed device tracking', () => {
         const click = history.clicks[0];
         expect(click?.clockSkew).toBeGreaterThan(4 * 60_000);
         expect(click?.reportMs).toBeGreaterThanOrEqual(0);
+        expect(click && inconsistencies(click)).toEqual([
+            expect.stringContaining('Browser timezone America/Vancouver'),
+            expect.stringContaining('Device clock 5 min ahead')
+        ]);
     });
 });
 

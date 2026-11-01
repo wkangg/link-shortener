@@ -1211,6 +1211,12 @@ a.slug:hover {
     overflow-wrap: anywhere;
 }
 
+.click-details-issues {
+    margin: 0;
+    padding-left: 1rem;
+    color: var(--warn);
+}
+
 .click-details-lists {
     display: flex;
     flex-direction: column;

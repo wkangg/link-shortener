@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { ClickHistoryRow, TraitRecord } from '../../../shared/types.ts';
-import { gpuName, screenLabel } from '../format.ts';
+import { formatBytes, gpuName, screenLabel } from '../format.ts';
 
 /** Known layouts by their top letter row; anything else shows its first keys. */
 function layoutName(keys: string): string {
@@ -48,6 +48,142 @@ function settings(c: ClickHistoryRow): string | null {
     return all.length > 0 ? all.join(', ') : null;
 }
 
+const BACKENDS: Record<string, string> = {
+    D3D9: 'Direct3D 9',
+    D3D11: 'Direct3D 11',
+    D3D11on12: 'Direct3D 11 on 12',
+    D3D12: 'Direct3D 12',
+    OpenGL: 'OpenGL',
+    'OpenGL ES': 'OpenGL ES',
+    Metal: 'Metal',
+    Vulkan: 'Vulkan'
+};
+
+/**
+ * The parts of a WebGL renderer string. ANGLE (Chromium, recent Firefox and Safari) reports
+ * "ANGLE (vendor, renderer (device id) Direct3D11 vs_5_0 ps_5_0, D3D11)"; anything else is
+ * just a name. The WebGL vendor ("Google Inc. (Intel)") fills in a missing vendor.
+ */
+function gpuParts(renderer: string, webglVendor: string | null) {
+    const angle = /^ANGLE \((.*)\)$/.exec(renderer)?.[1]?.split(', ');
+    const backend = angle?.at(-1);
+    const shader = /\bps_(\d+)_(\d+)\b/.exec(renderer);
+    const vendor = angle?.[0] ?? /\(([^)]+)\)$/.exec(webglVendor ?? '')?.[1] ?? webglVendor;
+    return {
+        name: gpuName(renderer),
+        vendor,
+        backend: backend && angle && angle.length > 2 ? (BACKENDS[backend] ?? backend) : null,
+        shaderModel: shader ? `${shader[1]}.${shader[2]}` : null,
+        deviceId: /\((0x[\da-f]+)\)/i.exec(renderer)?.[1] ?? null
+    };
+}
+
+/** "23-bit mantissa · ±2^127" from WebGL's high float precision "23,127,127". */
+function precision(value: unknown): string | null {
+    const [bits, min, max] = typeof value === 'string' ? value.split(',') : [];
+    if (!bits || !max) return null;
+    return `${bits}-bit mantissa · ±2^${Math.max(Number(min), Number(max))}`;
+}
+
+/** "GMT-05:00" for a zone at a moment; null for an unknown zone. */
+function utcOffset(zone: string, ts: number): string | null {
+    try {
+        return (
+            new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' })
+                .formatToParts(ts)
+                .find(part => part.type === 'timeZoneName')?.value ?? null
+        );
+    } catch {
+        return null;
+    }
+}
+
+/** "420 ms", "3.2 s", "4 min", "2 h". */
+function duration(ms: number): string {
+    const abs = Math.abs(ms);
+    if (abs < 1000) return `${Math.round(abs)} ms`;
+    if (abs < 60_000) return `${(abs / 1000).toFixed(1)} s`;
+    if (abs < 3_600_000) return `${Math.round(abs / 60_000)} min`;
+    return `${(abs / 3_600_000).toFixed(1)} h`;
+}
+
+/** Clocks within this of the server count as in sync (it includes network delay). */
+const CLOCK_TOLERANCE_MS = 120_000;
+
+/** Coarse OS family, so "Windows" (user agent) and "Windows 11" (client hints) compare equal. */
+function osFamily(os: string | null): string | null {
+    const s = os?.toLowerCase() ?? '';
+    if (s.startsWith('windows')) return 'windows';
+    if (s.startsWith('mac')) return 'macos';
+    if (s.startsWith('android')) return 'android';
+    if (s.startsWith('ios') || s.startsWith('ipados')) return 'ios';
+    if (s.startsWith('chrome')) return 'chromeos';
+    if (s.startsWith('linux')) return 'linux';
+    return null;
+}
+
+/**
+ * Traits that contradict each other: common with VPNs, spoofed user agents and
+ * automation, though each has innocent causes too (travel, desktop mode, a wrong clock).
+ */
+export function inconsistencies(c: ClickHistoryRow): string[] {
+    const out: string[] = [];
+    // `timezone` only differs from the IP's once the browser has reported its own.
+    if (c.js && c.ipTimezone && c.timezone && c.ipTimezone !== c.timezone) {
+        const browser = utcOffset(c.timezone, c.ts);
+        const ip = utcOffset(c.ipTimezone, c.ts);
+        if (browser && ip && browser !== ip) {
+            out.push(
+                `Browser timezone ${c.timezone} (${browser}) ≠ IP timezone ${c.ipTimezone} (${ip})`
+            );
+        }
+    }
+    const uaOs = osFamily(c.os);
+    const hintOs = osFamily(c.platform);
+    if (uaOs && hintOs && uaOs !== hintOs) {
+        out.push(`User agent says ${c.os ?? ''}, browser reports ${c.platform ?? ''}`);
+    }
+    const header = c.acceptLanguage?.split(/[,;]/)[0]?.trim().toLowerCase();
+    const preferred = c.languages?.[0]?.toLowerCase();
+    if (header && preferred && header.split('-')[0] !== preferred.split('-')[0]) {
+        out.push(`Accept-Language starts with ${header}, browser prefers ${preferred}`);
+    }
+    if (c.formFactors && c.device) {
+        const hintsMobile = /mobile|tablet/i.test(c.formFactors) && !/desktop/i.test(c.formFactors);
+        const uaMobile = c.device === 'mobile' || c.device === 'tablet';
+        if (hintsMobile !== uaMobile) {
+            out.push(`Client hints say ${c.formFactors}, user agent says ${c.device}`);
+        }
+    }
+    if (c.clockSkew !== null && Math.abs(c.clockSkew) > CLOCK_TOLERANCE_MS) {
+        out.push(`Device clock ${duration(c.clockSkew)} ${c.clockSkew > 0 ? 'ahead' : 'behind'}`);
+    }
+    return out;
+}
+
+/** "k=v, k=v". */
+function pairs(record: Record<string, string> | null): string | null {
+    if (!record) return null;
+    return Object.entries(record)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(', ');
+}
+
+/** "in sync (+1.2 s)" or "4 min ahead". */
+function clock(skew: number): string {
+    if (Math.abs(skew) > CLOCK_TOLERANCE_MS) {
+        return `${duration(skew)} ${skew > 0 ? 'ahead' : 'behind'}`;
+    }
+    return `in sync (${skew >= 0 ? '+' : '−'}${duration(skew)})`;
+}
+
+/** The page's report: "after 420 ms", "none", or null when no page was served. */
+function pageReport(c: ClickHistoryRow): string | null {
+    if (c.js === null) return null;
+    if (!c.js) return 'none';
+    return c.reportMs === null ? 'received' : `after ${duration(c.reportMs)}`;
+}
+
 type Row = [label: string, value: ReactNode];
 
 /** A titled group of label / value rows; hidden when every value is missing. */
@@ -91,6 +227,7 @@ function Chips({ label, items }: { label: string; items: string[] | null | undef
 /** Whether the browser reported anything worth a details panel. */
 export function hasDetails(c: ClickHistoryRow): boolean {
     return [
+        c.js,
         c.screen,
         c.gpu,
         c.battery,
@@ -120,13 +257,58 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
     const f = c.mediaFeatures;
     const intl = c.intl;
     const webgl = c.webgl;
+    const gpu = c.gpu ? gpuParts(c.gpu, text(webgl?.vendor)) : null;
     const devices = c.mediaDevices;
     const count = (key: string) => (typeof devices?.[key] === 'number' ? devices[key] : 0);
     const gamut = typeof f?.gamut === 'string' ? (GAMUTS[f.gamut] ?? f.gamut) : null;
+    const issues = inconsistencies(c);
+    const ipOffset = c.ipTimezone && utcOffset(c.ipTimezone, c.ts);
 
     return (
         <div className="click-details">
             <div className="click-details-grid">
+                <Section
+                    title="Signals"
+                    rows={[
+                        [
+                            'Checks',
+                            c.js &&
+                                (issues.length > 0 ? (
+                                    <ul className="click-details-issues">
+                                        {issues.map(issue => (
+                                            <li key={issue}>{issue}</li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    'nothing contradicts'
+                                ))
+                        ],
+                        [
+                            'Automation',
+                            c.webdriver === null
+                                ? null
+                                : c.webdriver
+                                  ? 'webdriver on'
+                                  : 'none reported'
+                        ],
+                        ['Page report', pageReport(c)],
+                        ['Device clock', c.clockSkew === null ? null : clock(c.clockSkew)]
+                    ]}
+                />
+                <Section
+                    title="Request"
+                    rows={[
+                        ['Referrer', c.referrer],
+                        ['UTM', pairs(c.utm)],
+                        ['Query', pairs(c.query)],
+                        ['Accept-Language', c.acceptLanguage],
+                        [
+                            'IP timezone',
+                            c.ipTimezone && `${c.ipTimezone}${ipOffset ? ` (${ipOffset})` : ''}`
+                        ],
+                        ['Visitor', mono(c.visitorHash)]
+                    ]}
+                />
                 <Section
                     title="Display"
                     rows={[
@@ -176,7 +358,9 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                 <Section
                     title="Hardware"
                     rows={[
-                        ['GPU', c.gpu && <span title={c.gpu}>{gpuName(c.gpu)}</span>],
+                        ['Model', c.deviceModel],
+                        ['Form factor', c.formFactors],
+                        ['Architecture', c.cpuArch],
                         ['Memory', c.memory === null ? null : `${c.memory} GB`],
                         ['CPU', c.cpuCores === null ? null : plural(c.cpuCores, 'core')],
                         [
@@ -193,18 +377,18 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                                 ? null
                                 : `${c.battery}%${c.charging ? ' · charging' : ''}`
                         ],
-                        ['Network', c.connection],
                         [
-                            'WebGPU',
-                            c.webgpu &&
-                                [c.webgpu.vendor, c.webgpu.architecture, c.webgpu.description]
-                                    .filter(Boolean)
-                                    .join(' · ')
+                            'Network',
+                            [
+                                c.connection,
+                                c.downlink === null ? null : `~${c.downlink} Mbps`,
+                                c.rtt === null ? null : `${c.rtt} ms RTT`,
+                                c.saveData ? 'Data Saver' : null
+                            ]
+                                .filter(Boolean)
+                                .join(' · ')
                         ],
-                        [
-                            'WebGL',
-                            webgl && [webgl.version, webgl.vendor].filter(Boolean).join(' · ')
-                        ],
+                        ['Storage', c.quota === null ? null : `${formatBytes(c.quota)} quota`],
                         [
                             'Media',
                             devices &&
@@ -222,6 +406,42 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                                   ? `up to Emoji ${c.emoji}`
                                   : 'no color emoji'
                         ]
+                    ]}
+                />
+                <Section
+                    title="Graphics"
+                    rows={[
+                        ['GPU', gpu?.name],
+                        ['Vendor', gpu?.vendor],
+                        ['Backend', gpu?.backend],
+                        ['Shader model', gpu?.shaderModel],
+                        ['Device ID', mono(gpu?.deviceId ?? null)],
+                        [
+                            'WebGPU',
+                            c.webgpu &&
+                                [c.webgpu.vendor, c.webgpu.architecture, c.webgpu.device]
+                                    .filter(Boolean)
+                                    .join(' · ')
+                        ],
+                        ['WebGPU name', text(c.webgpu?.description)],
+                        ['WebGL', text(webgl?.version)],
+                        ['GLSL', text(webgl?.shading)],
+                        [
+                            'Max texture',
+                            typeof webgl?.maxTexture === 'number' &&
+                                `${webgl.maxTexture}×${webgl.maxTexture}`
+                        ],
+                        ['Max viewport', text(webgl?.maxViewport)?.replace('-', '×')],
+                        ['Precision', webgl && precision(webgl.precision)],
+                        [
+                            'Antialiasing',
+                            typeof webgl?.antialias === 'boolean'
+                                ? webgl.antialias
+                                    ? 'on'
+                                    : 'off'
+                                : null
+                        ],
+                        ['Renderer', mono(c.gpu)]
                     ]}
                 />
                 <Section
