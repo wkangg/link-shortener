@@ -50,7 +50,11 @@ const IPHONE_IDS: Record<string, string> = {
     'iPhone18,1': 'iPhone 17 Pro',
     'iPhone18,2': 'iPhone 17 Pro Max',
     'iPhone18,3': 'iPhone 17',
-    'iPhone18,4': 'iPhone Air'
+    'iPhone18,4': 'iPhone Air',
+    'iPhone19,2': 'iPhone 18 Pro',
+    'iPhone19,3': 'iPhone 18 Pro Max',
+    'iPhone19,4': 'iPhone Duo',
+    'iPhone19,7': 'iPhone 18 Pro Max'
 };
 
 /**
@@ -69,9 +73,12 @@ const IPHONE_SCREENS: Record<string, string> = {
     '428x926@3': 'iPhone 12 Pro Max, 13 Pro Max or 14 Plus',
     '393x852@3': 'iPhone 14 Pro, 15, 15 Pro or 16',
     '430x932@3': 'iPhone 14 Pro Max, 15 Plus, 15 Pro Max or 16 Plus',
-    '402x874@3': 'iPhone 16 Pro, 17 or 17 Pro',
+    '402x874@3': 'iPhone 16 Pro, 17, 17 Pro or 18 Pro',
     '420x912@3': 'iPhone Air',
-    '440x956@3': 'iPhone 16 Pro Max or 17 Pro Max'
+    '440x956@3': 'iPhone 16 Pro Max, 17 Pro Max or 18 Pro Max',
+    '466x678@3': 'iPhone Duo (folded)',
+    // Rendered at 3x and downsampled to the ~2.81x panel, like the old Plus models.
+    '669x951@3': 'iPhone Duo (unfolded)'
 };
 
 const IPAD_SCREENS: Record<string, string> = {

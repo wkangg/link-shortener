@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 
-import { iosVersion, modelFromScreen, refineApple } from '../src/analytics/apple.ts';
+import {
+    iosVersion,
+    modelFromHardwareId,
+    modelFromScreen,
+    refineApple
+} from '../src/analytics/apple.ts';
 import { ClickBuffer } from '../src/analytics/clicks.ts';
 import { parseUserAgent } from '../src/analytics/ua.ts';
 import { openDatabase } from '../src/db/client.ts';
@@ -59,6 +64,14 @@ describe('model', () => {
             'Apple iPad (10th gen or later) or Air 11″'
         );
         expect(modelFromScreen('1920x1080@1', 'iPhone')).toBeNull();
+    });
+
+    test('iPhone 18 Pro and Duo', () => {
+        expect(modelFromHardwareId('(iPhone19,2; iOS 26_1)')).toBe('Apple iPhone 18 Pro');
+        expect(modelFromHardwareId('(iPhone19,7; iOS 26_1)')).toBe('Apple iPhone 18 Pro Max');
+        expect(modelFromHardwareId('(iPhone19,4; iOS 26_1)')).toBe('Apple iPhone Duo');
+        expect(modelFromScreen('466x678@3', 'iPhone')).toBe('Apple iPhone Duo (folded)');
+        expect(modelFromScreen('951x669@3', 'iPhone')).toBe('Apple iPhone Duo (unfolded)');
     });
 
     test('refining keeps an exact model', () => {
@@ -154,7 +167,7 @@ describe('stored clicks', () => {
                 os: 'iOS',
                 os_version: '26.0.1',
                 device: 'mobile',
-                device_model: 'Apple iPhone 16 Pro, 17 or 17 Pro'
+                device_model: 'Apple iPhone 16 Pro, 17, 17 Pro or 18 Pro'
             },
             {
                 os: 'iOS',
