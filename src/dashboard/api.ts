@@ -1,6 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import { randomUUID } from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -37,6 +36,8 @@ export interface ApiDeps {
     /** AbuseIPDB lookups are on. */
     reputation: boolean;
     abuseMinScore: number;
+    /** Writes buffered clicks to the database (before an export). */
+    flushClicks: () => void;
 }
 
 type Handler<Path extends string> = (
@@ -78,22 +79,54 @@ function error(message: string, status: number, issues?: ApiError['issues']): Re
     return json(body, status);
 }
 
-/** A compact, consistent copy of the database as a `.db` download. */
-async function exportDatabase(db: Database): Promise<Response> {
-    const file = path.join(tmpdir(), `links-export-${randomUUID()}.db`);
+/**
+ * A compact, consistent copy of the database as a `.db` download. The copy is
+ * made in a private (0700) temporary directory and streamed, so a large
+ * database isn't held in memory; the directory goes once the download ends.
+ */
+async function exportDatabase(deps: ApiDeps): Promise<Response> {
+    deps.flushClicks(); // clicks still buffered in memory belong in the copy
+    const dir = mkdtempSync(path.join(tmpdir(), 'links-export-'));
+    const cleanup = () => {
+        try {
+            rmSync(dir, { recursive: true, force: true });
+        } catch (error) {
+            console.error('[export] could not remove', dir, error);
+        }
+    };
     try {
-        await copyDatabase(db, file);
-        const bytes = await Bun.file(file).bytes();
+        const file = path.join(dir, 'links.db');
+        await copyDatabase(deps.db, file);
+        const reader = Bun.file(file).stream().getReader();
+        const body = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+                try {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        controller.close();
+                        cleanup();
+                    } else controller.enqueue(value);
+                } catch (error) {
+                    controller.error(error);
+                    cleanup();
+                }
+            },
+            async cancel(reason) {
+                await reader.cancel(reason);
+                cleanup();
+            }
+        });
         const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
-        return new Response(bytes, {
+        return new Response(body, {
             headers: {
                 'Content-Type': 'application/vnd.sqlite3',
                 'Content-Disposition': `attachment; filename="links-${stamp}.db"`,
                 'Cache-Control': 'no-store'
             }
         });
-    } finally {
-        rmSync(file, { force: true });
+    } catch (error) {
+        cleanup();
+        throw error;
     }
 }
 
@@ -223,7 +256,7 @@ export function apiRoutes(deps: ApiDeps) {
         },
 
         '/api/export': {
-            GET: guard(() => exportDatabase(deps.db))
+            GET: guard(() => exportDatabase(deps))
         },
 
         '/api/links': {

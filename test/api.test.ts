@@ -308,6 +308,7 @@ describe('about', () => {
 describe('export', () => {
     test('downloads a standalone copy of the database', async () => {
         await send('POST', '/api/links', { url: 'https://example.com/', slug: 'exported' });
+        await t.click('/exported'); // still buffered, not yet flushed
         const res = await t.api('/api/export');
         expect(res.status).toBe(200);
         expect(res.headers.get('content-type')).toBe('application/vnd.sqlite3');
@@ -319,6 +320,13 @@ describe('export', () => {
         expect(copy.query('SELECT url FROM links WHERE slug = ?').get('exported')).toEqual({
             url: 'https://example.com/'
         });
+        expect(
+            copy
+                .query(
+                    'SELECT COUNT(*) AS n FROM clicks JOIN links ON links.id = clicks.link_id WHERE slug = ?'
+                )
+                .get('exported')
+        ).toEqual({ n: 1 });
         copy.close();
 
         t.auth.identity = null;
