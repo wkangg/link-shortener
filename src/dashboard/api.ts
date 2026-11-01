@@ -8,7 +8,7 @@ import type { BunRequest, Server } from 'bun';
 import { z } from 'zod/v4';
 
 import { BadQueryError, Stats } from '../analytics/stats.ts';
-import { databaseInfo, pingDatabase } from '../db/client.ts';
+import { copyDatabase, databaseInfo, pingDatabase } from '../db/client.ts';
 import type {
     AboutResponse,
     ApiError,
@@ -78,15 +78,11 @@ function error(message: string, status: number, issues?: ApiError['issues']): Re
     return json(body, status);
 }
 
-/**
- * A compact, consistent copy of the database as a `.db` download. VACUUM INTO
- * writes a standalone file (no WAL) without blocking writers, but it runs on
- * this thread, so redirects wait while a large database is copied.
- */
+/** A compact, consistent copy of the database as a `.db` download. */
 async function exportDatabase(db: Database): Promise<Response> {
     const file = path.join(tmpdir(), `links-export-${randomUUID()}.db`);
     try {
-        db.query('VACUUM INTO ?').run(file);
+        await copyDatabase(db, file);
         const bytes = await Bun.file(file).bytes();
         const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
         return new Response(bytes, {
