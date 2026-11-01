@@ -157,8 +157,25 @@ docker run -d \
 The app is designed to sit behind Cloudflare:
 
 - **Authentication:** create a self-hosted Cloudflare Access application for the dashboard domain and allow only yourself. Every API request must carry a valid Access JWT.
-- **Location data:** analytics read `CF-Connecting-IP`, `CF-IPCountry` and the visitor location headers. Turn these on under _Rules → Transform Rules → Managed Transforms → Add visitor location headers_.
+- **Location data:** analytics read `CF-Connecting-IP`, `CF-IPCountry` and the visitor location headers (city, region, postal code, continent, US metro, timezone, coordinates). Turn these on under _Rules → Settings → Managed Transforms → Add visitor location headers_. The edge datacenter comes from `CF-RAY`, which is always sent.
+- **Security headers:** turn on _Add security headers_ in the same Managed Transforms list. The app sets none of its own, and it adds `nosniff` and `X-Frame-Options: SAMEORIGIN` (which stops the dashboard being framed). Leave _Remove visitor IP headers_ **off**: it strips `CF-Connecting-IP`, and every click would record Cloudflare's address instead of the visitor's.
 - **Origin protection:** allow only Cloudflare's IP ranges to reach the origin, or use a Cloudflare Tunnel, so those headers can't be spoofed.
+
+#### Network names (optional Worker)
+
+Cloudflare knows each visitor's network (AS number and organization, e.g. `AS812 · Rogers`) but doesn't send it as a header. The small Worker in [`cloudflare/asn-headers`](./cloudflare/asn-headers) adds it as `x-asn` and `x-as-org` on the short domain, overwriting anything the visitor sends. The click details then show the network, and the IP column flags a **network mismatch** when it disagrees with AbuseIPDB's ISP.
+
+1. The deploy routes the Worker to your short domain only, taken from `SHORT_ORIGIN` in the app's `.env`. To use another, set `ROUTE`, e.g. `ROUTE="s.example.com/*" bun run deploy`. Never route it to the dashboard domain.
+2. Deploy it:
+
+    ```sh
+    cd cloudflare/asn-headers
+    bun install
+    bun run login    # once; Wrangler keeps its own sign-in
+    bun run deploy
+    ```
+
+It runs on the Workers free plan (100,000 requests a day) and redirects pass through unchanged. Without it, the network fields stay empty. If you only need the AS number, a Transform Rule under _Rules → Transform Rules → Modify Request Header_ that sets `x-asn` to `ip.src.asnum` works too, but the name needs the Worker.
 
 ### Creating links from elsewhere
 
