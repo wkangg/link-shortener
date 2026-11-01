@@ -333,6 +333,32 @@ describe('export', () => {
         expect(await t.status('/api/export')).toBe(401);
         t.auth.identity = { subject: 'me@example.com' };
     });
+
+    test('refuses to export while buffered clicks can’t be saved', async () => {
+        const r = testApp();
+        try {
+            await r.api('/api/links', {
+                method: 'POST',
+                body: JSON.stringify({ url: 'https://example.com/', slug: 'stuck' })
+            });
+            await r.click('/stuck');
+            r.db.run(
+                "CREATE TRIGGER fail_clicks BEFORE INSERT ON clicks BEGIN SELECT RAISE(ABORT, 'disk full'); END"
+            );
+            const failed = await r.api('/api/export');
+            expect(failed.status).toBe(503);
+            expect(r.app.clicks.pending).toBe(1);
+
+            r.db.run('DROP TRIGGER fail_clicks');
+            const res = await r.api('/api/export');
+            expect(res.status).toBe(200);
+            const copy = Database.deserialize(new Uint8Array(await res.arrayBuffer()));
+            expect(copy.query('SELECT COUNT(*) AS n FROM clicks').get()).toEqual({ n: 1 });
+            copy.close();
+        } finally {
+            await r.close();
+        }
+    });
 });
 
 describe('IP reputation', () => {

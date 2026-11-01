@@ -191,6 +191,11 @@ export class ClickBuffer implements ClickSink {
         this.#timer = setInterval(() => this.flush(), this.#opts.intervalMs);
     }
 
+    /** Clicks, signals and hostnames waiting for the next flush. */
+    get pending(): number {
+        return this.#pending.length + this.#signals.length + this.#hostnames.length;
+    }
+
     /** Writes everything pending. Returns the number of click rows written. */
     flush(): number {
         if (this.#dropped > 0) {

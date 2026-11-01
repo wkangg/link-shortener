@@ -36,8 +36,8 @@ export interface ApiDeps {
     /** AbuseIPDB lookups are on. */
     reputation: boolean;
     abuseMinScore: number;
-    /** Writes buffered clicks to the database (before an export). */
-    flushClicks: () => void;
+    /** Writes buffered clicks to the database; false if some couldn't be. */
+    flushClicks: () => boolean;
 }
 
 type Handler<Path extends string> = (
@@ -85,7 +85,10 @@ function error(message: string, status: number, issues?: ApiError['issues']): Re
  * database isn't held in memory; the directory goes once the download ends.
  */
 async function exportDatabase(deps: ApiDeps): Promise<Response> {
-    deps.flushClicks(); // clicks still buffered in memory belong in the copy
+    // Clicks still buffered in memory belong in the copy; don't hand out one without them.
+    if (!deps.flushClicks()) {
+        return error('Couldn’t save recent clicks before exporting; try again', 503);
+    }
     const dir = mkdtempSync(path.join(tmpdir(), 'links-export-'));
     const cleanup = () => {
         try {

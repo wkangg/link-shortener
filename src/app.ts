@@ -126,7 +126,10 @@ export function startApp(opts: AppOptions) {
         shortOrigin: config.shortOrigin,
         reputation: reputation !== null,
         abuseMinScore: config.abuseMinScore,
-        flushClicks: () => clicks.flush()
+        flushClicks: () => {
+            clicks.flush();
+            return clicks.pending === 0;
+        }
     });
 
     return {
