@@ -179,7 +179,27 @@ describe('extra click fields', () => {
             downlink: null,
             rtt: null,
             save_data: null,
-            client_clock: null
+            client_clock: null,
+            history_length: null,
+            visibility: null,
+            nav_type: null,
+            has_opener: null,
+            page_referrer: null,
+            browser_brand: null,
+            nav_platform: null,
+            nav_vendor: null,
+            oscpu: null,
+            automation: null,
+            timer_ms: null,
+            cpu_ms: null,
+            heap_limit: null,
+            refresh_hz: null,
+            biometrics: null,
+            bluetooth: null,
+            font_size: null,
+            scrollbar: null,
+            outer_size: null,
+            blocked_storage: null
         });
         expect(
             parseSignals(
@@ -261,6 +281,77 @@ describe('extra click fields', () => {
             downlink: null,
             rtt: null,
             client_clock: null
+        });
+    });
+
+    test('click context, real browser, automation tells and settings', () => {
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    historyLength: 1,
+                    visibility: 'hidden',
+                    navType: 'reload',
+                    opener: false,
+                    pageReferrer: 'https://discord.com/',
+                    brand: 'Brave',
+                    navPlatform: 'Win32',
+                    vendor: 'Google Inc.',
+                    automation: ['no window.chrome', 7],
+                    timerMs: 0.1,
+                    cpuMs: 12.3,
+                    heapLimit: 4_294_705_152,
+                    refreshHz: 120,
+                    biometrics: true,
+                    bluetooth: false,
+                    fontSize: 20,
+                    scrollbar: 0,
+                    outer: '1440x900',
+                    blockedStorage: ['localStorage', 'cookies']
+                })
+            )
+        ).toMatchObject({
+            history_length: 1,
+            visibility: 'hidden',
+            nav_type: 'reload',
+            has_opener: 0,
+            page_referrer: 'https://discord.com/',
+            browser_brand: 'Brave',
+            nav_platform: 'Win32',
+            nav_vendor: 'Google Inc.',
+            oscpu: null,
+            automation: JSON.stringify(['no window.chrome']),
+            timer_ms: 0.1,
+            cpu_ms: 12.3,
+            heap_limit: 4_294_705_152,
+            refresh_hz: 120,
+            biometrics: 1,
+            bluetooth: 0,
+            font_size: 20,
+            scrollbar: 0,
+            outer_size: '1440x900',
+            blocked_storage: JSON.stringify(['localStorage'])
+        });
+        // An empty list is a finding ("none"); a missing one is not.
+        expect(parseSignals(JSON.stringify({ automation: [], blockedStorage: [] }))).toMatchObject({
+            automation: '[]',
+            blocked_storage: '[]'
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    visibility: 'peeking',
+                    navType: 'teleport',
+                    pageReferrer: 'ftp://example.com/',
+                    brand: 'Netscape',
+                    refreshHz: 0
+                })
+            )
+        ).toMatchObject({
+            visibility: null,
+            nav_type: null,
+            page_referrer: null,
+            browser_brand: null,
+            refresh_hz: null
         });
     });
 

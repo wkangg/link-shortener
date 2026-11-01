@@ -328,7 +328,10 @@ export class Stats {
             | 'multiMonitor'
             | 'webdriver'
             | 'js'
-            | 'saveData';
+            | 'saveData'
+            | 'hasOpener'
+            | 'biometrics'
+            | 'bluetooth';
         type Probes = 'codecs' | 'fonts' | 'settings';
         type Json =
             | 'webgl'
@@ -340,7 +343,9 @@ export class Stats {
             | 'permissions'
             | 'webgpu'
             | 'utm'
-            | 'query';
+            | 'query'
+            | 'automation'
+            | 'blockedStorage';
         const rows = this.#db
             .query<
                 Omit<ClickHistoryRow, Flags | Probes | Json> &
@@ -369,7 +374,14 @@ export class Stats {
                         c.accept_language AS acceptLanguage, c.ip_timezone AS ipTimezone,
                         c.cpu_arch AS cpuArch, c.form_factors AS formFactors, c.quota,
                         c.downlink, c.rtt, c.save_data AS saveData,
-                        c.clock_skew AS clockSkew, c.report_ms AS reportMs
+                        c.clock_skew AS clockSkew, c.report_ms AS reportMs,
+                        c.history_length AS historyLength, c.visibility, c.nav_type AS navType,
+                        c.has_opener AS hasOpener, c.page_referrer AS pageReferrer,
+                        c.browser_brand AS browserBrand, c.nav_platform AS navPlatform,
+                        c.nav_vendor AS navVendor, c.oscpu, c.automation, c.timer_ms AS timerMs,
+                        c.cpu_ms AS cpuMs, c.heap_limit AS heapLimit, c.refresh_hz AS refreshHz,
+                        c.biometrics, c.bluetooth, c.font_size AS fontSize, c.scrollbar,
+                        c.outer_size AS outerSize, c.blocked_storage AS blockedStorage
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -391,6 +403,11 @@ export class Stats {
                 webdriver: flag(r.webdriver),
                 js: flag(r.js),
                 saveData: flag(r.saveData),
+                hasOpener: flag(r.hasOpener),
+                biometrics: flag(r.biometrics),
+                bluetooth: flag(r.bluetooth),
+                automation: parseJson(r.automation),
+                blockedStorage: parseJson(r.blockedStorage),
                 utm: withoutNulls(parseJson(r.utm)),
                 query: parseJson(r.query),
                 webgl: parseJson(r.webgl),

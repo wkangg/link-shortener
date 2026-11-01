@@ -129,6 +129,50 @@ export interface DeviceSignals {
     save_data: 0 | 1 | null;
     /** The device's Date.now() when it sent the report; not stored, see ClickBuffer. */
     client_clock: number | null;
+    // How the click happened.
+    /** history.length: 1 is a fresh tab, usually opened from another app. */
+    history_length: number | null;
+    /** visible | hidden (a background tab) | prerender. */
+    visibility: string | null;
+    /** navigate | reload | back_forward | prerender. */
+    nav_type: string | null;
+    /** window.opener was set. */
+    has_opener: 0 | 1 | null;
+    /** document.referrer as the page saw it. */
+    page_referrer: string | null;
+    // The real browser and automation tells.
+    /** Brave, DuckDuckGo, Opera or Arc, detected behind a Chrome-like user agent. */
+    browser_brand: string | null;
+    /** navigator.platform, e.g. "Win32". */
+    nav_platform: string | null;
+    /** navigator.vendor, e.g. "Google Inc.". */
+    nav_vendor: string | null;
+    /** navigator.oscpu (Firefox). */
+    oscpu: string | null;
+    /** JSON array of automation-tool leftovers and headless tells; [] when none. */
+    automation: string | null;
+    /** performance.now() resolution, ms; coarse in Tor and resist-fingerprinting. */
+    timer_ms: number | null;
+    // Hardware.
+    /** ms for a fixed workload: rough device speed. */
+    cpu_ms: number | null;
+    /** performance.memory.jsHeapSizeLimit, bytes (Chromium). */
+    heap_limit: number | null;
+    /** Screen refresh rate, Hz. */
+    refresh_hz: number | null;
+    /** Built-in biometrics (Windows Hello, Touch ID, Face ID) available. */
+    biometrics: 0 | 1 | null;
+    /** A Bluetooth adapter is available (Chromium). */
+    bluetooth: 0 | 1 | null;
+    // Display and browser settings.
+    /** Default font size, px. */
+    font_size: number | null;
+    /** Classic scrollbar width, px; 0 is overlay scrollbars. */
+    scrollbar: number | null;
+    /** Browser window outer size "WxH". */
+    outer_size: string | null;
+    /** JSON array of storage APIs that are blocked; [] when all work. */
+    blocked_storage: string | null;
 }
 
 type TraitKind = 'str' | 'int' | 'bool' | 'strs';
@@ -219,6 +263,11 @@ const VIEWPORT_RE = /^\d{1,5}x\d{1,5}$/;
 const ARCH_RE = /^[\w-]{1,16}$/;
 const BITNESS_RE = /^\d{2}$/;
 const MAX_ACCEPT_LANGUAGE = 200;
+const VISIBILITIES = new Set(['visible', 'hidden', 'prerender']);
+const NAV_TYPES = new Set(['navigate', 'reload', 'back_forward', 'prerender']);
+const BRANDS = new Set(['Brave', 'DuckDuckGo', 'Opera', 'Arc']);
+const STORAGE_APIS = new Set(['localStorage', 'sessionStorage', 'indexedDB']);
+const MAX_PAGE_REFERRER = 500;
 const ORIENTATIONS = new Set([
     'portrait-primary',
     'portrait-secondary',
@@ -383,7 +432,33 @@ export function parseSignals(body: string): DeviceSignals | null {
         downlink: number(s.downlink, 100_000, false),
         rtt: number(s.rtt, 60_000, true),
         save_data: flag('saveData'),
-        client_clock: number(s.clock, 1e14, true)
+        client_clock: number(s.clock, 1e14, true),
+        history_length: number(s.historyLength, 1000, true),
+        visibility: VISIBILITIES.has(str('visibility')) ? str('visibility') : null,
+        nav_type: NAV_TYPES.has(str('navType')) ? str('navType') : null,
+        has_opener: flag('opener'),
+        page_referrer: /^https?:\/\//.test(str('pageReferrer'))
+            ? traitText(s.pageReferrer, MAX_PAGE_REFERRER)
+            : null,
+        browser_brand: BRANDS.has(str('brand')) ? str('brand') : null,
+        nav_platform: traitText(s.navPlatform, 40),
+        nav_vendor: traitText(s.vendor, 60),
+        oscpu: traitText(s.oscpu, 60),
+        automation: Array.isArray(s.automation)
+            ? JSON.stringify(traitList(s.automation, 20))
+            : null,
+        timer_ms: number(s.timerMs, 1000, false),
+        cpu_ms: number(s.cpuMs, 60_000, false),
+        heap_limit: number(s.heapLimit, 1e13, true),
+        refresh_hz: number(s.refreshHz, 1000, true) || null,
+        biometrics: flag('biometrics'),
+        bluetooth: flag('bluetooth'),
+        font_size: number(s.fontSize, 200, false),
+        scrollbar: number(s.scrollbar, 100, true),
+        outer_size: match('outer', VIEWPORT_RE),
+        blocked_storage: Array.isArray(s.blockedStorage)
+            ? JSON.stringify(traitList(s.blockedStorage, 5)?.filter(k => STORAGE_APIS.has(k)))
+            : null
     };
 }
 

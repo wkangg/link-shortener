@@ -267,6 +267,11 @@ describe('detailed device tracking', () => {
             multiMonitor: false,
             canvas: 'randomized',
             rtt: 100,
+            historyLength: 1,
+            automation: ['no window.chrome'],
+            // Contradict the Mac Safari user agent.
+            navPlatform: 'Win32',
+            vendor: 'Google Inc.',
             // Five minutes fast.
             clock: Date.now() + 5 * 60_000
         };
@@ -312,7 +317,10 @@ describe('detailed device tracking', () => {
             js: true,
             rtt: 100,
             acceptLanguage: 'en-CA,en;q=0.9',
-            ipTimezone: 'America/Toronto'
+            ipTimezone: 'America/Toronto',
+            historyLength: 1,
+            automation: ['no window.chrome'],
+            navPlatform: 'Win32'
         });
         const click = history.clicks[0];
         expect(click?.clockSkew).toBeGreaterThan(4 * 60_000);
@@ -333,7 +341,7 @@ describe('about', () => {
         expect(about.database).toMatchObject({
             path: '',
             walBytes: 0,
-            migration: '0003_request_signals.sql',
+            migration: '0004_click_context.sql',
             sqliteVersion: expect.stringMatching(/^3\./)
         });
         expect(about.database.sizeBytes).toBeGreaterThan(0);

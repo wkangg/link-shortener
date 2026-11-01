@@ -93,7 +93,27 @@ const SIGNAL_COLUMNS = [
     'quota',
     'downlink',
     'rtt',
-    'save_data'
+    'save_data',
+    'history_length',
+    'visibility',
+    'nav_type',
+    'has_opener',
+    'page_referrer',
+    'browser_brand',
+    'nav_platform',
+    'nav_vendor',
+    'oscpu',
+    'automation',
+    'timer_ms',
+    'cpu_ms',
+    'heap_limit',
+    'refresh_hz',
+    'biometrics',
+    'bluetooth',
+    'font_size',
+    'scrollbar',
+    'outer_size',
+    'blocked_storage'
 ] as const satisfies readonly (keyof DeviceSignals)[];
 
 /** Unused tokens are cleared (and their clicks reclassified) at most this often. */

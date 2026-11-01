@@ -280,6 +280,43 @@ export interface ClickHistoryRow {
     clockSkew: number | null;
     /** ms from the click to the page's report arriving. */
     reportMs: number | null;
+    /** history.length: 1 is a fresh tab, usually opened from another app. */
+    historyLength: number | null;
+    /** visible | hidden (a background tab) | prerender. */
+    visibility: string | null;
+    /** navigate | reload | back_forward | prerender. */
+    navType: string | null;
+    hasOpener: boolean | null;
+    /** document.referrer as the page saw it. */
+    pageReferrer: string | null;
+    /** Brave, DuckDuckGo, Opera or Arc behind a Chrome-like user agent. */
+    browserBrand: string | null;
+    /** navigator.platform, e.g. "Win32". */
+    navPlatform: string | null;
+    /** navigator.vendor, e.g. "Google Inc.". */
+    navVendor: string | null;
+    /** navigator.oscpu (Firefox). */
+    oscpu: string | null;
+    /** Automation leftovers and headless tells; [] when none were found. */
+    automation: string[] | null;
+    /** performance.now() resolution, ms. */
+    timerMs: number | null;
+    /** ms for a fixed workload: lower is faster. */
+    cpuMs: number | null;
+    /** JS heap limit, bytes (Chromium). */
+    heapLimit: number | null;
+    refreshHz: number | null;
+    /** Windows Hello, Touch ID or Face ID available. */
+    biometrics: boolean | null;
+    bluetooth: boolean | null;
+    /** Default font size, px. */
+    fontSize: number | null;
+    /** Classic scrollbar width, px; 0 is overlay scrollbars. */
+    scrollbar: number | null;
+    /** Browser window outer size, "WxH". */
+    outerSize: string | null;
+    /** Storage APIs that are blocked; [] when all work. */
+    blockedStorage: string[] | null;
     /** Approximate (city-level) position of the IP, from the edge. */
     latitude: number | null;
     longitude: number | null;

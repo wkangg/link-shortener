@@ -176,6 +176,72 @@ s.emoji=tryit(function(){
   });
   return v;
 });
+// How the click happened: a fresh tab (history 1) usually means opened from an app.
+s.historyLength=history.length;
+s.visibility=document.prerendering?'prerender':document.visibilityState;
+s.navType=tryit(function(){return performance.getEntriesByType('navigation')[0].type});
+s.opener=!!window.opener;
+if(document.referrer)s.pageReferrer=document.referrer.slice(0,500);
+// The real browser behind a Chrome-like user agent.
+s.brand=tryit(function(){
+  if(n.brave&&typeof n.brave.isBrave==='function')return 'Brave';
+  if(n.duckduckgo)return 'DuckDuckGo';
+  if(window.opr||/ OPR\//.test(n.userAgent))return 'Opera';
+  if(getComputedStyle(document.documentElement).getPropertyValue('--arc-palette-title'))return 'Arc';
+});
+s.navPlatform=n.platform;
+s.vendor=n.vendor;
+s.oscpu=n.oscpu;
+// Leftovers from automation tools, and headless-browser tells.
+s.automation=tryit(function(){
+  var t=[],keys=Object.getOwnPropertyNames(window).concat(Object.getOwnPropertyNames(document));
+  ['__webdriver_evaluate','__selenium_unwrapped','__webdriver_script_fn','__driver_evaluate',
+   '__fxdriver_unwrapped','_Selenium_IDE_Recorder','_selenium','calledSelenium','__nightmare',
+   'callPhantom','_phantom','domAutomation','domAutomationController','__playwright__binding__',
+   '__pwInitScripts','__puppeteer_evaluation_script__'].forEach(function(k){if(k in window)t.push(k)});
+  if(keys.some(function(k){return /cdc_/.test(k)}))t.push('chromedriver');
+  if(/HeadlessChrome/.test(n.userAgent))t.push('HeadlessChrome');
+  var chrome=/Chrome\//.test(n.userAgent)&&!/Mobile/.test(n.userAgent);
+  if(chrome&&!window.chrome)t.push('no window.chrome');
+  if(chrome&&n.plugins&&n.plugins.length===0)t.push('no plugins');
+  if(outerWidth===0&&outerHeight===0)t.push('zero outer window');
+  if(n.languages&&n.languages.length===0)t.push('no languages');
+  return t;
+});
+// Timer resolution: Tor and Firefox's resist-fingerprinting round it coarsely.
+s.timerMs=tryit(function(){
+  var start=performance.now(),a=start,b;
+  while((b=performance.now())===a&&b-start<20){}
+  a=b;
+  while((b=performance.now())===a&&b-start<40){}
+  return Math.round((b-a)*1000)/1000;
+});
+// A fixed workload, for a rough device speed (lower is faster).
+s.cpuMs=tryit(function(){
+  var t=performance.now(),x=0;
+  for(var i=0;i<1e6;i++)x+=Math.sqrt(i)*Math.sin(i);
+  return x===-1?0:Math.round((performance.now()-t)*10)/10;
+});
+if(performance.memory)s.heapLimit=performance.memory.jsHeapSizeLimit;
+// User display settings: default font size, scrollbar width, browser frame.
+s.fontSize=tryit(function(){return parseFloat(getComputedStyle(document.documentElement).fontSize)});
+s.scrollbar=tryit(function(){
+  var d=document.createElement('div');
+  d.style.cssText='position:absolute;top:-999px;width:100px;height:100px;overflow:scroll';
+  document.body.appendChild(d);
+  var w=d.offsetWidth-d.clientWidth;
+  d.remove();
+  return w;
+});
+s.outer=outerWidth+'x'+outerHeight;
+s.blockedStorage=tryit(function(){
+  var b=[];
+  ['localStorage','sessionStorage'].forEach(function(k){
+    try{window[k].setItem('_t','1');window[k].removeItem('_t')}catch(e){b.push(k)}
+  });
+  if(!window.indexedDB)b.push('indexedDB');
+  return b;
+});
 var bait=document.createElement('div');
 // Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
 bait.className='ad_banner ad-slot ad-unit';
@@ -209,6 +275,22 @@ function hints(){
     s.bitness=h.bitness;
     s.wow64=h.wow64;
     s.formFactors=h.formFactors;
+  });
+}
+function refreshRate(){
+  if(document.visibilityState!=='visible')return null;
+  return new Promise(function(r){
+    var times=[];
+    function frame(t){
+      times.push(t);
+      if(times.length<12)return requestAnimationFrame(frame);
+      var d=[];
+      for(var i=2;i<times.length;i++)d.push(times[i]-times[i-1]);
+      d.sort(function(a,b){return a-b});
+      s.refreshHz=Math.round(1000/d[d.length>>1]);
+      r();
+    }
+    requestAnimationFrame(frame);
   });
 }
 function keyboard(){
@@ -270,6 +352,10 @@ function webgpu(){
 }
 var tasks=[
   hints(),
+  tryit(refreshRate),
+  window.PublicKeyCredential&&PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
+    ?PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(v){s.biometrics=v}):0,
+  n.bluetooth&&n.bluetooth.getAvailability?n.bluetooth.getAvailability().then(function(v){s.bluetooth=v}):0,
   tryit(keyboard),
   tryit(audio),
   tryit(voices),
@@ -288,6 +374,9 @@ Promise.race([
   Promise.all(tasks.map(function(p){return Promise.resolve(p).catch(function(){})})),
   new Promise(function(r){setTimeout(r,500)})
 ]).then(function(){
+  // Headless Chrome denies notifications while the permission API still says "prompt".
+  if(s.automation&&window.Notification&&Notification.permission==='denied'&&s.permissions&&s.permissions.notifications==='prompt')
+    s.automation.push('notification permission mismatch');
   // Compared with the server's clock when the report arrives.
   s.clock=Date.now();
   var body=JSON.stringify(s);
