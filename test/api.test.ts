@@ -327,6 +327,8 @@ describe('detailed device tracking', () => {
         expect(click?.reportMs).toBeGreaterThanOrEqual(0);
         expect(click && inconsistencies(click)).toEqual([
             expect.stringContaining('Browser timezone America/Vancouver'),
+            expect.stringContaining('navigator.platform is Win32'),
+            expect.stringContaining('Safari should report vendor "Apple Computer, Inc."'),
             expect.stringContaining('Device clock 5 min ahead')
         ]);
     });

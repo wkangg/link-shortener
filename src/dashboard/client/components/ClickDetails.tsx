@@ -122,6 +122,102 @@ function osFamily(os: string | null): string | null {
     return null;
 }
 
+/** navigator.platform's OS family; Linux also covers Android and ChromeOS. */
+function navPlatformFamily(platform: string | null): string | null {
+    if (!platform) return null;
+    if (platform.startsWith('Win')) return 'windows';
+    if (platform.startsWith('Mac')) return 'macos';
+    if (/^(iPhone|iPad|iPod)/.test(platform)) return 'ios';
+    if (/^(Linux|Android)/i.test(platform)) return 'linux';
+    return null;
+}
+
+const CHROMIUM = /^(Chrome|Chromium|Microsoft Edge|Opera|Brave|Vivaldi|Samsung Internet|Yandex)/;
+
+/** navigator.vendor each engine reports; null when the browser isn't one we know. */
+function expectedVendor(browser: string | null): string | null {
+    if (!browser) return null;
+    if (browser.startsWith('Firefox')) return '';
+    if (browser === 'Safari') return 'Apple Computer, Inc.';
+    if (CHROMIUM.test(browser)) return 'Google Inc.';
+    return null;
+}
+
+/** In-app browsers by their user-agent marker. */
+const IN_APP: [RegExp, string][] = [
+    [/FBAN|FBAV|FB_IAB/, 'Facebook'],
+    [/Instagram/, 'Instagram'],
+    [/musical_ly|BytedanceWebview|TikTok/i, 'TikTok'],
+    [/Snapchat/, 'Snapchat'],
+    [/LinkedInApp/, 'LinkedIn'],
+    [/Pinterest/, 'Pinterest'],
+    [/MicroMessenger/, 'WeChat'],
+    [/\bLine\//, 'LINE'],
+    [/Twitter/, 'X (Twitter)'],
+    [/Discord/, 'Discord'],
+    [/Telegram/, 'Telegram'],
+    [/\bGSA\//, 'Google app'],
+    [/; wv\)/, 'an Android app (WebView)']
+];
+
+function inAppBrowser(ua: string | null): string | null {
+    if (!ua) return null;
+    return IN_APP.find(([re]) => re.test(ua))?.[1] ?? null;
+}
+
+const NAV_TYPES: Record<string, string> = {
+    navigate: 'link or address bar',
+    reload: 'reload',
+    back_forward: 'back / forward',
+    prerender: 'prerendered'
+};
+
+const VISIBILITY: Record<string, string> = {
+    visible: 'visible',
+    hidden: 'background tab',
+    prerender: 'prerendered, not yet shown'
+};
+
+/** "1440×900 · 132 px of toolbars" from the outer size and the page's own size. */
+function frame(c: ClickHistoryRow): string | null {
+    if (!c.outerSize) return null;
+    const [ow, oh] = c.outerSize.split('x').map(Number);
+    const ih = c.viewport ? Number(c.viewport.split('x')[1]) : null;
+    const toolbars = oh && ih !== null && oh > ih ? ` · ${oh - ih} px of toolbars` : '';
+    return `${ow}×${oh}${toolbars}`;
+}
+
+/** "Brave (user agent says Chrome)", or just the browser when they agree. */
+function realBrowser(c: ClickHistoryRow): string | null {
+    if (!c.browserBrand) return null;
+    if (c.browser?.startsWith(c.browserBrand)) return c.browserBrand;
+    return `${c.browserBrand} (user agent says ${c.browser ?? 'unknown'})`;
+}
+
+/** Webdriver plus any automation leftovers, or "none found". */
+function automation(c: ClickHistoryRow): ReactNode {
+    const tells = [...(c.webdriver ? ['webdriver on'] : []), ...(c.automation ?? [])];
+    if (tells.length > 0) {
+        return (
+            <ul className="click-details-issues">
+                {tells.map(tell => (
+                    <li key={tell}>{tell}</li>
+                ))}
+            </ul>
+        );
+    }
+    return c.webdriver === null && c.automation === null ? null : 'none found';
+}
+
+/** "0.005 ms", flagged when coarse enough to mean Tor or resist-fingerprinting. */
+function timer(ms: number): string {
+    return ms >= 1 ? `${ms} ms (coarsened: Tor or anti-fingerprinting)` : `${ms} ms`;
+}
+
+function yesNo(value: boolean | null, yes = 'yes', no = 'no'): string | null {
+    return value === null ? null : value ? yes : no;
+}
+
 /**
  * Traits that contradict each other: common with VPNs, spoofed user agents and
  * automation, though each has innocent causes too (travel, desktop mode, a wrong clock).
@@ -154,6 +250,19 @@ export function inconsistencies(c: ClickHistoryRow): string[] {
         if (hintsMobile !== uaMobile) {
             out.push(`Client hints say ${c.formFactors}, user agent says ${c.device}`);
         }
+    }
+    const navOs = navPlatformFamily(c.navPlatform);
+    const linuxLike = uaOs === 'linux' || uaOs === 'android' || uaOs === 'chromeos';
+    // iPads ask for desktop sites as a Mac: platform "MacIntel" with a Mac user agent,
+    // so a Mac platform under an iOS user agent isn't a contradiction either.
+    const ipad = navOs === 'macos' && uaOs === 'ios';
+    if (navOs && uaOs && navOs !== uaOs && !(navOs === 'linux' && linuxLike) && !ipad) {
+        out.push(`User agent says ${c.os ?? ''}, navigator.platform is ${c.navPlatform ?? ''}`);
+    }
+    const vendor = expectedVendor(c.browser);
+    // Every iOS browser is Safari's engine underneath, so its vendor is always Apple's.
+    if (c.navVendor !== null && vendor !== null && uaOs !== 'ios' && c.navVendor !== vendor) {
+        out.push(`${c.browser ?? ''} should report vendor "${vendor}", got "${c.navVendor}"`);
     }
     if (c.clockSkew !== null && Math.abs(c.clockSkew) > CLOCK_TOLERANCE_MS) {
         out.push(`Device clock ${duration(c.clockSkew)} ${c.clockSkew > 0 ? 'ahead' : 'behind'}`);
@@ -283,16 +392,29 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                                     'nothing contradicts'
                                 ))
                         ],
-                        [
-                            'Automation',
-                            c.webdriver === null
-                                ? null
-                                : c.webdriver
-                                  ? 'webdriver on'
-                                  : 'none reported'
-                        ],
+                        ['Real browser', realBrowser(c)],
+                        ['Automation', automation(c)],
+                        ['Timer', c.timerMs === null ? null : timer(c.timerMs)],
                         ['Page report', pageReport(c)],
                         ['Device clock', c.clockSkew === null ? null : clock(c.clockSkew)]
+                    ]}
+                />
+                <Section
+                    title="Context"
+                    rows={[
+                        ['In-app browser', inAppBrowser(c.userAgent)],
+                        ['Opened by', c.navType && (NAV_TYPES[c.navType] ?? c.navType)],
+                        [
+                            'Tab history',
+                            c.historyLength === null
+                                ? null
+                                : c.historyLength <= 1
+                                  ? 'fresh tab (likely opened from an app)'
+                                  : `${c.historyLength} pages`
+                        ],
+                        ['Visibility', c.visibility && (VISIBILITY[c.visibility] ?? c.visibility)],
+                        ['Opener', yesNo(c.hasOpener, 'opened by another window', 'none')],
+                        ['Page referrer', c.pageReferrer]
                     ]}
                 />
                 <Section
@@ -330,6 +452,22 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                                 ]
                                     .filter(Boolean)
                                     .join(' · ')
+                        ],
+                        ['Refresh rate', c.refreshHz === null ? null : `${c.refreshHz} Hz`],
+                        ['Browser frame', frame(c)],
+                        [
+                            'Font size',
+                            c.fontSize === null
+                                ? null
+                                : `${c.fontSize} px${c.fontSize === 16 ? ' (default)' : ' (changed)'}`
+                        ],
+                        [
+                            'Scrollbars',
+                            c.scrollbar === null
+                                ? null
+                                : c.scrollbar === 0
+                                  ? 'overlay'
+                                  : `classic, ${c.scrollbar} px`
                         ]
                     ]}
                 />
@@ -405,6 +543,17 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                                 : c.emoji > 0
                                   ? `up to Emoji ${c.emoji}`
                                   : 'no color emoji'
+                        ],
+                        ['Biometrics', yesNo(c.biometrics, 'available', 'none')],
+                        ['Bluetooth', yesNo(c.bluetooth, 'available', 'none')],
+                        [
+                            'JS heap',
+                            c.heapLimit === null ? null : `${formatBytes(c.heapLimit)} limit`
+                        ],
+                        ['CPU test', c.cpuMs === null ? null : `${c.cpuMs} ms (lower is faster)`],
+                        [
+                            'Platform',
+                            [c.navPlatform, c.navVendor, c.oscpu].filter(Boolean).join(' · ')
                         ]
                     ]}
                 />
@@ -451,6 +600,13 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                         ['Private', c.incognito === null ? null : c.incognito ? 'yes' : 'no'],
                         ['Ad blocker', c.adBlocker === null ? null : c.adBlocker ? 'yes' : 'no'],
                         ['Permissions', c.permissions && permissions(c.permissions)],
+                        [
+                            'Storage',
+                            c.blockedStorage &&
+                                (c.blockedStorage.length > 0
+                                    ? `blocked: ${c.blockedStorage.join(', ')}`
+                                    : 'all available')
+                        ],
                         ['Fingerprint', mono(c.fingerprint)],
                         ['Canvas', mono(c.canvas)],
                         ['Audio', mono(c.audio)],
