@@ -406,6 +406,19 @@ function Chips({ label, items }: { label: string; items: string[] | null | undef
 /** Whether the browser reported anything worth a details panel. */
 export function hasDetails(c: ClickHistoryRow): boolean {
     return [
+        // Server-side, on every click.
+        c.asn,
+        c.asOrg,
+        c.postalCode,
+        c.regionCode,
+        c.continent,
+        c.metroCode,
+        c.edgeColo,
+        c.utm,
+        c.query,
+        c.acceptLanguage,
+        c.ipTimezone,
+        // From the device-signals page.
         c.js,
         c.screen,
         c.gpu,
@@ -451,16 +464,15 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                     rows={[
                         [
                             'Checks',
-                            c.js &&
-                                (issues.length > 0 ? (
-                                    <ul className="click-details-issues">
-                                        {issues.map(issue => (
-                                            <li key={issue}>{issue}</li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    'nothing contradicts'
-                                ))
+                            issues.length > 0 ? (
+                                <ul className="click-details-issues">
+                                    {issues.map(issue => (
+                                        <li key={issue}>{issue}</li>
+                                    ))}
+                                </ul>
+                            ) : c.js ? (
+                                'nothing contradicts'
+                            ) : null
                         ],
                         ['Real browser', realBrowser(c)],
                         ['Automation', automation(c)],
@@ -615,13 +627,18 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                         ],
                         ['Storage', c.quota === null ? null : `${formatBytes(c.quota)} quota`],
                         [
+                            // Without a permission prompt browsers expose at most one of
+                            // each kind, so this says what exists, not how many.
                             'Media',
                             devices &&
-                                [
-                                    plural(count('cameras'), 'camera'),
-                                    plural(count('microphones'), 'mic'),
-                                    plural(count('speakers'), 'speaker')
-                                ].join(' · ')
+                                ([
+                                    count('cameras') > 0 ? 'camera' : null,
+                                    count('microphones') > 0 ? 'microphone' : null,
+                                    count('speakers') > 0 ? 'speakers' : null
+                                ]
+                                    .filter(Boolean)
+                                    .join(' · ') ||
+                                    'none exposed')
                         ],
                         [
                             'Emoji',
@@ -631,7 +648,14 @@ export function ClickDetails({ c }: { c: ClickHistoryRow }) {
                                   ? `up to Emoji ${c.emoji}`
                                   : 'no color emoji'
                         ],
-                        ['Biometrics', yesNo(c.biometrics, 'available', 'none')],
+                        [
+                            'Device sign-in',
+                            yesNo(
+                                c.biometrics,
+                                'available (Windows Hello, Touch ID or device PIN)',
+                                'none'
+                            )
+                        ],
                         ['Bluetooth', yesNo(c.bluetooth, 'available', 'none')],
                         [
                             'JS heap',

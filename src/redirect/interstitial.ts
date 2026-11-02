@@ -237,7 +237,8 @@ s.outer=outerWidth+'x'+outerHeight;
 s.blockedStorage=tryit(function(){
   var b=[];
   ['localStorage','sessionStorage'].forEach(function(k){
-    try{window[k].setItem('_t','1');window[k].removeItem('_t')}catch(e){b.push(k)}
+    var key='_t'+Math.random().toString(36).slice(2);
+    try{window[k].setItem(key,'1');window[k].removeItem(key)}catch(e){b.push(k)}
   });
   if(!window.indexedDB)b.push('indexedDB');
   return b;
