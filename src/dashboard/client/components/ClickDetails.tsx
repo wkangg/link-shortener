@@ -414,6 +414,8 @@ export function hasDetails(c: ClickHistoryRow): boolean {
         c.continent,
         c.metroCode,
         c.edgeColo,
+        c.visitorHash,
+        c.referrer,
         c.utm,
         c.query,
         c.acceptLanguage,
