@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG BUN_VERSION=1.4.3
+ARG BUN_VERSION=1.4.4
 
 # ---- dependencies (production only) ----
 FROM oven/bun:${BUN_VERSION}-slim AS deps

@@ -12,7 +12,7 @@ jobs:
             - uses: actions/checkout@v4
             - uses: oven-sh/setup-bun@v2
               with:
-                  # `bun fmt` and `bun lint` are only in canary builds so far.
+                  # `bun lint` is only in canary builds so far.
                   bun-version: canary
             - run: bun install --frozen-lockfile
             - name: Format

@@ -85,7 +85,7 @@ Short links are served on one domain (e.g. `s.example`) and the dashboard on ano
 
 ## Quick start
 
-> **Requirements:** [Bun](https://bun.com) 1.4+ (canary for `bun fmt` and `bun lint`; see [Development](#development))
+> **Requirements:** [Bun](https://bun.com) 1.4.4+ (canary for `bun lint`; see [Development](#development))
 
 ```sh
 git clone https://github.com/wkangg/link-shortener.git
@@ -335,7 +335,7 @@ You're responsible for meeting the privacy laws that apply to you (GDPR and simi
 | `bun run bench`                | Measure redirect latency and throughput                           |
 
 > [!NOTE]
-> `bun fmt` and `bun lint` are only in canary builds of Bun so far. Run `bun upgrade --canary` to get them.
+> `bun fmt` ships in Bun 1.4.4, but `bun lint` is only in canary builds so far. Run `bun upgrade --canary` to get it.
 
 ### Database migrations
 
