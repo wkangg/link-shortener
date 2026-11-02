@@ -112,7 +112,102 @@ CREATE TABLE clicks (
 
   -- Browser-side, only on links with track_device = 1: navigator.hardwareConcurrency,
   -- the logical CPU cores the browser exposes.
-  cpu_cores     INTEGER
+  cpu_cores     INTEGER,
+
+  -- More browser-side traits from the device-signals page, only on links with
+  -- track_device = 1. All are shown per click. Those up to languages feed the
+  -- fingerprint, except dark_mode (auto dark mode flips it by time of day).
+  browser_version TEXT,                              -- client hints, e.g. "Google Chrome 130.0.6723.92" (Chromium only)
+  display         TEXT,                              -- "availWidth x availHeight x colorDepth", e.g. "1920x1032x24"
+  codecs          TEXT,                              -- one digit per media type in shared/probes.ts CODECS
+  fonts           TEXT,                              -- one bit per font in shared/probes.ts FONTS
+  settings        TEXT,                              -- one bit per setting in shared/probes.ts SETTINGS
+  dark_mode       INTEGER CHECK (dark_mode IN (0, 1)), -- prefers-color-scheme: dark
+  webgl           TEXT,                              -- JSON: limits, versions, extensions
+  keyboard        TEXT,                              -- layout characters in US QWERTY key order (Chromium only)
+  intl            TEXT,                              -- JSON: locale, calendar, numbering, hour cycle, sample date and number
+  languages       TEXT,                              -- JSON array: navigator.languages
+
+  -- Shown per click only.
+  canvas          TEXT,                              -- hash of a drawn canvas, or "randomized"
+  audio           TEXT,                              -- sum of an offline-rendered audio signal
+  media_features  TEXT,                              -- JSON: color gamut, HDR, pointer, hover
+  voices          TEXT,                              -- JSON array: speech synthesis voices
+  emoji           INTEGER,                           -- newest emoji version drawn in color
+  math            TEXT,                              -- hash of Math function results
+  media_devices   TEXT,                              -- JSON: camera, microphone, speaker counts
+  permissions     TEXT,                              -- JSON: permission states
+  multi_monitor   INTEGER CHECK (multi_monitor IN (0, 1)), -- screen.isExtended
+  webgpu          TEXT,                              -- JSON: adapter vendor, architecture, device, description
+  viewport        TEXT,                              -- window inner size "WxH"
+
+  -- Client hints, network, storage and clock from the device-signals page (only on
+  -- links with track_device = 1), shown per click with the request details below.
+  hint_model      TEXT,                              -- client hints model (Android phones), also copied to device_model
+  cpu_arch        TEXT,                              -- client hints architecture and bitness, e.g. "x86 64-bit"
+  form_factors    TEXT,                              -- client hints form factors, e.g. "Desktop"
+  quota           INTEGER,                           -- navigator.storage quota in bytes
+  downlink        REAL,                              -- Network Information estimated Mbps
+  rtt             INTEGER,                           -- Network Information estimated round trip, ms
+  save_data       INTEGER CHECK (save_data IN (0, 1)), -- Data Saver on
+  clock_skew      INTEGER,                           -- device clock minus server clock when the report arrived, ms
+  report_ms       INTEGER,                           -- ms from the click to the page's report arriving
+
+  -- Server-side, every click: request details kept as received, since the
+  -- browser's own language and timezone overwrite those columns.
+  accept_language TEXT,                              -- whole Accept-Language header
+  ip_timezone     TEXT,                              -- CF-Timezone
+
+  -- More from the device-signals page (only on links with track_device = 1), shown
+  -- per click and not part of the fingerprint.
+
+  -- How the click happened.
+  history_length  INTEGER,                           -- history.length; 1 = a fresh tab, usually opened from an app
+  visibility      TEXT,                              -- visible | hidden (background tab) | prerender
+  nav_type        TEXT,                              -- navigate | reload | back_forward | prerender
+  has_opener      INTEGER CHECK (has_opener IN (0, 1)), -- window.opener set
+  page_referrer   TEXT,                              -- document.referrer as the page saw it
+
+  -- The real browser, and automation tells.
+  browser_brand   TEXT,                              -- Brave | DuckDuckGo | Opera | Arc behind a Chrome-like user agent
+  nav_platform    TEXT,                              -- navigator.platform, e.g. "Win32"
+  nav_vendor      TEXT,                              -- navigator.vendor, e.g. "Google Inc."
+  oscpu           TEXT,                              -- navigator.oscpu (Firefox)
+  automation      TEXT,                              -- JSON array of automation leftovers and headless tells; [] = none
+  timer_ms        REAL,                              -- performance.now() resolution; coarse in Tor / resist-fingerprinting
+
+  -- Hardware.
+  cpu_ms          REAL,                              -- ms for a fixed workload (lower is faster)
+  heap_limit      INTEGER,                           -- performance.memory.jsHeapSizeLimit, bytes (Chromium)
+  refresh_hz      INTEGER,                           -- screen refresh rate
+  biometrics      INTEGER CHECK (biometrics IN (0, 1)), -- platform authenticator (Windows Hello, Touch ID...)
+  bluetooth       INTEGER CHECK (bluetooth IN (0, 1)),  -- Bluetooth adapter available (Chromium)
+
+  -- Display and browser settings.
+  font_size       REAL,                              -- default font size, px
+  scrollbar       INTEGER,                           -- classic scrollbar width, px; 0 = overlay
+  outer_size      TEXT,                              -- browser window outer size "WxH"
+  blocked_storage TEXT,                              -- JSON array of blocked storage APIs; [] = all work
+
+  -- More Cloudflare edge data, server-side on every click.
+
+  -- From the "Add visitor location headers" managed transform (enable it in
+  -- Rules -> Settings). CF-IPCity/Region/Country already arrive without it.
+  continent       TEXT,                              -- CF-IPContinent, e.g. "NA"
+  region_code     TEXT,                              -- CF-Region-Code (ISO subdivision), e.g. "NY"
+  postal_code     TEXT,                              -- CF-Postal-Code
+  metro_code      TEXT,                              -- CF-Metro-Code (US DMA)
+
+  -- The Cloudflare edge datacenter that served the click, parsed from CF-RAY
+  -- (always present), e.g. "EWR". A coarse routing/location hint.
+  edge_colo       TEXT,
+
+  -- The IP's network. Not a default header (and Cloudflare won't let rules set
+  -- cf-* names), so a Worker on the redirect host sets x-asn from request.cf.asn
+  -- and x-as-org from request.cf.asOrganization. A Transform Rule setting
+  -- x-asn = ip.src.asnum also works for the number alone; the name needs the Worker.
+  asn             INTEGER,
+  as_org          TEXT
 ) STRICT;
 
 CREATE INDEX clicks_ts      ON clicks (ts);
