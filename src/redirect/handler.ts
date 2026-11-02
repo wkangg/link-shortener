@@ -112,6 +112,14 @@ export function createRedirectHandler(opts: RedirectHandlerOptions) {
                 country: h.get('cf-ipcountry') ?? '',
                 region: h.get('cf-region') ?? '',
                 city: h.get('cf-ipcity') ?? '',
+                continent: h.get('cf-ipcontinent') ?? '',
+                regionCode: h.get('cf-region-code') ?? '',
+                postalCode: h.get('cf-postal-code') ?? '',
+                metroCode: h.get('cf-metro-code') ?? '',
+                ray: h.get('cf-ray') ?? '',
+                // Set by a Cloudflare Worker or Transform Rule; see migrations/0005.
+                asn: h.get('x-asn') ?? '',
+                asOrg: h.get('x-as-org') ?? '',
                 qr,
                 query,
                 language: h.get('accept-language') ?? '',
@@ -144,7 +152,7 @@ function interstitial(destination: string, token: string): Response {
             'Cache-Control': NO_STORE,
             'X-Robots-Tag': 'noindex',
             'Content-Security-Policy':
-                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'"
+                "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; connect-src 'self'"
         }
     });
 }

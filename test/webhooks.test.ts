@@ -224,6 +224,13 @@ function raw(linkId: number, extra: Partial<RawClick> = {}): RawClick {
         country: 'CA',
         region: 'Ontario',
         city: 'Toronto',
+        continent: '',
+        regionCode: '',
+        postalCode: '',
+        metroCode: '',
+        ray: '',
+        asn: '',
+        asOrg: '',
         qr: false,
         query: '',
         language: 'en-CA',
@@ -773,7 +780,10 @@ describe('delivery', () => {
         p.clock.now += LOOKUP_RECHECK_MS;
         await p.deliverer.tick();
         expect(p.requests).toHaveLength(0);
-        expect(p.events()[0]).toMatchObject({ status: 'skipped', last_error: 'Skipped: datacenter' });
+        expect(p.events()[0]).toMatchObject({
+            status: 'skipped',
+            last_error: 'Skipped: datacenter'
+        });
     });
 
     test('a lookup that never comes holds a click for LOOKUP_WAIT_MS at most', async () => {

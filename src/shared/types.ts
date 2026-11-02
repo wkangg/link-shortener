@@ -183,6 +183,19 @@ export interface ClickHistoryRow {
     country: string | null;
     region: string | null;
     city: string | null;
+    /** Continent code from Cloudflare, e.g. "NA". */
+    continent: string | null;
+    /** ISO subdivision code, e.g. "NY". */
+    regionCode: string | null;
+    postalCode: string | null;
+    /** US DMA / metro code. */
+    metroCode: string | null;
+    /** Cloudflare edge datacenter that served the click, e.g. "EWR". */
+    edgeColo: string | null;
+    /** The IP's autonomous system number. */
+    asn: number | null;
+    /** The IP's network / AS organization. */
+    asOrg: string | null;
     referrer: string | null;
     source: string;
     qr: boolean;
@@ -220,6 +233,103 @@ export interface ClickHistoryRow {
     gpu: string | null;
     incognito: boolean | null;
     adBlocker: boolean | null;
+    /** The browser prefers a dark color scheme. */
+    darkMode: boolean | null;
+    /** WebGL limits, versions and extensions. */
+    webgl: TraitRecord | null;
+    /** Characters on the letter/punctuation keys in US QWERTY order, e.g. "azertyuiop^$qsdfghjklmù…". */
+    keyboard: string | null;
+    /** Locale, calendar, numbering system, hour cycle, sample date and number. */
+    intl: TraitRecord | null;
+    /** navigator.languages, preferred first. */
+    languages: string[] | null;
+    /** Hash of a drawn canvas, or "randomized" when the browser adds noise. */
+    canvas: string | null;
+    /** Sum of an offline-rendered audio signal. */
+    audio: string | null;
+    /** Color gamut, HDR, pointer and hover. */
+    mediaFeatures: TraitRecord | null;
+    /** Speech synthesis voices, "Name (lang)". */
+    voices: string[] | null;
+    /** Newest emoji version the system draws in color. */
+    emoji: number | null;
+    /** Hash of Math function results. */
+    math: string | null;
+    /** Camera, microphone and speaker counts. */
+    mediaDevices: TraitRecord | null;
+    /** Permission states, e.g. { notifications: "denied" }. */
+    permissions: TraitRecord | null;
+    /** More than one monitor (Chromium only). */
+    multiMonitor: boolean | null;
+    /** WebGPU adapter vendor, architecture, device and description. */
+    webgpu: TraitRecord | null;
+    /** Window inner size, "WxH". */
+    viewport: string | null;
+    /** navigator.webdriver: the browser said it's automated. */
+    webdriver: boolean | null;
+    /** Device-signals page: null = not served, false = no report (yet), true = reported. */
+    js: boolean | null;
+    visitorHash: string | null;
+    /** UTM tags by name without the prefix, e.g. { source: "newsletter" }. */
+    utm: Record<string, string> | null;
+    /** Other query parameters on the short link. */
+    query: Record<string, string> | null;
+    /** The whole Accept-Language header. */
+    acceptLanguage: string | null;
+    /** The IP's timezone (CF-Timezone); `timezone` is the browser's once it reports. */
+    ipTimezone: string | null;
+    /** e.g. "x86 64-bit" (Chromium only). */
+    cpuArch: string | null;
+    /** e.g. "Desktop" (Chromium only). */
+    formFactors: string | null;
+    /** Storage quota in bytes. */
+    quota: number | null;
+    /** Estimated bandwidth, Mbps. */
+    downlink: number | null;
+    /** Estimated round trip, ms. */
+    rtt: number | null;
+    saveData: boolean | null;
+    /** Device clock minus server clock, ms. */
+    clockSkew: number | null;
+    /** ms from the click to the page's report arriving. */
+    reportMs: number | null;
+    /** history.length: 1 is a fresh tab, usually opened from another app. */
+    historyLength: number | null;
+    /** visible | hidden (a background tab) | prerender. */
+    visibility: string | null;
+    /** navigate | reload | back_forward | prerender. */
+    navType: string | null;
+    hasOpener: boolean | null;
+    /** document.referrer as the page saw it. */
+    pageReferrer: string | null;
+    /** Brave, DuckDuckGo, Opera or Arc behind a Chrome-like user agent. */
+    browserBrand: string | null;
+    /** navigator.platform, e.g. "Win32". */
+    navPlatform: string | null;
+    /** navigator.vendor, e.g. "Google Inc.". */
+    navVendor: string | null;
+    /** navigator.oscpu (Firefox). */
+    oscpu: string | null;
+    /** Automation leftovers and headless tells; [] when none were found. */
+    automation: string[] | null;
+    /** performance.now() resolution, ms. */
+    timerMs: number | null;
+    /** ms for a fixed workload: lower is faster. */
+    cpuMs: number | null;
+    /** JS heap limit, bytes (Chromium). */
+    heapLimit: number | null;
+    refreshHz: number | null;
+    /** Windows Hello, Touch ID or Face ID available. */
+    biometrics: boolean | null;
+    bluetooth: boolean | null;
+    /** Default font size, px. */
+    fontSize: number | null;
+    /** Classic scrollbar width, px; 0 is overlay scrollbars. */
+    scrollbar: number | null;
+    /** Browser window outer size, "WxH". */
+    outerSize: string | null;
+    /** Storage APIs that are blocked; [] when all work. */
+    blockedStorage: string[] | null;
     /** Approximate (city-level) position of the IP, from the edge. */
     latitude: number | null;
     longitude: number | null;
@@ -231,7 +341,20 @@ export interface ClickHistoryRow {
     platform: string | null;
     /** Max simultaneous touches; 0 = no touch screen. */
     touchPoints: number | null;
+    /** Full browser version(s) from client hints, e.g. "Google Chrome 130.0.6723.92". */
+    browserVersion: string | null;
+    /** Usable screen size and color depth, e.g. "1920x1032x24". */
+    display: string | null;
+    /** Playable media formats, e.g. ["H.264", "VP9", "Opus (WebM)"]. */
+    codecs: string[] | null;
+    /** Detected installed fonts (from a fixed list of common ones). */
+    fonts: string[] | null;
+    /** Notable browser settings, e.g. ["cookies on", "Do Not Track"]. */
+    settings: string[] | null;
 }
+
+/** A browser-reported trait made of named values, e.g. WebGL limits. */
+export type TraitRecord = Record<string, string | number | boolean | string[]>;
 
 export interface ClickHistoryResponse {
     clicks: ClickHistoryRow[];
@@ -253,6 +376,20 @@ export interface RawClick {
     country: string;
     region: string;
     city: string;
+    /** CF-IPContinent header, e.g. "NA". */
+    continent: string;
+    /** CF-Region-Code header (ISO subdivision), e.g. "NY". */
+    regionCode: string;
+    /** CF-Postal-Code header. */
+    postalCode: string;
+    /** CF-Metro-Code header (US DMA). */
+    metroCode: string;
+    /** CF-RAY header; its suffix is the edge datacenter, e.g. "...-EWR". */
+    ray: string;
+    /** ASN, from the x-asn header a Cloudflare Worker or Transform Rule sets. */
+    asn: string;
+    /** AS organization name, from the x-as-org header a Cloudflare Worker sets. */
+    asOrg: string;
     qr: boolean;
     /** Query string from the short URL, without the leading `?` and without `qr`. */
     query: string;

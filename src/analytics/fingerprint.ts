@@ -1,8 +1,10 @@
 // A device fingerprint: a short hash over the most stable identifying traits of
 // a visitor's browser. The visitor_hash answers "how many unique people" (it
 // mixes in the IP, so it changes with the network); the fingerprint answers "is
-// this the same device as before", surviving a changed IP. It is deliberately coarse — many devices share one — so it's a signal for
-// grouping clicks, never a unique-person identifier.
+// this the same device as before", surviving a changed IP. Header-only clicks get
+// a coarse hash many devices share; with the device-signals page's traits
+// (codecs, fonts, settings, display) it gets much more specific. Either way it's
+// a signal for grouping clicks, never a unique-person identifier.
 
 /** The traits a fingerprint is built from. All optional; missing ones are skipped. */
 export interface FingerprintParts {
@@ -22,6 +24,24 @@ export interface FingerprintParts {
     memory?: number | null;
     /** navigator.maxTouchPoints. */
     touchPoints?: number | null;
+    /** Full browser version(s) from client hints, e.g. "Google Chrome 130.0.6723.92". */
+    browserVersion?: string | null;
+    /** Available screen size and color depth, e.g. "1920x1040x24". */
+    display?: string | null;
+    /** One digit per probed media type: how well it plays (see interstitial.ts). */
+    codecs?: string | null;
+    /** One bit per probed font: installed or not. */
+    fonts?: string | null;
+    /** One bit per probed browser setting (cookies, Do Not Track, reduced motion…). */
+    settings?: string | null;
+    /** WebGL limits, versions and extensions (JSON). */
+    webgl?: string | null;
+    /** Keyboard layout characters (Chromium only). */
+    keyboard?: string | null;
+    /** Regional formats (JSON). */
+    intl?: string | null;
+    /** navigator.languages (JSON array). */
+    languages?: string | null;
 }
 
 const ORDER: (keyof FingerprintParts)[] = [
@@ -35,16 +55,33 @@ const ORDER: (keyof FingerprintParts)[] = [
     'touchPoints'
 ];
 
+// Added later, and hashed only when present, so header-only fingerprints keep
+// the value they had before these existed.
+const EXTRA: (keyof FingerprintParts)[] = [
+    'browserVersion',
+    'display',
+    'codecs',
+    'fonts',
+    'settings',
+    'webgl',
+    'keyboard',
+    'intl',
+    'languages'
+];
+
 /**
  * A stable base36 hash of the parts, or null when nothing identifying is known.
  * The same parts always hash to the same value; the field order is fixed so a
  * value is comparable across clicks.
  */
 export function computeFingerprint(parts: FingerprintParts): string | null {
-    const fields = ORDER.map(key => {
+    const field = (key: keyof FingerprintParts) => {
         const value = parts[key];
         return value === null || value === undefined ? '' : String(value);
-    });
+    };
+    const fields = ORDER.map(key => field(key));
+    const extra = EXTRA.map(key => field(key));
+    if (extra.some(f => f !== '')) fields.push(...extra);
     if (fields.every(f => f === '')) return null;
     return Bun.hash(fields.join('\u0001')).toString(36);
 }

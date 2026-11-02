@@ -44,6 +44,13 @@ const click = (ip: string, ts = T0): RawClick => ({
     country: 'CA',
     region: '',
     city: '',
+    continent: '',
+    regionCode: '',
+    postalCode: '',
+    metroCode: '',
+    ray: '',
+    asn: '',
+    asOrg: '',
     qr: false,
     query: '',
     language: '',
@@ -53,9 +60,7 @@ const click = (ip: string, ts = T0): RawClick => ({
     longitude: ''
 });
 
-function setup(
-    opts: { dailyLimit?: number; now?: () => number; reverseDns?: ReverseDns } = {}
-) {
+function setup(opts: { dailyLimit?: number; now?: () => number; reverseDns?: ReverseDns } = {}) {
     const db = openDatabase(':memory:');
     db.run(
         "INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://a.com', 0, 0)"

@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
 import net from 'node:net';
 
+import { inconsistencies } from '../src/dashboard/client/components/ClickDetails.tsx';
 import type {
     AboutResponse,
     ApiError,
@@ -254,7 +255,26 @@ describe('detailed device tracking', () => {
             gpu: 'Apple GPU',
             incognito: true,
             adBlocker: false,
-            timezone: 'America/Vancouver'
+            timezone: 'America/Vancouver',
+            browserVersion: 'Safari 18.6',
+            display: '390x844x24',
+            codecs: '5500000020000000',
+            fonts: '01',
+            settings: '1001',
+            darkMode: true,
+            webgl: { maxTexture: 4096, extensions: ['OES_texture_float'] },
+            languages: ['en-CA', 'fr-CA'],
+            voices: ['Samantha (en-US)'],
+            multiMonitor: false,
+            canvas: 'randomized',
+            rtt: 100,
+            historyLength: 1,
+            automation: ['no window.chrome'],
+            // Contradict the Mac Safari user agent.
+            navPlatform: 'Win32',
+            vendor: 'Google Inc.',
+            // Five minutes fast.
+            clock: Date.now() + 5 * 60_000
         };
         const post = (body: unknown) =>
             fetch(new URL('/_/signals', t.app.short.url), {
@@ -282,8 +302,36 @@ describe('detailed device tracking', () => {
             connection: '4g',
             gpu: 'Apple GPU',
             incognito: true,
-            adBlocker: false
+            adBlocker: false,
+            browserVersion: 'Safari 18.6',
+            display: '390x844x24',
+            codecs: ['H.264', 'HEVC', 'HLS'],
+            fonts: ['Calibri'],
+            settings: ['cookies on', 'PDF viewer'],
+            darkMode: true,
+            webgl: { maxTexture: 4096, extensions: ['OES_texture_float'] },
+            languages: ['en-CA', 'fr-CA'],
+            voices: ['Samantha (en-US)'],
+            multiMonitor: false,
+            canvas: 'randomized',
+            intl: null,
+            js: true,
+            rtt: 100,
+            acceptLanguage: 'en-CA,en;q=0.9',
+            ipTimezone: 'America/Toronto',
+            historyLength: 1,
+            automation: ['no window.chrome'],
+            navPlatform: 'Win32'
         });
+        const click = history.clicks[0];
+        expect(click?.clockSkew).toBeGreaterThan(4 * 60_000);
+        expect(click?.reportMs).toBeGreaterThanOrEqual(0);
+        expect(click && inconsistencies(click)).toEqual([
+            expect.stringContaining('Browser timezone America/Vancouver'),
+            expect.stringContaining('navigator.platform is Win32'),
+            expect.stringContaining('Safari should report vendor "Apple Computer, Inc."'),
+            expect.stringContaining('Device clock 5 min ahead')
+        ]);
     });
 });
 
@@ -296,7 +344,7 @@ describe('about', () => {
         expect(about.database).toMatchObject({
             path: '',
             walBytes: 0,
-            migration: '0001_init.sql',
+            migration: '0005_cloudflare_geo.sql',
             sqliteVersion: expect.stringMatching(/^3\./)
         });
         expect(about.database.sizeBytes).toBeGreaterThan(0);

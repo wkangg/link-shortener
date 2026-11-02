@@ -1,0 +1,12 @@
+{
+    "name": "link-shortener-asn-headers",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "login": "bun --bun ./node_modules/wrangler/bin/wrangler.js login",
+        "deploy": "bun --env-file=../../.env deploy.ts"
+    },
+    "devDependencies": {
+        "wrangler": "^4.156.0"
+    }
+}

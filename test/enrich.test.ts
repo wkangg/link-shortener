@@ -22,6 +22,13 @@ const base: RawClick = {
     country: 'CA',
     region: 'Ontario',
     city: 'Toronto',
+    continent: '',
+    regionCode: '',
+    postalCode: '',
+    metroCode: '',
+    ray: '',
+    asn: '',
+    asOrg: '',
     qr: false,
     query: '',
     language: '',
@@ -126,7 +133,13 @@ describe('extra click fields', () => {
                     cores: 12,
                     platform: 'Windows 11',
                     touch: 10,
-                    webdriver: false
+                    webdriver: false,
+                    browserVersion: 'Chromium 130.0.6723.92, Google Chrome 130.0.6723.92',
+                    display: '1920x1032x24',
+                    codecs: '50505000052222002222',
+                    fonts: '0110101',
+                    settings: '100100000',
+                    darkMode: false
                 })
             )
         ).toEqual({
@@ -144,7 +157,73 @@ describe('extra click fields', () => {
             touch_points: 10,
             webdriver: 0,
             timezone: 'Europe/Paris',
-            language: 'en-GB'
+            language: 'en-GB',
+            browser_version: 'Chromium 130.0.6723.92, Google Chrome 130.0.6723.92',
+            display: '1920x1032x24',
+            codecs: '50505000052222002222',
+            fonts: '0110101',
+            settings: '100100000',
+            dark_mode: 0,
+            webgl: null,
+            keyboard: null,
+            intl: null,
+            languages: null,
+            canvas: null,
+            audio: null,
+            media_features: null,
+            voices: null,
+            emoji: null,
+            math: null,
+            media_devices: null,
+            permissions: null,
+            multi_monitor: null,
+            webgpu: null,
+            viewport: null,
+            hint_model: null,
+            cpu_arch: null,
+            form_factors: null,
+            quota: null,
+            downlink: null,
+            rtt: null,
+            save_data: null,
+            client_clock: null,
+            history_length: null,
+            visibility: null,
+            nav_type: null,
+            has_opener: null,
+            page_referrer: null,
+            browser_brand: null,
+            nav_platform: null,
+            nav_vendor: null,
+            oscpu: null,
+            automation: null,
+            timer_ms: null,
+            cpu_ms: null,
+            heap_limit: null,
+            refresh_hz: null,
+            biometrics: null,
+            bluetooth: null,
+            font_size: null,
+            scrollbar: null,
+            outer_size: null,
+            blocked_storage: null
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    browserVersion: '<script>',
+                    display: '1920x1080',
+                    codecs: '0129',
+                    fonts: '012',
+                    settings: 7
+                })
+            )
+        ).toMatchObject({
+            browser_version: null,
+            display: null,
+            codecs: null,
+            fonts: null,
+            settings: null
         });
         expect(
             parseSignals(
@@ -162,6 +241,243 @@ describe('extra click fields', () => {
         expect(parseSignals(JSON.stringify({ cores: 1.5 }))).toMatchObject({ cpu_cores: null });
         expect(parseSignals('not json')).toBeNull();
         expect(parseSignals('[1]')).toMatchObject({ screen: null });
+    });
+
+    test('client hints, network, storage and clock', () => {
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    model: 'Pixel 8',
+                    architecture: 'arm',
+                    bitness: '64',
+                    formFactors: ['Mobile'],
+                    quota: 123_456_789.4,
+                    downlink: 9.5,
+                    rtt: 50,
+                    saveData: false,
+                    clock: 1_800_000_000_000
+                })
+            )
+        ).toMatchObject({
+            hint_model: 'Pixel 8',
+            cpu_arch: 'arm 64-bit',
+            form_factors: 'Mobile',
+            quota: 123_456_789,
+            downlink: 9.5,
+            rtt: 50,
+            save_data: 0,
+            client_clock: 1_800_000_000_000
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    architecture: 'x86',
+                    bitness: '64',
+                    wow64: true,
+                    formFactors: [],
+                    quota: -1,
+                    downlink: Number.MAX_VALUE,
+                    rtt: 'fast',
+                    clock: '1'
+                })
+            )
+        ).toMatchObject({
+            cpu_arch: 'x86 64-bit (32-bit browser)',
+            form_factors: null,
+            quota: null,
+            downlink: null,
+            rtt: null,
+            client_clock: null
+        });
+    });
+
+    test('click context, real browser, automation tells and settings', () => {
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    historyLength: 1,
+                    visibility: 'hidden',
+                    navType: 'reload',
+                    opener: false,
+                    pageReferrer: 'https://discord.com/',
+                    brand: 'Brave',
+                    navPlatform: 'Win32',
+                    vendor: 'Google Inc.',
+                    automation: ['no window.chrome', 7],
+                    timerMs: 0.1,
+                    cpuMs: 12.3,
+                    heapLimit: 4_294_705_152,
+                    refreshHz: 120,
+                    biometrics: true,
+                    bluetooth: false,
+                    fontSize: 20,
+                    scrollbar: 0,
+                    outer: '1440x900',
+                    blockedStorage: ['localStorage', 'cookies']
+                })
+            )
+        ).toMatchObject({
+            history_length: 1,
+            visibility: 'hidden',
+            nav_type: 'reload',
+            has_opener: 0,
+            page_referrer: 'https://discord.com/',
+            browser_brand: 'Brave',
+            nav_platform: 'Win32',
+            nav_vendor: 'Google Inc.',
+            oscpu: null,
+            automation: JSON.stringify(['no window.chrome']),
+            timer_ms: 0.1,
+            cpu_ms: 12.3,
+            heap_limit: 4_294_705_152,
+            refresh_hz: 120,
+            biometrics: 1,
+            bluetooth: 0,
+            font_size: 20,
+            scrollbar: 0,
+            outer_size: '1440x900',
+            blocked_storage: JSON.stringify(['localStorage'])
+        });
+        // An empty list is a finding ("none"); a missing one is not.
+        expect(parseSignals(JSON.stringify({ automation: [], blockedStorage: [] }))).toMatchObject({
+            automation: '[]',
+            blocked_storage: '[]'
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    visibility: 'peeking',
+                    navType: 'teleport',
+                    pageReferrer: 'ftp://example.com/',
+                    brand: 'Netscape',
+                    refreshHz: 0
+                })
+            )
+        ).toMatchObject({
+            visibility: null,
+            nav_type: null,
+            page_referrer: null,
+            browser_brand: null,
+            refresh_hz: null
+        });
+    });
+
+    test('structured browser traits keep known keys, in schema order, as JSON', () => {
+        const parsed = parseSignals(
+            JSON.stringify({
+                webgl: {
+                    extensions: ['ANGLE_instanced_arrays', 7, 'OES_texture_float'],
+                    maxTexture: 16_384,
+                    vendor: 'Google Inc. (NVIDIA)',
+                    antialias: true,
+                    evil: 'dropped'
+                },
+                keyboard: 'azertyuiop^$qsdfghjklmùwxcvbn,;:!',
+                intl: { locale: 'fr-FR', hourCycle: 'h23', number: '1 234 567,891' },
+                languages: ['fr-FR', 'en-US', '<b>'],
+                canvas: 'randomized',
+                audio: '124.04347527516074',
+                mediaFeatures: { gamut: 'p3', hdr: true, pointer: 'fine' },
+                voices: ['Thomas (fr-FR)', 'Samantha (en-US)'],
+                emoji: 15,
+                math: 'a1b2c3d4',
+                mediaDevices: { cameras: 1, microphones: 2, speakers: -1 },
+                permissions: { notifications: 'denied', 'persistent-storage': 'granted' },
+                multiMonitor: true,
+                webgpu: { vendor: 'nvidia', architecture: 'ada', device: '' },
+                viewport: '1280x720'
+            })
+        );
+        expect(parsed).toMatchObject({
+            webgl: JSON.stringify({
+                vendor: 'Google Inc. (NVIDIA)',
+                maxTexture: 16_384,
+                antialias: true,
+                extensions: ['ANGLE_instanced_arrays', 'OES_texture_float']
+            }),
+            keyboard: 'azertyuiop^$qsdfghjklmùwxcvbn,;:!',
+            intl: JSON.stringify({ locale: 'fr-FR', hourCycle: 'h23', number: '1 234 567,891' }),
+            languages: JSON.stringify(['fr-FR', 'en-US']),
+            canvas: 'randomized',
+            audio: '124.04347527516074',
+            media_features: JSON.stringify({ gamut: 'p3', hdr: true, pointer: 'fine' }),
+            voices: JSON.stringify(['Thomas (fr-FR)', 'Samantha (en-US)']),
+            emoji: 15,
+            math: 'a1b2c3d4',
+            media_devices: JSON.stringify({ cameras: 1, microphones: 2 }),
+            permissions: JSON.stringify({
+                notifications: 'denied',
+                'persistent-storage': 'granted'
+            }),
+            multi_monitor: 1,
+            webgpu: JSON.stringify({ vendor: 'nvidia', architecture: 'ada' }),
+            viewport: '1280x720'
+        });
+        expect(
+            parseSignals(
+                JSON.stringify({
+                    webgl: [1],
+                    intl: {},
+                    languages: 'en',
+                    canvas: 'nothex!',
+                    audio: 'NaN',
+                    emoji: 1.5,
+                    viewport: '1x',
+                    keyboard: 42
+                })
+            )
+        ).toMatchObject({
+            webgl: null,
+            intl: null,
+            languages: null,
+            canvas: null,
+            audio: null,
+            emoji: null,
+            viewport: null,
+            keyboard: null
+        });
+    });
+});
+
+describe('Cloudflare edge fields', () => {
+    test('parsed, validated and the edge colo is pulled from CF-RAY', () => {
+        expect(
+            enrichClick(
+                {
+                    ...base,
+                    continent: 'na',
+                    regionCode: 'NY',
+                    postalCode: '10001',
+                    metroCode: '501',
+                    ray: '8a1b2c3d4e5f6a7b-EWR',
+                    asn: 'AS13335',
+                    asOrg: 'Cloudflare, Inc.'
+                },
+                opts
+            )
+        ).toMatchObject({
+            continent: 'NA',
+            region_code: 'NY',
+            postal_code: '10001',
+            metro_code: '501',
+            edge_colo: 'EWR',
+            asn: 13_335,
+            as_org: 'Cloudflare, Inc.'
+        });
+    });
+
+    test('junk values are dropped', () => {
+        expect(
+            enrichClick(
+                { ...base, continent: 'North', metroCode: 'abc', ray: 'nodash', asn: 'AS0' },
+                opts
+            )
+        ).toMatchObject({
+            continent: null,
+            metro_code: null,
+            edge_colo: null,
+            asn: null
+        });
     });
 });
 

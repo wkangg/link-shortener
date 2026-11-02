@@ -66,7 +66,8 @@ When a link has tracking turned on, visitors see a short page instead of a bare 
 
 - OS version, screen size, orientation, GPU, RAM, CPU cores, touch points, network type and battery
 - Private browsing and ad-blocker detection
-- A coarse **device fingerprint** that groups one device's clicks across days and IP changes
+- A **device fingerprint** that groups one device's clicks across days and IP changes, built from the browser version, languages, regional formats, timezone, display, GPU and WebGL details, keyboard layout, media codecs, installed fonts and browser settings
+- Per click: canvas, audio and math hashes, speech voices, emoji version, display features (HDR, color gamut, pointer), cameras and microphones, permissions, multiple monitors, WebGPU adapter and window size
 
 ### 🔳 QR codes
 
@@ -156,8 +157,25 @@ docker run -d \
 The app is designed to sit behind Cloudflare:
 
 - **Authentication:** create a self-hosted Cloudflare Access application for the dashboard domain and allow only yourself. Every API request must carry a valid Access JWT.
-- **Location data:** analytics read `CF-Connecting-IP`, `CF-IPCountry` and the visitor location headers. Turn these on under _Rules → Transform Rules → Managed Transforms → Add visitor location headers_.
+- **Location data:** analytics read `CF-Connecting-IP`, `CF-IPCountry` and the visitor location headers (city, region, postal code, continent, US metro, timezone, coordinates). Turn these on under _Rules → Settings → Managed Transforms → Add visitor location headers_. The edge datacenter comes from `CF-RAY`, which is always sent.
+- **Security headers:** turn on _Add security headers_ in the same Managed Transforms list. The app sets none of its own, and it adds `nosniff` and `X-Frame-Options: SAMEORIGIN` (which stops the dashboard being framed). Leave _Remove visitor IP headers_ **off**: it strips `CF-Connecting-IP`, and every click would record Cloudflare's address instead of the visitor's.
 - **Origin protection:** allow only Cloudflare's IP ranges to reach the origin, or use a Cloudflare Tunnel, so those headers can't be spoofed.
+
+#### Network names (optional Worker)
+
+Cloudflare knows each visitor's network (AS number and organization, e.g. `AS812 · Rogers`) but doesn't send it as a header. The small Worker in [`cloudflare/asn-headers`](./cloudflare/asn-headers) adds it as `x-asn` and `x-as-org` on the short domain, overwriting anything the visitor sends. The click details then show the network, and the IP column flags a **network mismatch** when it disagrees with AbuseIPDB's ISP.
+
+1. The deploy routes the Worker to your short domain only, taken from `SHORT_ORIGIN` in the app's `.env`. To use another, set `ROUTE`, e.g. `ROUTE="s.example.com/*" bun run deploy`. Never route it to the dashboard domain.
+2. Deploy it:
+
+    ```sh
+    cd cloudflare/asn-headers
+    bun install
+    bun run login    # once; Wrangler keeps its own sign-in
+    bun run deploy
+    ```
+
+It runs on the Workers free plan (100,000 requests a day) and redirects pass through unchanged. Without it, the network fields stay empty. If you only need the AS number, a Transform Rule under _Rules → Transform Rules → Modify Request Header_ that sets `x-asn` to `ip.src.asnum` works too, but the name needs the Worker.
 
 ### Creating links from elsewhere
 
@@ -261,13 +279,13 @@ A `link.clicked` event looks like this:
 ## Architecture
 
 ```text
-             ┌────────────────────── one Bun process ──────────────────────┐
- visitor ──▶ │ :3000 redirect ─▶ LRU cache ─▶ SQLite ─▶ 302 / tracking page │
-             │        │                                                    │
-             │        └─▶ in-memory click queue ─▶ enrich ─▶ batch write   │
-             │                                                (1 s)       │
- you ──────▶ │ :3001 dashboard ─▶ Cloudflare Access JWT ─▶ JSON API + SPA  │
-             └─────────────────────────────────────────────────────────────┘
+             ┌─────────────────────── one Bun process ───────────────────────┐
+ visitor ──> │ :3000 redirect ─> LRU cache ─> SQLite ─> 302 / tracking page  │
+             │        │                                                      │
+             │        └─> in-memory click queue ─> enrich ─> batch write     │
+             │                                                 (1 s)         │
+ you ──────> │ :3001 dashboard ─> Cloudflare Access JWT ─> JSON API + SPA    │
+             └───────────────────────────────────────────────────────────────┘
 ```
 
 | Module                             | Responsibility                                                                                                                                                                                          |
@@ -293,7 +311,7 @@ This is an analytics tool, and it records a lot about each click. Know what's st
 - **IP addresses are stored** with each click, along with ISP, reverse DNS hostname and abuse score, for the click history and reputation checks.
 - **Unique visitors** are counted with a hash of your `VISITOR_SALT`, the IP and the user agent. The same IP and browser count as one visitor across any date range.
 - **Location** comes from Cloudflare's headers. There's no GeoIP database.
-- **Device signals and fingerprints** are collected only on links with detailed tracking turned on. A fingerprint is a coarse hash of browser properties, not an identifier for a person.
+- **Device signals and fingerprints** are collected only on links with detailed tracking turned on. A fingerprint is a hash of browser properties for grouping clicks, not an identifier for a person.
 - Every click lives in one SQLite file you control. No data goes to third parties, except IP lookups to AbuseIPDB when you configure a key, and the webhooks you add yourself.
 - **Webhooks** send coarse location, device, source and the visitor hash by default. IP addresses and user agents go only to endpoints you turn that on for.
 

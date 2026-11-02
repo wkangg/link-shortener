@@ -1091,14 +1091,160 @@ a.slug:hover {
     cursor: pointer;
 }
 
-.history-raw summary:hover {
-    color: var(--text-secondary);
-}
-
 .history-raw .mono {
     display: block;
+    width: 0;
+    min-width: 100%;
     margin-top: 0.2rem;
     overflow-wrap: anywhere;
+}
+
+/* Details toggle in the Device column, and the full-width row it opens under the click. */
+.details-toggle {
+    display: block;
+    margin-top: 0.2rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+/* Every expander is accent blue: the Details button and all <summary> toggles. */
+.details-toggle,
+.history-raw summary,
+.click-details-list summary {
+    color: var(--accent);
+}
+
+.details-toggle:hover,
+.history-raw summary:hover,
+.click-details-list summary:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+/* One disclosure arrow for every expander (<summary> and the Details button), so they
+   match: the browser's built-in marker differs in size and color from text arrows. */
+.history-raw summary,
+.click-details-list summary {
+    list-style: none;
+}
+
+.history-raw summary::-webkit-details-marker,
+.click-details-list summary::-webkit-details-marker {
+    display: none;
+}
+
+.history-raw summary::before,
+.click-details-list summary::before,
+.details-toggle::before {
+    content: '▶';
+    display: inline-block;
+    width: 1em;
+    margin-right: 0.45em;
+    font-size: 0.75em;
+    vertical-align: 0.08em;
+}
+
+.history-raw[open] > summary::before,
+.click-details-list[open] > summary::before,
+.details-toggle[aria-expanded='true']::before {
+    content: '▼';
+}
+
+.history-table tr.history-open > td {
+    border-bottom-color: transparent;
+}
+
+.history-table tr.history-details-row > td {
+    padding-top: 0;
+}
+
+/* Zero width with min-width 100% (like .history-sub): the panel fills the row but never
+   feeds its content back into the column widths, so opening a list doesn't shift columns. */
+.click-details {
+    box-sizing: border-box;
+    width: 0;
+    min-width: 100%;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    background: var(--bg);
+    font-size: 0.82rem;
+}
+
+.click-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem 2rem;
+}
+
+.click-details-section h4 {
+    margin: 0 0 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.click-details-section dl {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+}
+
+.click-details-section dl > div {
+    display: grid;
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: 0.75rem;
+}
+
+.click-details-section dt {
+    color: var(--muted);
+}
+
+.click-details-section dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.click-details-issues {
+    margin: 0;
+    padding-left: 1rem;
+    color: var(--warn);
+}
+
+.click-details-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--line);
+}
+
+.click-details-list summary {
+    width: fit-content;
+    cursor: pointer;
+}
+
+.click-details-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 0.5rem 0 0.3rem;
+}
+
+.chip {
+    padding: 0.05rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
 }
 
 /* Pager under the click history; wraps under the range on narrow screens. */
@@ -1196,6 +1342,11 @@ a.slug:hover {
 .badge-danger {
     border-color: var(--danger);
     color: var(--danger);
+}
+
+.badge-warn {
+    border-color: var(--warn);
+    color: var(--warn);
 }
 
 a.badge {

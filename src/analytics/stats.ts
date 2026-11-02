@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
+import { codecNames, fontNames, settingNames } from '../shared/probes.ts';
 import type {
     ClickHistoryResponse,
     ClickHistoryRow,
@@ -316,9 +317,42 @@ export class Stats {
             sql += ' AND (c.ts < ? OR (c.ts = ? AND c.id < ?))';
             params.push(ts, ts, id);
         }
-        type Flags = 'qr' | 'bot' | 'isDatacenter' | 'charging' | 'incognito' | 'adBlocker';
+        type Flags =
+            | 'qr'
+            | 'bot'
+            | 'isDatacenter'
+            | 'charging'
+            | 'incognito'
+            | 'adBlocker'
+            | 'darkMode'
+            | 'multiMonitor'
+            | 'webdriver'
+            | 'js'
+            | 'saveData'
+            | 'hasOpener'
+            | 'biometrics'
+            | 'bluetooth';
+        type Probes = 'codecs' | 'fonts' | 'settings';
+        type Json =
+            | 'webgl'
+            | 'intl'
+            | 'languages'
+            | 'mediaFeatures'
+            | 'voices'
+            | 'mediaDevices'
+            | 'permissions'
+            | 'webgpu'
+            | 'utm'
+            | 'query'
+            | 'automation'
+            | 'blockedStorage';
         const rows = this.#db
-            .query<Omit<ClickHistoryRow, Flags> & Record<Flags, number | null>, Param[]>(
+            .query<
+                Omit<ClickHistoryRow, Flags | Probes | Json> &
+                    Record<Flags, number | null> &
+                    Record<Probes | Json, string | null>,
+                Param[]
+            >(
                 `SELECT c.id, c.ts, c.link_id AS linkId, l.slug, c.ip, c.user_agent AS userAgent,
                         c.country, c.region, c.city, c.referrer, c.source, c.via_qr AS qr,
                         c.device, c.browser, c.os, c.os_version AS osVersion, c.is_bot AS bot, c.bot_name AS botName,
@@ -327,7 +361,29 @@ export class Stats {
                         c.device_model AS deviceModel, c.language, c.timezone, c.hostname,
                         c.screen, c.orientation, c.battery, c.charging, c.connection, c.gpu,
                         c.incognito, c.ad_blocker AS adBlocker, c.latitude, c.longitude,
-                        c.memory, c.cpu_cores AS cpuCores, c.platform, c.touch_points AS touchPoints
+                        c.memory, c.cpu_cores AS cpuCores, c.platform, c.touch_points AS touchPoints,
+                        c.browser_version AS browserVersion, c.display, c.codecs, c.fonts, c.settings,
+                        c.dark_mode AS darkMode, c.webgl, c.keyboard, c.intl, c.languages,
+                        c.canvas, c.audio, c.media_features AS mediaFeatures, c.voices, c.emoji,
+                        c.math, c.media_devices AS mediaDevices, c.permissions,
+                        c.continent, c.region_code AS regionCode, c.postal_code AS postalCode,
+                        c.metro_code AS metroCode, c.edge_colo AS edgeColo, c.asn, c.as_org AS asOrg,
+                        c.multi_monitor AS multiMonitor, c.webgpu, c.viewport,
+                        c.webdriver, c.js, c.visitor_hash AS visitorHash, c.query,
+                        json_object('source', c.utm_source, 'medium', c.utm_medium,
+                                    'campaign', c.utm_campaign, 'term', c.utm_term,
+                                    'content', c.utm_content) AS utm,
+                        c.accept_language AS acceptLanguage, c.ip_timezone AS ipTimezone,
+                        c.cpu_arch AS cpuArch, c.form_factors AS formFactors, c.quota,
+                        c.downlink, c.rtt, c.save_data AS saveData,
+                        c.clock_skew AS clockSkew, c.report_ms AS reportMs,
+                        c.history_length AS historyLength, c.visibility, c.nav_type AS navType,
+                        c.has_opener AS hasOpener, c.page_referrer AS pageReferrer,
+                        c.browser_brand AS browserBrand, c.nav_platform AS navPlatform,
+                        c.nav_vendor AS navVendor, c.oscpu, c.automation, c.timer_ms AS timerMs,
+                        c.cpu_ms AS cpuMs, c.heap_limit AS heapLimit, c.refresh_hz AS refreshHz,
+                        c.biometrics, c.bluetooth, c.font_size AS fontSize, c.scrollbar,
+                        c.outer_size AS outerSize, c.blocked_storage AS blockedStorage
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -343,7 +399,30 @@ export class Stats {
                 isDatacenter: r.isDatacenter === 1,
                 charging: flag(r.charging),
                 incognito: flag(r.incognito),
-                adBlocker: flag(r.adBlocker)
+                adBlocker: flag(r.adBlocker),
+                darkMode: flag(r.darkMode),
+                multiMonitor: flag(r.multiMonitor),
+                webdriver: flag(r.webdriver),
+                js: flag(r.js),
+                saveData: flag(r.saveData),
+                hasOpener: flag(r.hasOpener),
+                biometrics: flag(r.biometrics),
+                bluetooth: flag(r.bluetooth),
+                automation: parseJson(r.automation),
+                blockedStorage: parseJson(r.blockedStorage),
+                utm: withoutNulls(parseJson(r.utm)),
+                query: parseJson(r.query),
+                webgl: parseJson(r.webgl),
+                intl: parseJson(r.intl),
+                languages: parseJson(r.languages),
+                mediaFeatures: parseJson(r.mediaFeatures),
+                voices: parseJson(r.voices),
+                mediaDevices: parseJson(r.mediaDevices),
+                permissions: parseJson(r.permissions),
+                webgpu: parseJson(r.webgpu),
+                codecs: codecNames(r.codecs),
+                fonts: fontNames(r.fonts),
+                settings: settingNames(r.settings)
             })),
             next: more && last ? `${last.ts}_${last.id}` : null,
             total
@@ -478,4 +557,23 @@ export function csvCell(
 /** A nullable 0/1 column as a boolean, keeping null for "not reported". */
 function flag(value: number | null): boolean | null {
     return value === null ? null : value === 1;
+}
+
+/** A JSON column written by parseSignals; null when empty or (impossibly) malformed. */
+function parseJson<T>(value: string | null): T | null {
+    if (value === null) return null;
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return null;
+    }
+}
+
+/** The record without its null values; null when nothing is left. */
+function withoutNulls(record: Record<string, string | null> | null): Record<string, string> | null {
+    if (!record) return null;
+    const entries = Object.entries(record).filter(
+        (entry): entry is [string, string] => entry[1] !== null
+    );
+    return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
