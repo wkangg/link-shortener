@@ -367,6 +367,16 @@ a.slug:hover {
     background: transparent;
 }
 
+/* Ring the whole field (host prefix + slug), not just the inner input. */
+.slug-input:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.slug-input input:focus-visible {
+    outline: none;
+}
+
 /* ---------- create bar ---------- */
 
 .create-bar {
