@@ -47,7 +47,7 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
             stroke: ink,
             grid: { stroke: grid, width: 1 },
             ticks: { show: false },
-            font: '12px system-ui, sans-serif'
+            font: `12px ${cssVar(el, '--sans')}`
         };
         const tickFmt = data.interval === 'hour' ? hourFmt : dayFmt;
         const tipFmt = data.interval === 'hour' ? tooltipHour : tooltipDay;

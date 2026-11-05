@@ -1,6 +1,6 @@
 {
     "name": "link-shortener",
-    "version": "1.4.2",
+    "version": "1.5.0",
     "private": true,
     "author": {
         "name": "William Kang",
@@ -22,6 +22,9 @@
         "bench": "bun scripts/bench.ts"
     },
     "dependencies": {
+        "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+        "@fontsource-variable/geist": "^5.3.0",
+        "@fontsource-variable/geist-mono": "^5.3.0",
         "bowser": "^2.14.1",
         "country-flag-emoji-polyfill": "^0.1.10",
         "isbot": "^5.2.2",
