@@ -30,11 +30,16 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
     const ref = useRef<HTMLDialogElement>(null);
     const reduce = useReducedMotion();
     const [closing, setClosing] = useState(false);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         const dialog = ref.current;
         if (dialog && !dialog.open) dialog.showModal();
-        return () => dialog?.close();
+        return () => {
+            // Closed some other way first (e.g. a second Esc): don't close the parent's next one.
+            if (closeTimer.current) clearTimeout(closeTimer.current);
+            dialog?.close();
+        };
     }, []);
 
     // Plays the closing animation, then lets the parent unmount the dialog.
@@ -45,7 +50,7 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
         }
         if (closing) return;
         setClosing(true);
-        setTimeout(onClose, CLOSE_MS);
+        closeTimer.current = setTimeout(onClose, CLOSE_MS);
     }, [closing, onClose, reduce]);
 
     const classes = ['dialog', wide && 'dialog-wide', closing && 'dialog-closing'];
@@ -54,6 +59,8 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
             ref={ref}
             className={classes.filter(Boolean).join(' ')}
             aria-label={title}
+            // No typing, clicking or submitting into a dialog that's on its way out.
+            inert={closing}
             // Esc: animate out instead of the browser closing it at once.
             onCancel={event => {
                 event.preventDefault();
