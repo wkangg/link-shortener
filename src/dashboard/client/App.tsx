@@ -3,7 +3,7 @@ import { type ReactNode, useEffect } from 'react';
 import { api } from './api.ts';
 import { ToastProvider } from './components/Toast.tsx';
 import { ConfigContext } from './config.tsx';
-import { hostOf } from './format.ts';
+import { hostOf, pageTitle } from './format.ts';
 import { LinkPage } from './pages/LinkPage.tsx';
 import { LinksPage } from './pages/LinksPage.tsx';
 import { OverviewPage } from './pages/OverviewPage.tsx';
@@ -35,9 +35,14 @@ export function App() {
     const config = useApi('config', () => api.config());
     const shortOrigin = config.data?.shortOrigin;
 
+    // "Links · s.example". A link's own page swaps in its slug once it loads (LinkPage).
     useEffect(() => {
-        if (shortOrigin) document.title = hostOf(shortOrigin);
-    }, [shortOrigin]);
+        if (!shortOrigin) return;
+        const page = /^\/links\/\d+$/.test(path)
+            ? 'Link'
+            : (NAV.find(item => item.href === path)?.label ?? 'Not found');
+        document.title = pageTitle(page, shortOrigin);
+    }, [path, shortOrigin]);
 
     if (config.error) {
         return (

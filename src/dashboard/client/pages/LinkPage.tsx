@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { api } from '../api.ts';
 import { Analytics } from '../components/Analytics.tsx';
@@ -6,7 +6,7 @@ import { LinkActions } from '../components/LinkActions.tsx';
 import { LinkWebhooks } from '../components/LinkWebhooks.tsx';
 import { useToast } from '../components/Toast.tsx';
 import { useConfig } from '../config.tsx';
-import { formatDateTime, hostOf } from '../format.ts';
+import { formatDateTime, hostOf, pageTitle } from '../format.ts';
 import { linkClick, navigate } from '../router.ts';
 import { useApi } from '../useApi.ts';
 
@@ -16,6 +16,12 @@ export function LinkPage({ id }: { id: number }) {
     const [version, setVersion] = useState(0);
     const [webhooksOpen, setWebhooksOpen] = useState(false);
     const { data: link, error } = useApi(`${id}|${version}`, () => api.link(id));
+    const slug = link?.slug;
+
+    // Replaces App's "Link · …" placeholder once the slug is known: "nl-oct · s.example".
+    useEffect(() => {
+        if (slug !== undefined) document.title = pageTitle(slug, shortOrigin);
+    }, [slug, shortOrigin]);
 
     if (error) {
         return (
