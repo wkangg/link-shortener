@@ -58,11 +58,14 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
     // directly rather than through the `close` event, which some browsers deliver late.
     const close = useCallback(() => {
         const finish = () => {
+            // Once only, e.g. if reduced motion turns on while a close is animating.
+            if (closedByUs.current) return;
             closedByUs.current = true;
             ref.current?.close();
             onClose();
         };
         if (reduce) {
+            if (closeTimer.current) clearTimeout(closeTimer.current);
             finish();
             return;
         }
