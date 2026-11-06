@@ -9,7 +9,12 @@ import {
     tokenize
 } from '../src/analytics/search.ts';
 import { BadQueryError, Stats } from '../src/analytics/stats.ts';
-import { termAt, withTerm } from '../src/dashboard/client/components/SearchBox.tsx';
+import {
+    hasTerm,
+    termAt,
+    toggleTerm,
+    withTerm
+} from '../src/dashboard/client/components/SearchBox.tsx';
 import { openDatabase } from '../src/db/client.ts';
 import { LINK_SEARCH_DIALECT, SEARCH_FIELDS, SEARCH_FLAGS } from '../src/shared/search.ts';
 import type { StatsQuery } from '../src/shared/types.ts';
@@ -285,6 +290,29 @@ describe('second review', () => {
         expect(withTerm('-(is:bot', 'country:=CA')).toBe('-(is:bot) country:=CA');
         expect(withTerm('(a || (b', 'c')).toBe('((a || (b))) c');
         expect(withTerm('os:"a (b"', 'c')).toBe('os:"a (b" c');
+    });
+
+    test('clicking a row again removes its term', () => {
+        expect(toggleTerm('', 'country:=CA')).toBe('country:=CA');
+        expect(toggleTerm('country:=CA', 'country:=CA')).toBe('');
+        expect(toggleTerm('is:qr country:=CA os:=iOS', 'country:=CA')).toBe('is:qr os:=iOS');
+        expect(toggleTerm('city:="New York" is:qr', 'city:="New York"')).toBe('is:qr');
+        // A negated or longer term isn't the same filter.
+        expect(toggleTerm('-country:=CA', 'country:=CA')).toBe('-country:=CA country:=CA');
+        expect(toggleTerm('country:=CAN', 'country:=CA')).toBe('country:=CAN country:=CA');
+        expect(hasTerm('is:qr country:=CA', 'country:=CA')).toBe(true);
+        // Only top-level AND-ed terms come out: not one inside brackets or quotes, or
+        // beside a top-level || or && (which would be left dangling). `withTerm` then
+        // leaves the search alone, as before, since the term is already in it.
+        expect(toggleTerm('is:qr || (a country:=CA b)', 'country:=CA')).toBe(
+            'is:qr || (a country:=CA b)'
+        );
+        expect(toggleTerm('is:qr || country:=CA', 'country:=CA')).toBe('is:qr || country:=CA');
+        expect(hasTerm('is:qr || country:=CA', 'country:=CA')).toBe(false);
+        expect(hasTerm('is:bot && country:=CA', 'country:=CA')).toBe(false);
+        expect(hasTerm('os:"x country:=CA y"', 'country:=CA')).toBe(false);
+        expect(toggleTerm('(a || b) country:=CA', 'country:=CA')).toBe('(a || b)');
+        expect(hasTerm('-country:=CA', 'country:=CA')).toBe(false);
     });
 
     test('autocomplete splits only at && and ||', () => {

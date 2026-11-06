@@ -7,7 +7,7 @@ import { formatCount, formatDelta } from '../format.ts';
 import { useApi } from '../useApi.ts';
 import { Chart } from './Chart.tsx';
 import { ClickHistory, type Toggle } from './ClickHistory.tsx';
-import { exactTerm, withTerm } from './SearchBox.tsx';
+import { exactTerm, hasTerm, toggleTerm, withTerm } from './SearchBox.tsx';
 import { type Tab, TopList } from './TopList.tsx';
 
 const DAY = 86_400_000;
@@ -160,8 +160,11 @@ export function Analytics({ linkId }: AnalyticsProps) {
 
     const selectRow = (dim: string, row: TopRow) => {
         if (dim === 'link' && linkId !== undefined) return;
-        addTerm(searchTerm(dim, row));
+        // Clicking the row again takes its filter back off.
+        applySearch(toggleTerm(text, searchTerm(dim, row)));
     };
+    const isRowActive = (dim: string, row: TopRow) =>
+        !(dim === 'link' && linkId !== undefined) && hasTerm(text, searchTerm(dim, row));
 
     const toggles: Toggle[] = [
         { label: 'Bots', on: bots, set: setBots },
@@ -269,6 +272,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
                         refreshKey={String(tick)}
                         drill={panel.drill}
                         onSelect={selectRow}
+                        isActive={isRowActive}
                     />
                 ))}
             </div>

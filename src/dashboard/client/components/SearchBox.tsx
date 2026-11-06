@@ -101,6 +101,46 @@ export function withTerm(search: string, term: string): string {
     return `${current.includes('||') ? `(${current})` : current} ${term}`;
 }
 
+/**
+ * The terms AND-ed at the top level of `search`: split at whitespace outside quotes and
+ * brackets. Null when `||` or `&&` joins them there, since taking one out would leave
+ * the operator dangling.
+ */
+function topLevelTerms(search: string): string[] | null {
+    const terms: string[] = [];
+    let depth = 0;
+    let quoted = false;
+    let start = 0;
+    for (let i = 0; i < search.length; i++) {
+        const c = search.charAt(i);
+        if (quoted) {
+            if (c === '\\') i++;
+            else if (c === '"') quoted = false;
+        } else if (c === '"') quoted = true;
+        else if (c === '(') depth++;
+        else if (c === ')') depth = Math.max(0, depth - 1);
+        else if (depth > 0) continue;
+        else if (search.startsWith('||', i) || search.startsWith('&&', i)) return null;
+        else if (/\s/.test(c)) {
+            if (i > start) terms.push(search.slice(start, i));
+            start = i + 1;
+        }
+    }
+    if (start < search.length) terms.push(search.slice(start));
+    return terms;
+}
+
+/** Whether `term` stands on its own at the top level of `search`, so `toggleTerm` would remove it. */
+export function hasTerm(search: string, term: string): boolean {
+    return topLevelTerms(search.trim())?.includes(term) ?? false;
+}
+
+/** `search` without `term` where it stands on its own at the top level, or with it added (as `withTerm`). */
+export function toggleTerm(search: string, term: string): string {
+    const terms = topLevelTerms(search.trim());
+    return terms?.includes(term) ? terms.filter(t => t !== term).join(' ') : withTerm(search, term);
+}
+
 /** `field:=value`, quoted (and escaped) when a bare value couldn't hold it. */
 export function exactTerm(field: string, value: string): string {
     return `${field}:=${quoteValue(value)}`;

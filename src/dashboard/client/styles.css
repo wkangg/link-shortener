@@ -989,6 +989,40 @@ button.tag {
     text-decoration: underline;
 }
 
+/* A row whose filter is on: a much stronger bar on a tinted, outlined row, so it stands
+   out from the pale bars around it and a second click reads as "off". Ink stays readable
+   on the mixed fill in both themes (about 11:1 light, 7:1 dark). */
+.top-row[aria-pressed='true'] {
+    background: var(--accent-soft);
+}
+
+/* The ring sits on its own layer: the bar is positioned, so it would paint over an inset
+   shadow on the row itself (and a filtered row's bar is usually full width). */
+.top-row[aria-pressed='true']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 2px var(--accent);
+    pointer-events: none;
+}
+
+/* Forced colors drop the shadow and fills, so mark the row with a system-colored border,
+   on the ring's layer so it doesn't replace the focus outline. */
+@media (forced-colors: active) {
+    .top-row[aria-pressed='true']::after {
+        border: 2px solid Highlight;
+    }
+}
+
+.top-row[aria-pressed='true'] .top-bar {
+    background: color-mix(in srgb, var(--accent) 45%, var(--surface));
+}
+
+.top-row[aria-pressed='true'] .top-label {
+    font-weight: 600;
+}
+
 .top-bar {
     position: absolute;
     inset: 0 auto 0 0;
