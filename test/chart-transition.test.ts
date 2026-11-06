@@ -71,13 +71,32 @@ describe('chartTransition', () => {
         expect(chartTransition(settled(data), data).moves).toBe(false);
     });
 
-    test('hours after days rise from 0 instead of easing from a whole day', () => {
-        const before = settled(days(0, [100, 200]));
+    test('days to hours zooms in, starting from the day line rescaled to hours', () => {
+        const before = settled(days(0, [48, 96]));
         const hours: TimeseriesResponse = {
             interval: 'hour',
-            points: [{ t: 0, clicks: 3, visitors: 1 }]
+            points: [0, 12, 24].map(h => ({ t: h * 3600 * 1000, clicks: 1, visitors: 1 }))
         };
         const { at } = chartTransition(before, hours);
-        expect(at(0).data).toEqual([[0], [0], [0]]);
+        // Same picture as before: values and y axis both / 24.
+        expect(at(0).x).toEqual([0, DAY]);
+        expect(at(0).top).toBeCloseTo(before.top / 24);
+        // Hour 12 sits halfway between the two days: (2 + 4) / 2 per hour.
+        expect(at(0).data).toEqual([
+            [0, 12 * 3600, DAY],
+            [2, 3, 4],
+            [1, 1.5, 2]
+        ]);
+        expect(at(1).data[1]).toEqual([1, 1, 1]);
+    });
+
+    test('a range that does not overlap still lands on the data', () => {
+        const before = settled(days(0, [10]));
+        const { at } = chartTransition(before, days(5, [20, 30]));
+        expect(at(1).data).toEqual([
+            [5 * DAY, 6 * DAY],
+            [20, 30],
+            [10, 15]
+        ]);
     });
 });

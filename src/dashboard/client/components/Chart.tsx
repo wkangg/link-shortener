@@ -28,6 +28,9 @@ function useDarkScheme(): boolean {
     return useSyncExternalStore(subscribeToScheme, () => darkQuery().matches);
 }
 
+/** The longest span charted in hours (the server's cutoff), in seconds. */
+const HOURLY_SPAN_S = 3 * 86_400;
+
 const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
 const dayFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 const tooltipHour = new Intl.DateTimeFormat(undefined, {
@@ -72,7 +75,6 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
             ticks: { show: false },
             font
         };
-        const tickFmt = data.interval === 'hour' ? hourFmt : dayFmt;
         const tipFmt = data.interval === 'hour' ? tooltipHour : tooltipDay;
 
         const plot = new uPlot(
@@ -94,7 +96,13 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
                     {
                         ...axis,
                         grid: { show: false },
-                        values: (_u, ticks) => ticks.map(t => tickFmt.format(t * 1000))
+                        // By the span in view rather than the bucket size, so labels suit the
+                        // view while it zooms between hours and days.
+                        values: (u, ticks) => {
+                            const span = (u.scales.x?.max ?? 0) - (u.scales.x?.min ?? 0);
+                            const fmt = span <= HOURLY_SPAN_S ? hourFmt : dayFmt;
+                            return ticks.map(t => fmt.format(t * 1000));
+                        }
                     },
                     {
                         ...axis,
