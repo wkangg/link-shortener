@@ -404,14 +404,15 @@ input::placeholder {
     flex-wrap: wrap;
 }
 
-/* A date and time needs less than half the row and the redirect type beside it more;
-   when both don't fit, they wrap onto their own lines. */
+/* A date and time needs less than half the row, so the redirect type beside it takes
+   nearly all the spare room. Once its longest common option wouldn't fit, the two wrap
+   onto their own lines and each fills its line. */
 .field-expires {
-    flex: 0 1 16rem;
+    flex: 1 1 16rem;
 }
 
 .field-redirect {
-    flex: 1 1 14rem;
+    flex: 999 1 19rem;
 }
 
 .field-inline.grow {
@@ -2181,11 +2182,6 @@ input[type='color'] {
 
     .total-delta-vs {
         display: block;
-    }
-
-    /* Once it wraps above the redirect type, fill the line like it does. */
-    .field-expires {
-        flex-grow: 1;
     }
 
     .filter-bar .export {

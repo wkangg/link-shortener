@@ -42,16 +42,19 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
         };
     }, []);
 
-    // Plays the closing animation, then lets the parent unmount the dialog.
+    // Plays the closing animation, then closes the dialog natively: its `close` event
+    // unmounts it, and the browser returns focus to whatever opened it, which it skips
+    // for a dialog that's already gone from the page.
     const close = useCallback(() => {
+        const finish = () => ref.current?.close();
         if (reduce) {
-            onClose();
+            finish();
             return;
         }
         if (closing) return;
         setClosing(true);
-        closeTimer.current = setTimeout(onClose, CLOSE_MS);
-    }, [closing, onClose, reduce]);
+        closeTimer.current = setTimeout(finish, CLOSE_MS);
+    }, [closing, reduce]);
 
     const classes = ['dialog', wide && 'dialog-wide', closing && 'dialog-closing'];
     return (
@@ -66,7 +69,7 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
                 event.preventDefault();
                 close();
             }}
-            // Anything else that closes it natively.
+            // Every close ends here, ours included.
             onClose={onClose}
             onClick={event => {
                 if (event.target === ref.current) close();
