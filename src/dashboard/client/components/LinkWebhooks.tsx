@@ -53,8 +53,8 @@ export function LinkWebhooks({ link, onClose }: { link: Link; onClose: () => voi
             {endpoints.error && <p className="error">{endpoints.error.message}</p>}
             {list?.length === 0 && (
                 <p className="link-webhooks-intro">
-                    A webhook sends each click on this link somewhere else as it happens, such as a
-                    Discord channel or your own server. You haven’t set one up yet.
+                    A webhook sends this link’s clicks somewhere else, such as a Discord channel or
+                    your own server. You haven’t set one up yet.
                 </p>
             )}
             {list && list.length > 0 && (

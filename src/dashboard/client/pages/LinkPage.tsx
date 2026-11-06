@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { api } from '../api.ts';
+import { api, ApiRequestError } from '../api.ts';
 import { Analytics } from '../components/Analytics.tsx';
 import { LinkActions } from '../components/LinkActions.tsx';
 import { LinkWebhooks } from '../components/LinkWebhooks.tsx';
@@ -17,18 +17,24 @@ export function LinkPage({ id }: { id: number }) {
     const [webhooksOpen, setWebhooksOpen] = useState(false);
     const { data: link, error } = useApi(`${id}|${version}`, () => api.link(id));
     const slug = link?.slug;
+    // Only a 404 means the link is gone; a network or server error says nothing about it.
+    const missing = error instanceof ApiRequestError && error.status === 404;
 
     // Replaces App's "Link · …" placeholder once the slug is known ("nl-oct · s.example"),
-    // or with "Not found" when the link doesn't exist, like unknown paths.
+    // or says why there's no link, like unknown paths do.
     useEffect(() => {
         if (slug !== undefined) document.title = pageTitle(slug, shortOrigin);
-        else if (error) document.title = pageTitle('Not found', shortOrigin);
-    }, [slug, error, shortOrigin]);
+        else if (error) document.title = pageTitle(missing ? 'Not found' : 'Error', shortOrigin);
+    }, [slug, error, missing, shortOrigin]);
 
     if (error) {
         return (
             <main className="page">
-                <p className="error">This link doesn’t exist any more.</p>
+                <p className="error">
+                    {missing
+                        ? 'This link doesn’t exist any more.'
+                        : `Couldn’t load this link: ${error.message}`}
+                </p>
                 <a href="/links" onClick={linkClick}>
                     Back to links
                 </a>
