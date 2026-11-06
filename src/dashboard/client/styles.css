@@ -14,8 +14,10 @@
     /* --accent fills surfaces; --accent-text is the contrast-safe version for text. */
     --accent: #ff5b24;
     --accent-text: #c43a0c;
-    /* Text on --accent fills: dark, since white on this orange is about 3:1. */
+    /* Text on --accent (selection): dark, since white on this orange is about 3:1. */
     --accent-ink: #141414;
+    /* Filled buttons, both themes: a deeper orange so white text passes (4.56:1). */
+    --accent-fill: #d4430c;
     --accent-soft: #ffeee6;
     --bar: #ffe3d6;
     --danger: #c43c3b;
@@ -302,14 +304,15 @@ input::placeholder {
 }
 
 .button.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-ink);
+    background: var(--accent-fill);
+    border-color: var(--accent-fill);
+    color: #fff;
     font-weight: 600;
 }
 
+/* Darken rather than lighten on hover, so the white text keeps its contrast. */
 .button.primary:hover {
-    filter: brightness(1.08);
+    filter: brightness(0.92);
 }
 
 .button.danger {
