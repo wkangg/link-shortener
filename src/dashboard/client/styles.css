@@ -1883,6 +1883,16 @@ input[type='color'] {
     margin: 0.5rem 0 0;
 }
 
+.link-webhooks-intro {
+    margin: 0;
+}
+
+/* More room above the actions in the webhook dialog than the default button row. */
+.link-webhooks-intro + .button-row.spread,
+.link-webhooks + .button-row.spread {
+    margin-top: 1.5rem;
+}
+
 .link-webhooks .checkbox {
     align-items: flex-start;
     white-space: normal;
