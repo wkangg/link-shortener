@@ -13,15 +13,17 @@ function cssVar(el: Element, name: string): string {
 }
 
 // The canvas reads its colors from CSS once, so it's rebuilt when the color scheme flips.
-const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+// matchMedia is called lazily so importing this module without a DOM (tests) doesn't throw.
+const darkQuery = () => matchMedia('(prefers-color-scheme: dark)');
 
 function subscribeToScheme(onChange: () => void): () => void {
-    darkQuery.addEventListener('change', onChange);
-    return () => darkQuery.removeEventListener('change', onChange);
+    const query = darkQuery();
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
 }
 
 function useDarkScheme(): boolean {
-    return useSyncExternalStore(subscribeToScheme, () => darkQuery.matches);
+    return useSyncExternalStore(subscribeToScheme, () => darkQuery().matches);
 }
 
 const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
