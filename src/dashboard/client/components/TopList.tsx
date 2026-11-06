@@ -4,6 +4,7 @@ import type { TopRow } from '../../../shared/types.ts';
 import { api } from '../api.ts';
 import { countryLabel, formatCount } from '../format.ts';
 import { useApi } from '../useApi.ts';
+import { useCountUp } from '../useCountUp.ts';
 
 export interface Tab {
     dim: string;
@@ -28,6 +29,11 @@ function rowLabel(dim: string, row: TopRow): string {
     // Fingerprints are long hashes; a short prefix is enough to tell them apart.
     if (dim === 'fingerprint' && row.value) return row.value.slice(0, 10);
     return row.label;
+}
+
+/** A row's click count, easing to its new value when the filters change. */
+function Count({ value }: { value: number }) {
+    return <span className="top-count">{formatCount(useCountUp(value) ?? value)}</span>;
 }
 
 export function TopList({
@@ -84,7 +90,9 @@ export function TopList({
                 {rows.map(row => {
                     const drills = drill && drillKey === null && Boolean(row.value);
                     return (
-                        <li key={row.value ?? '∅'}>
+                        // Keyed by the data's own dim so a row only carries over (and animates)
+                        // within a dim.
+                        <li key={`${data?.dim}|${row.value ?? '∅'}`}>
                             <button
                                 type="button"
                                 className="top-row"
@@ -100,7 +108,7 @@ export function TopList({
                                     style={{ width: `${(row.clicks / max) * 100}%` }}
                                 />
                                 <span className="top-label">{rowLabel(dim, row)}</span>
-                                <span className="top-count">{formatCount(row.clicks)}</span>
+                                <Count value={row.clicks} />
                             </button>
                         </li>
                     );

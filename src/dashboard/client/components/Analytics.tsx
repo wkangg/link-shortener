@@ -5,6 +5,7 @@ import { api, localTz } from '../api.ts';
 import { useConfig } from '../config.tsx';
 import { formatCount, formatDelta } from '../format.ts';
 import { useApi } from '../useApi.ts';
+import { useCountUp } from '../useCountUp.ts';
 import { Chart } from './Chart.tsx';
 import { ClickHistory, type Toggle } from './ClickHistory.tsx';
 import { exactTerm, hasTerm, toggleTerm, withTerm } from './SearchBox.tsx';
@@ -301,10 +302,11 @@ function Total({ label, value, previous }: { label: string; value?: number; prev
             : value > previous
               ? 'up'
               : 'down';
+    const shown = useCountUp(value);
     return (
         <div className="total">
             <span className="total-label">{label}</span>
-            <span className="total-value">{value === undefined ? '–' : formatCount(value)}</span>
+            <span className="total-value">{shown === undefined ? '–' : formatCount(shown)}</span>
             {delta && (
                 <span className="total-delta">
                     <span className={trend}>{delta}</span> vs previous period

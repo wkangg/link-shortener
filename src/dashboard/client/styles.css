@@ -1031,6 +1031,20 @@ button.tag {
     z-index: 0;
 }
 
+/* Bars grow in when a row appears and slide to their new width when the data changes. */
+@media (prefers-reduced-motion: no-preference) {
+    .top-bar {
+        transition: width 0.6s cubic-bezier(0.33, 1, 0.68, 1);
+        animation: top-bar-in 0.6s cubic-bezier(0.33, 1, 0.68, 1);
+    }
+}
+
+@keyframes top-bar-in {
+    from {
+        width: 0;
+    }
+}
+
 .top-label,
 .top-count {
     position: relative;
