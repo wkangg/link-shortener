@@ -3,9 +3,11 @@ import flagFontUrl from 'country-flag-emoji-polyfill/dist/TwemojiCountryFlags.wo
 import { createRoot } from 'react-dom/client';
 
 import { App } from './App.tsx';
+import { loadFonts } from './fonts.ts';
 
 // Windows has no flag emoji glyphs; there this loads a flags-only font (listed in --sans).
 polyfillCountryFlagEmojis('Twemoji Country Flags', flagFontUrl);
+loadFonts();
 
 const el = document.querySelector('#root');
 if (!el) throw new Error('#root not found');

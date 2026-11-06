@@ -1,8 +1,5 @@
 @import 'uplot/dist/uPlot.min.css';
-/* Self-hosted: bundled with the dashboard, so no requests to a font CDN. */
-@import '@fontsource-variable/bricolage-grotesque/wght.css';
-@import '@fontsource-variable/geist/wght.css';
-@import '@fontsource-variable/geist-mono/wght.css';
+/* The Bricolage, Geist and Geist Mono faces are registered in fonts.ts. */
 
 :root {
     color-scheme: light dark;
@@ -11,13 +8,14 @@
     --surface-hover: #fbfaf7;
     --ink: #141414;
     --text-secondary: #5f5c57;
-    --muted: #75716a;
+    --muted: #6f6b64;
     --line: #e2ded6;
     --grid: #eeebe5;
     /* --accent fills surfaces; --accent-text is the contrast-safe version for text. */
     --accent: #ff5b24;
     --accent-text: #c43a0c;
-    --accent-ink: #ffffff;
+    /* Text on --accent fills: dark, since white on this orange is about 3:1. */
+    --accent-ink: #141414;
     --accent-soft: #ffeee6;
     --bar: #ffe3d6;
     --danger: #c43c3b;
@@ -28,6 +26,7 @@
     --shadow: 0 1px 2px rgb(20 20 20 / 0.04), 0 8px 24px -12px rgb(20 20 20 / 0.12);
     --radius-s: 10px;
     --radius-m: 18px;
+    --radius-l: 22px;
     --mono:
         'Geist Mono Variable', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
     --sans:
@@ -74,18 +73,28 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* Like the portfolio: links keep the text color and turn orange on hover. */
 a {
-    color: var(--accent-text);
+    color: inherit;
+    text-decoration-color: var(--line);
     text-underline-offset: 3px;
+    transition:
+        color 0.15s,
+        text-decoration-color 0.15s;
+}
+
+a:hover {
+    color: var(--accent-text);
+    text-decoration-color: currentColor;
 }
 
 ::selection {
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
 }
 
 :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-text);
     outline-offset: 2px;
 }
 
@@ -211,6 +220,7 @@ h3 {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius-m);
+    box-shadow: var(--shadow);
 }
 
 .prose h2 {
@@ -297,7 +307,7 @@ input::placeholder {
         filter 0.15s;
 }
 
-.button:hover {
+.button:not(:disabled):hover {
     border-color: var(--ink);
     transform: translateY(-1px);
 }
@@ -466,7 +476,7 @@ a.slug:hover {
 
 /* Ring the whole field (host prefix + slug), not just the inner input. */
 .slug-input:has(input:focus-visible) {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-text);
     outline-offset: 2px;
 }
 
@@ -484,7 +494,7 @@ a.slug:hover {
     margin: 0.5rem 0 2rem;
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 22px;
+    border-radius: var(--radius-l);
     box-shadow: var(--shadow);
 }
 
@@ -570,9 +580,13 @@ a.slug:hover {
     overflow: hidden;
 }
 
+.link-list:empty {
+    display: none;
+}
+
 .link-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 13.5rem auto;
+    grid-template-columns: minmax(0, 1fr) 15rem auto;
     gap: 1.25rem;
     align-items: center;
     padding: 1rem 1.25rem;
@@ -590,7 +604,7 @@ a.slug:hover {
 }
 
 .link-row:has(.row-link:focus-visible) {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-text);
     outline-offset: -2px;
 }
 
@@ -671,6 +685,9 @@ a.slug:hover {
     color: var(--accent-text);
     font-size: inherit;
     font-weight: 500;
+}
+
+button.tag {
     cursor: pointer;
 }
 
@@ -711,7 +728,7 @@ a.slug:hover {
     font-weight: 700;
     letter-spacing: -0.02em;
     line-height: 1.15;
-    min-width: 7ch;
+    min-width: 6ch;
 }
 
 .link-stat-label {
@@ -889,11 +906,13 @@ a.slug:hover {
     box-shadow: var(--shadow);
 }
 
+/* Wraps the tabs under the title when they don't fit beside it. */
 .panel-header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: baseline;
-    gap: 1rem;
+    gap: 0.4rem 1rem;
     margin-bottom: 0.6rem;
 }
 
@@ -905,14 +924,8 @@ a.slug:hover {
 
 .tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.15rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar {
-    display: none;
 }
 
 .tab {
@@ -935,8 +948,8 @@ a.slug:hover {
 }
 
 .tab[aria-selected='true'] {
-    color: var(--ink);
-    background: var(--bg);
+    color: var(--accent-text);
+    background: var(--accent-soft);
 }
 
 .panel-empty {
@@ -1264,7 +1277,7 @@ a.slug:hover {
     cursor: pointer;
 }
 
-/* Every expander is accent blue: the Details button and all <summary> toggles. */
+/* Every expander is accent-colored: the Details button and all <summary> toggles. */
 .details-toggle,
 .history-raw summary,
 .click-details-list summary {
@@ -1433,6 +1446,7 @@ a.slug:hover {
 
 .pager-buttons {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.4rem;
 }
@@ -1524,7 +1538,7 @@ button.badge {
     width: min(34rem, calc(100vw - 2rem));
     padding: 0;
     border: 1px solid var(--line);
-    border-radius: 22px;
+    border-radius: var(--radius-l);
     background: var(--surface);
     color: var(--ink);
     box-shadow: 0 24px 64px -16px rgb(0 0 0 / 0.35);
@@ -1914,26 +1928,29 @@ input[type='color'] {
 
 @media (max-width: 720px) {
     .topbar {
+        flex-wrap: wrap;
         gap: 1rem;
-        justify-content: space-between;
     }
 
     .create-bar {
         grid-template-columns: 1fr;
     }
 
-    .topbar {
-        flex-wrap: wrap;
+    /* Cards keep more of the narrow width for their content. */
+    .panel,
+    .chart,
+    .prose section {
+        padding-inline: 1rem;
     }
 
+    /* One column: stats and actions each get their own line under the slug. */
     .link-row {
+        grid-template-columns: minmax(0, 1fr);
         gap: 0.75rem;
         padding: 0.9rem 1rem;
     }
 
-    /* Stats get their own line so the slug keeps the full width. */
     .link-stats {
-        grid-column: 1 / -1;
         justify-content: flex-start;
         gap: 1.5rem;
     }
@@ -1948,10 +1965,6 @@ input[type='color'] {
         display: none;
     }
 
-    .link-row {
-        grid-template-columns: minmax(0, 1fr) auto;
-    }
-
     .list-controls {
         flex-wrap: wrap;
     }
@@ -1960,16 +1973,10 @@ input[type='color'] {
         flex-basis: 100%;
     }
 
-    .link-actions {
-        grid-column: 1 / -1;
-    }
-
-    .sparkline {
-        display: none;
-    }
-
+    /* Stretch, so the one-line destination ellipsizes instead of widening the page. */
     .link-header {
         flex-direction: column;
+        align-items: stretch;
     }
 
     .link-header-actions {

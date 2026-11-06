@@ -43,11 +43,12 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
         ];
         const ink = cssVar(el, '--text-secondary');
         const grid = cssVar(el, '--grid');
+        const font = `12px ${cssVar(el, '--sans')}`;
         const axis = {
             stroke: ink,
             grid: { stroke: grid, width: 1 },
             ticks: { show: false },
-            font: `12px ${cssVar(el, '--sans')}`
+            font
         };
         const tickFmt = data.interval === 'hour' ? hourFmt : dayFmt;
         const tipFmt = data.interval === 'hour' ? tooltipHour : tooltipDay;
@@ -117,7 +118,16 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
             plot.setSize({ width: el.clientWidth, height: 240 })
         );
         observer.observe(el);
+
+        // Canvas text neither loads web fonts nor repaints when one arrives, so the axis
+        // labels keep the fallback font if the chart draws first. Redraw once it's loaded.
+        let alive = true;
+        void document.fonts.load(font).then(() => {
+            if (alive) plot.redraw(false, true);
+        });
+
         return () => {
+            alive = false;
             observer.disconnect();
             plot.destroy();
         };
