@@ -288,8 +288,49 @@ describe('second review', () => {
 
     test('a clicked term goes after open brackets', () => {
         expect(withTerm('-(is:bot', 'country:=CA')).toBe('-(is:bot) country:=CA');
-        expect(withTerm('(a || (b', 'c')).toBe('((a || (b))) c');
+        expect(withTerm('(a || (b', 'c')).toBe('(a || (b)) c');
         expect(withTerm('os:"a (b"', 'c')).toBe('os:"a (b" c');
+    });
+
+    test('a clicked term is skipped only when it already filters all of the search', () => {
+        // However the || is spaced, the term isn't AND-ed with all of it yet.
+        expect(withTerm('is:qr || country:=CA', 'country:=CA')).toBe(
+            '(is:qr || country:=CA) country:=CA'
+        );
+        expect(withTerm('is:qr||country:=CA', 'country:=CA')).toBe(
+            '(is:qr||country:=CA) country:=CA'
+        );
+        // One side of a bracketed || doesn't filter the rest, so adding it narrows.
+        expect(withTerm('(a || country:=CA) b', 'country:=CA')).toBe(
+            '(a || country:=CA) b country:=CA'
+        );
+        // Inside AND-only brackets it already filters everything, so adding it again is
+        // redundant but harmless, and lets the bar show as active.
+        expect(withTerm('(a country:=CA b)', 'country:=CA')).toBe('(a country:=CA b) country:=CA');
+        // A top-level && is bracketed like ||, so the term is found next time.
+        expect(withTerm('is:bot && is:qr', 'country:=CA')).toBe('(is:bot && is:qr) country:=CA');
+        // A quoted value with a space, or different case, is still the same filter.
+        expect(withTerm('city:="New York"', 'city:="New York"')).toBe('city:="New York"');
+        expect(withTerm('Country:=ca', 'country:=CA')).toBe('Country:=ca');
+    });
+
+    test('clicking the same term twice adds it once', () => {
+        for (const search of [
+            'is:qr || country:=CA',
+            'is:bot && is:qr',
+            'is:bot && country:=CA',
+            '(a || country:=CA) b'
+        ]) {
+            const once = withTerm(search, 'country:=CA');
+            expect(withTerm(once, 'country:=CA')).toBe(once);
+        }
+        // A panel bar clicked on, then off, gives back the bracketed search, and again
+        // doesn't bracket it twice.
+        const on = toggleTerm('is:qr || country:=CA', 'country:=CA');
+        expect(hasTerm(on, 'country:=CA')).toBe(true);
+        const off = toggleTerm(on, 'country:=CA');
+        expect(off).toBe('(is:qr || country:=CA)');
+        expect(toggleTerm(off, 'country:=CA')).toBe('(is:qr || country:=CA) country:=CA');
     });
 
     test('clicking a row again removes its term', () => {
@@ -309,12 +350,14 @@ describe('second review', () => {
         expect(hasTerm('is:QR', 'is:qr')).toBe(true);
         expect(hasTerm('query.Ref:=x', 'query.ref:=x')).toBe(false);
         // Only top-level AND-ed terms come out: not one inside brackets or quotes, or
-        // beside a top-level || or && (which would be left dangling). `withTerm` then
-        // leaves the search alone, as before, since the term is already in it.
+        // beside a top-level || or && (which would be left dangling). `withTerm` adds it
+        // instead, which narrows the results when it was one side of an ||.
         expect(toggleTerm('is:qr || (a country:=CA b)', 'country:=CA')).toBe(
-            'is:qr || (a country:=CA b)'
+            '(is:qr || (a country:=CA b)) country:=CA'
         );
-        expect(toggleTerm('is:qr || country:=CA', 'country:=CA')).toBe('is:qr || country:=CA');
+        expect(toggleTerm('is:qr || country:=CA', 'country:=CA')).toBe(
+            '(is:qr || country:=CA) country:=CA'
+        );
         expect(hasTerm('is:qr || country:=CA', 'country:=CA')).toBe(false);
         expect(hasTerm('is:bot && country:=CA', 'country:=CA')).toBe(false);
         expect(hasTerm('os:"x country:=CA y"', 'country:=CA')).toBe(false);
