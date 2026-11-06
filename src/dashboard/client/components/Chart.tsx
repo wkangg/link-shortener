@@ -259,7 +259,8 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
     }, [hasData, dark, reduce]);
 
     // Runs after the effect above, so also right after it rebuilds the plot, which then
-    // shows what was drawn before without easing.
+    // picks up from what was drawn: unchanged once settled, or still easing if the rebuild
+    // came mid-transition.
     useEffect(() => {
         if (!data) return;
         zoom.current = carryZoom(zoom.current, zoomedData.current, data);
