@@ -51,15 +51,19 @@ addEventListener('pagehide', () => {
     }
 });
 
-/** Stops restoring the reloaded page's position, if that's still going. */
+/** Stops restoring a scroll position, if one is still being restored. */
 let stopRestoring = () => {};
 
 /**
- * Scrolls a reloaded page back to `top`. Its data loads after the first render, so the page
- * starts too short to get there: this scrolls again each time it grows, until it arrives,
- * the user scrolls or navigates, or 5 s pass.
+ * Scrolls to `top`. A page whose data is still loading (after a reload, or going back to one
+ * with nothing kept) can be too short to get there, so this scrolls again each time the page
+ * grows, until it arrives, the user scrolls or navigates, or 5 s pass.
  */
-function restoreAfterReload(top: number) {
+function restoreScroll(top: number) {
+    stopRestoring();
+    scrollTo(0, top);
+    if (Math.abs(scrollY - top) < 1) return;
+
     const stopOn = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
     const attempt = () => {
         scrollTo(0, top);
@@ -78,7 +82,7 @@ function restoreAfterReload(top: number) {
 }
 
 const reloadedTop = scrollOf.get(currentKey);
-if (reloadedTop) restoreAfterReload(reloadedTop);
+if (reloadedTop) restoreScroll(reloadedTop);
 
 /** The bottom of the nav, in page coordinates. */
 function navBottom(): number {
@@ -94,6 +98,7 @@ function navBottom(): number {
  */
 function notify(top?: number) {
     stopRestoring();
+    const navigation = ++navigations;
     const pageChanged = location.pathname !== renderedPath;
     const update = () => {
         renderedPath = location.pathname;
@@ -101,7 +106,9 @@ function notify(top?: number) {
         flushSync(() => {
             for (const listener of listeners) listener();
         });
-        if (top !== undefined) scrollTo(0, top);
+        // A transition's update runs a frame later. If Back or another navigation came in
+        // first, it rendered the current page above, but the scroll position is no longer its.
+        if (top !== undefined && navigation === navigations) restoreScroll(top);
     };
     if (!pageChanged || !document.startViewTransition || prefersReducedMotion()) {
         update();
@@ -129,6 +136,8 @@ function notify(top?: number) {
 }
 
 let latest: ViewTransition | undefined;
+/** Counts navigations, so a late update can tell whether a newer one has started. */
+let navigations = 0;
 
 function onPopState() {
     scrollOf.set(currentKey, scrollY);
