@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { mergeChips, type ShownChip } from '../src/dashboard/client/components/FilterChips.tsx';
-import { searchChips, toggleTerm } from '../src/dashboard/client/components/SearchBox.tsx';
+import { chipKey, searchChips, toggleTerm } from '../src/dashboard/client/components/SearchBox.tsx';
 
 const labels = (search: string) => searchChips(search).map(c => c.label);
 const shown = (search: string): ShownChip[] =>
@@ -34,7 +34,9 @@ describe('searchChips', () => {
 
     test('a search joined by || or && at the top level is one chip that clears it', () => {
         for (const search of ['is:bot || is:dc', 'country:=CA && os:iOS', 'a b || c']) {
-            expect(searchChips(search)).toEqual([{ key: search, label: search, rest: '' }]);
+            expect(searchChips(search)).toEqual([
+                { key: chipKey(search), label: search, rest: '' }
+            ]);
         }
     });
 
@@ -48,7 +50,11 @@ describe('searchChips', () => {
 
     test('a repeated term gets its own key, and removing one keeps the other', () => {
         const chips = searchChips('is:qr country:=CA is:qr');
-        expect(chips.map(c => c.key)).toEqual(['is:qr', 'country:=CA', 'is:qr#2']);
+        expect(chips.map(c => c.key)).toEqual([
+            chipKey('is:qr'),
+            chipKey('country:=CA'),
+            chipKey('is:qr', 2)
+        ]);
         expect(chips[2]?.rest).toBe('is:qr country:=CA');
     });
 
@@ -73,8 +79,8 @@ describe('mergeChips', () => {
         const leaving = mergeChips(shown('a b'), searchChips('a'));
         const back = mergeChips(leaving, searchChips('a b'));
         expect(back.map(c => [c.key, c.leaving])).toEqual([
-            ['a', false],
-            ['b', false]
+            [chipKey('a'), false],
+            [chipKey('b'), false]
         ]);
     });
 
@@ -82,17 +88,17 @@ describe('mergeChips', () => {
         const before = shown('a country:=C');
         const after = mergeChips(before, searchChips('a country:=CA'));
         expect(after.map(c => [c.key, c.label, c.leaving])).toEqual([
-            ['a', 'a', false],
-            ['country:=C', 'country:=CA', false]
+            [chipKey('a'), 'a', false],
+            [chipKey('country:=C'), 'country:=CA', false]
         ]);
         // And keeps it as the edit goes on.
         const later = mergeChips(after, searchChips('a country:=CAN'));
-        expect(later.map(c => c.key)).toEqual(['a', 'country:=C']);
+        expect(later.map(c => c.key)).toEqual([chipKey('a'), chipKey('country:=C')]);
     });
 
     test('the chips left after a removal carry the search without it', () => {
         const after = mergeChips(shown('a b c'), searchChips('a c'));
-        expect(after.find(c => c.key === 'c')?.rest).toBe('a');
+        expect(after.find(c => c.key === chipKey('c'))?.rest).toBe('a');
     });
 
     test('splitting an OR-ed search replaces its chip', () => {
@@ -100,6 +106,17 @@ describe('mergeChips', () => {
         expect(after.map(c => [c.label, c.leaving])).toEqual([
             ['a', false],
             ['b', false]
+        ]);
+    });
+
+    test('a term that looks like a numbered repeat never shares a key', () => {
+        const chips = searchChips('a a#2 a');
+        expect(new Set(chips.map(c => c.key)).size).toBe(3);
+        const after = mergeChips(shown('a a#2 a'), searchChips('a a'));
+        expect(after.map(c => [c.label, c.leaving])).toEqual([
+            ['a', false],
+            ['a#2', true],
+            ['a', false]
         ]);
     });
 });

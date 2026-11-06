@@ -163,9 +163,16 @@ export function toggleTerm(search: string, term: string): string {
         : withTerm(search, term);
 }
 
+/**
+ * A chip's key: its term and which occurrence of that term it is. Encoded as JSON so no
+ * term can spell another's key (with a suffix like `#2`, a literal `a#2` would clash
+ * with the second `a`).
+ */
+export const chipKey = (term: string, occurrence = 1) => JSON.stringify([term, occurrence]);
+
 /** One filter in a search, shown as a chip that takes it back off. */
 export interface SearchChip {
-    /** Stable while the chip stays: the term, numbered when it appears more than once. */
+    /** Stable while the chip stays: the term and which occurrence of it this is (`chipKey`). */
     key: string;
     /** What the chip shows. */
     label: string;
@@ -183,13 +190,13 @@ export function searchChips(search: string): SearchChip[] {
     const whole = search.trim();
     if (whole === '') return [];
     const terms = topLevelTerms(whole);
-    if (!terms) return [{ key: whole, label: whole, rest: '' }];
+    if (!terms) return [{ key: chipKey(whole), label: whole, rest: '' }];
     const seen = new Map<string, number>();
     return terms.map((term, i) => {
         const n = (seen.get(term) ?? 0) + 1;
         seen.set(term, n);
         return {
-            key: n === 1 ? term : `${term}#${n}`,
+            key: chipKey(term, n),
             label: term,
             rest: terms.filter((_, j) => j !== i).join(' ')
         };
