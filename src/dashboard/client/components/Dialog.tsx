@@ -1,9 +1,11 @@
 import {
     createContext,
     type ReactNode,
+    type Ref,
     useCallback,
     useContext,
     useEffect,
+    useImperativeHandle,
     useRef,
     useState
 } from 'react';
@@ -15,18 +17,24 @@ const CLOSE_MS = 160;
 
 const DialogCloseContext = createContext<() => void>(() => {});
 
+/** Lets the component that renders a dialog close it the animated way, e.g. after a save. */
+export interface DialogHandle {
+    close: () => void;
+}
+
 interface DialogProps {
     title: string;
     onClose: () => void;
     children: ReactNode;
     wide?: boolean;
+    ref?: Ref<DialogHandle>;
 }
 
 /**
  * A native modal <dialog>: focus trapping, Esc and the backdrop come for free. It
  * animates in, and out when closed with ×, Esc, the backdrop or a `DialogClose` button.
  */
-export function Dialog({ title, onClose, children, wide = false }: DialogProps) {
+export function Dialog({ title, onClose, children, wide = false, ref: handle }: DialogProps) {
     const ref = useRef<HTMLDialogElement>(null);
     const reduce = useReducedMotion();
     const [closing, setClosing] = useState(false);
@@ -55,6 +63,7 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
         setClosing(true);
         closeTimer.current = setTimeout(finish, CLOSE_MS);
     }, [closing, reduce]);
+    useImperativeHandle(handle, () => ({ close }), [close]);
 
     const classes = ['dialog', wide && 'dialog-wide', closing && 'dialog-closing'];
     return (

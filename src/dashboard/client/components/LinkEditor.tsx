@@ -1,9 +1,9 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 
 import type { Link, RedirectType } from '../../../shared/types.ts';
 import { api, ApiRequestError } from '../api.ts';
 import { hostOf } from '../format.ts';
-import { Dialog, DialogClose } from './Dialog.tsx';
+import { Dialog, DialogClose, type DialogHandle } from './Dialog.tsx';
 
 const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
 
@@ -57,6 +57,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const dialog = useRef<DialogHandle>(null);
 
     const save = async (event: FormEvent) => {
         event.preventDefault();
@@ -76,6 +77,8 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                 expiresAt: expires ? new Date(expires).getTime() : null
             });
             onSaved(saved);
+            // Animates out like Cancel; its onClose then unmounts it.
+            dialog.current?.close();
         } catch (error) {
             if (error instanceof ApiRequestError) {
                 const fieldErrors: Record<string, string> = { form: error.message };
@@ -95,7 +98,12 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     };
 
     return (
-        <Dialog title={`Edit ${hostOf(shortOrigin)}/${link.slug}`} onClose={onClose} wide>
+        <Dialog
+            ref={dialog}
+            title={`Edit ${hostOf(shortOrigin)}/${link.slug}`}
+            onClose={onClose}
+            wide
+        >
             <form className="editor" onSubmit={e => void save(e)}>
                 <label className="field">
                     <span>Destination</span>
