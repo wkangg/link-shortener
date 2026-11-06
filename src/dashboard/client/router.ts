@@ -12,8 +12,21 @@ let renderedPath = location.pathname;
 // does it as soon as `popstate` fires: against the page being left, before a transition
 // renders the one it belongs to.
 history.scrollRestoration = 'manual';
+
+/** Where scroll positions outlive a reload: per tab, like the history they belong to. */
+const SCROLL_STORE = 'scroll-positions';
+
 /** How far each history entry was scrolled when it was left, by the key in its state. */
-const scrollOf = new Map<number, number>();
+const scrollOf = new Map<number, number>(readScrollPositions());
+
+function readScrollPositions(): [number, number][] {
+    try {
+        const saved: unknown = JSON.parse(sessionStorage.getItem(SCROLL_STORE) ?? '[]');
+        return Array.isArray(saved) ? (saved as [number, number][]) : [];
+    } catch {
+        return [];
+    }
+}
 // Started from the clock so entries from before a reload, which keep their keys, don't clash.
 let nextKey = Date.now();
 
@@ -28,6 +41,45 @@ function entryKey(): number {
 
 let currentKey = entryKey();
 
+// Leaving or reloading the page saves where every entry was, the current one included.
+addEventListener('pagehide', () => {
+    scrollOf.set(currentKey, scrollY);
+    try {
+        sessionStorage.setItem(SCROLL_STORE, JSON.stringify([...scrollOf]));
+    } catch {
+        // Storage is off or full; positions just don't survive the reload.
+    }
+});
+
+/** Stops restoring the reloaded page's position, if that's still going. */
+let stopRestoring = () => {};
+
+/**
+ * Scrolls a reloaded page back to `top`. Its data loads after the first render, so the page
+ * starts too short to get there: this scrolls again each time it grows, until it arrives,
+ * the user scrolls or navigates, or 5 s pass.
+ */
+function restoreAfterReload(top: number) {
+    const stopOn = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+    const attempt = () => {
+        scrollTo(0, top);
+        if (Math.abs(scrollY - top) < 1) stopRestoring();
+    };
+    const observer = new ResizeObserver(attempt);
+    const timer = setTimeout(() => stopRestoring(), 5000);
+    stopRestoring = () => {
+        observer.disconnect();
+        clearTimeout(timer);
+        for (const type of stopOn) removeEventListener(type, stopRestoring);
+        stopRestoring = () => {};
+    };
+    for (const type of stopOn) addEventListener(type, stopRestoring, { passive: true });
+    observer.observe(document.documentElement);
+}
+
+const reloadedTop = scrollOf.get(currentKey);
+if (reloadedTop) restoreAfterReload(reloadedTop);
+
 /** The bottom of the nav, in page coordinates. */
 function navBottom(): number {
     const nav = document.querySelector('.topbar nav');
@@ -41,6 +93,7 @@ function navBottom(): number {
  * update in place.
  */
 function notify(top?: number) {
+    stopRestoring();
     const pageChanged = location.pathname !== renderedPath;
     const update = () => {
         renderedPath = location.pathname;
