@@ -2,6 +2,8 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import uPlot from 'uplot';
 
 import type { TimeseriesResponse } from '../../../shared/types.ts';
+import { type ChartSnapshot, chartTransition, yTop } from '../chartTransition.ts';
+import { animate, useReducedMotion } from '../motion.ts';
 
 const SERIES = [
     { label: 'Clicks', css: '--series-1' },
@@ -26,6 +28,9 @@ function useDarkScheme(): boolean {
     return useSyncExternalStore(subscribeToScheme, () => darkQuery().matches);
 }
 
+/** The longest span charted in hours (the server's cutoff), in seconds. */
+const HOURLY_SPAN_S = 3 * 86_400;
+
 const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
 const dayFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 const tooltipHour = new Intl.DateTimeFormat(undefined, {
@@ -39,23 +44,36 @@ const tooltipDay = new Intl.DateTimeFormat(undefined, {
     day: 'numeric'
 });
 
-/** Clicks and unique visitors over time, with a crosshair tooltip. */
-export function Chart({ data }: { data: TimeseriesResponse }) {
+/**
+ * Clicks and unique visitors over time, with a crosshair tooltip. Empty until `data`
+ * arrives, so the card holds its place while the first request loads, or says why
+ * when the request fails.
+ */
+export function Chart({ data, error }: { data: TimeseriesResponse | undefined; error?: Error }) {
     const host = useRef<HTMLDivElement>(null);
     const tooltip = useRef<HTMLDivElement>(null);
     const dark = useDarkScheme();
+    const reduce = useReducedMotion();
+    // What's on screen now, so new data eases from there.
+    const drawn = useRef<ChartSnapshot | null>(null);
 
     useEffect(() => {
         const el = host.current;
         const tip = tooltip.current;
         if (!el || !tip) return;
+        // Nothing drawn (still loading, or the request failed): the next data rises from 0,
+        // like the totals, rather than easing from lines that are no longer on screen.
+        if (!data) {
+            drawn.current = null;
+            return;
+        }
 
-        const xs = data.points.map(p => p.t / 1000);
-        const plotData: uPlot.AlignedData = [
-            xs,
-            data.points.map(p => p.clicks),
-            data.points.map(p => p.visitors)
-        ];
+        // By bucket start in seconds, as drawn on the x axis.
+        const points = new Map(data.points.map(p => [p.t / 1000, p]));
+        const transition = chartTransition(drawn.current, data);
+        let progress = reduce || !transition.moves ? 1 : 0;
+        // Read by the scales below, so the view moves with the lines while they ease.
+        let frame = transition.at(progress);
         const ink = cssVar(el, '--text-secondary');
         const grid = cssVar(el, '--grid');
         const font = `12px ${cssVar(el, '--sans')}`;
@@ -65,7 +83,6 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
             ticks: { show: false },
             font
         };
-        const tickFmt = data.interval === 'hour' ? hourFmt : dayFmt;
         const tipFmt = data.interval === 'hour' ? tooltipHour : tooltipDay;
 
         const plot = new uPlot(
@@ -75,14 +92,25 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
                 legend: { show: false },
                 cursor: { y: false, points: { size: 8 } },
                 scales: {
-                    x: { time: true },
-                    y: { range: (_u, _min, max) => [0, Math.max(4, max * 1.1)] }
+                    x: {
+                        time: true,
+                        range: (_u, min, max) => (progress < 1 ? frame.x : [min, max])
+                    },
+                    y: {
+                        range: (_u, _min, max) => [0, progress < 1 ? frame.top : yTop(max)]
+                    }
                 },
                 axes: [
                     {
                         ...axis,
                         grid: { show: false },
-                        values: (_u, ticks) => ticks.map(t => tickFmt.format(t * 1000))
+                        // By the span in view rather than the bucket size, so labels suit the
+                        // view while it zooms between hours and days.
+                        values: (u, ticks) => {
+                            const span = (u.scales.x?.max ?? 0) - (u.scales.x?.min ?? 0);
+                            const fmt = span <= HOURLY_SPAN_S ? hourFmt : dayFmt;
+                            return ticks.map(t => fmt.format(t * 1000));
+                        }
                     },
                     {
                         ...axis,
@@ -103,13 +131,15 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
                 hooks: {
                     setCursor: [
                         u => {
+                            // Look the point up by time, not index: while the view eases, the
+                            // plot also draws buckets that are leaving, which have no tooltip.
                             const i = u.cursor.idx;
-                            if (i === null || i === undefined) {
+                            const x = i === null || i === undefined ? undefined : u.data[0][i];
+                            const point = x === undefined ? undefined : points.get(x);
+                            if (x === undefined || !point) {
                                 tip.hidden = true;
                                 return;
                             }
-                            const point = data.points[i];
-                            if (!point) return;
                             tip.hidden = false;
                             tip.replaceChildren(
                                 Object.assign(document.createElement('strong'), {
@@ -119,15 +149,24 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
                                     textContent: `${point.clicks} clicks, ${point.visitors} unique`
                                 })
                             );
-                            const left = u.valToPos(xs[i] ?? 0, 'x');
+                            const left = u.valToPos(x, 'x');
                             tip.style.transform = `translateX(${Math.min(left, el.clientWidth - 180)}px)`;
                         }
                     ]
                 }
             },
-            plotData,
+            frame.data,
             el
         );
+
+        const stop =
+            progress < 1
+                ? animate(k => {
+                      progress = k;
+                      frame = transition.at(k);
+                      plot.setData(frame.data);
+                  })
+                : undefined;
 
         const observer = new ResizeObserver(() =>
             plot.setSize({ width: el.clientWidth, height: 240 })
@@ -146,12 +185,16 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
 
         return () => {
             alive = false;
+            stop?.();
+            drawn.current = { ...frame, interval: data.interval };
             observer.disconnect();
             plot.destroy();
+            // Or a hover from before a failed refresh stays on screen.
+            tip.hidden = true;
         };
-    }, [data, dark]);
+    }, [data, dark, reduce]);
 
-    const empty = !data.points.some(p => p.clicks > 0);
+    const empty = data !== undefined && !data.points.some(p => p.clicks > 0);
 
     return (
         <figure className="chart">
@@ -167,6 +210,9 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
                 <div ref={host} />
                 <div ref={tooltip} className="chart-tooltip" hidden />
                 {empty && <p className="chart-empty">No clicks in this period</p>}
+                {!data && error && (
+                    <p className="chart-empty">Couldn’t load the chart: {error.message}</p>
+                )}
             </div>
         </figure>
     );

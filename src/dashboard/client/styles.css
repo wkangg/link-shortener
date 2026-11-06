@@ -404,6 +404,17 @@ input::placeholder {
     flex-wrap: wrap;
 }
 
+/* A date and time needs less than half the row, so the redirect type beside it takes
+   nearly all the spare room. Once its longest common option wouldn't fit, the two wrap
+   onto their own lines and each fills its line. */
+.field-expires {
+    flex: 1 1 16rem;
+}
+
+.field-redirect {
+    flex: 999 1 19rem;
+}
+
 .field-inline.grow {
     flex: 1;
 }
@@ -674,6 +685,43 @@ button.chip {
     color: var(--muted);
 }
 
+/* Collapses rather than unmounting, so archiving grows it in and restoring shrinks it
+   away, with the tags after it sliding over instead of jumping. */
+.archived-flag {
+    /* Just over the word's width, so the whole transition shows. */
+    max-width: 4rem;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.archived-flag.off {
+    max-width: 0;
+    opacity: 0;
+    /* Cancels the row gap after it, so nothing is left behind. */
+    margin-right: -0.9rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .archived-flag {
+        transition:
+            max-width 300ms ease,
+            margin-right 300ms ease,
+            opacity 200ms ease;
+    }
+
+    .swap-in {
+        display: inline-block;
+        animation: swap-in 220ms ease-out;
+    }
+}
+
+@keyframes swap-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+
 .tag {
     border: 0;
     padding: 0 0.5rem;
@@ -786,7 +834,10 @@ button.tag {
 }
 
 .totals {
-    display: flex;
+    display: grid;
+    /* Fixed columns, wide enough for "9,999" or "no change vs previous period", so a
+       total changing width as it counts doesn't push the one beside it. */
+    grid-template-columns: repeat(2, 11.5rem);
     gap: 3.5rem;
     margin: 0.5rem 0 1.5rem;
 }
@@ -815,6 +866,10 @@ button.tag {
 .total-delta {
     font-size: 0.8rem;
     color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    /* Held while loading or with nothing to compare, so what's below doesn't move. */
+    min-height: 1lh;
 }
 
 .total-delta .up {
@@ -856,6 +911,8 @@ button.tag {
 
 .chart-plot {
     position: relative;
+    /* The plot's height, held while the first data loads. */
+    min-height: 240px;
 }
 
 .chart-tooltip {
@@ -1029,6 +1086,20 @@ button.tag {
     background: var(--bar);
     border-radius: 8px;
     z-index: 0;
+}
+
+/* Bars grow in when a row appears and slide to their new width when the data changes. */
+@media (prefers-reduced-motion: no-preference) {
+    .top-bar {
+        transition: width 0.6s cubic-bezier(0.33, 1, 0.68, 1);
+        animation: top-bar-in 0.6s cubic-bezier(0.33, 1, 0.68, 1);
+    }
+}
+
+@keyframes top-bar-in {
+    from {
+        width: 0;
+    }
 }
 
 .top-label,
@@ -1581,7 +1652,9 @@ button.badge {
 }
 
 .dialog-wide {
-    width: min(44rem, calc(100vw - 2rem));
+    /* Room for "302 temporary (every click counted)" beside the expiry, and for the
+       five UTM fields in one row, which keeps the editor short enough not to scroll. */
+    width: min(48rem, calc(100vw - 2rem));
 }
 
 .dialog::backdrop {
@@ -1591,6 +1664,52 @@ button.badge {
 
 .dialog-body {
     padding: 1.4rem 1.6rem 1.6rem;
+}
+
+/* Rises in over a fading backdrop, and sinks out the same way. */
+@media (prefers-reduced-motion: no-preference) {
+    .dialog[open] {
+        animation: dialog-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .dialog[open]::backdrop {
+        animation: fade-in 240ms ease-out;
+    }
+
+    /* CLOSE_MS in Dialog.tsx matches this duration. */
+    .dialog.dialog-closing {
+        animation: dialog-out 160ms ease-in forwards;
+    }
+
+    .dialog.dialog-closing::backdrop {
+        animation: fade-out 160ms ease-in forwards;
+    }
+}
+
+@keyframes dialog-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.97);
+    }
+}
+
+@keyframes dialog-out {
+    to {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes fade-out {
+    to {
+        opacity: 0;
+    }
 }
 
 .dialog-header {
@@ -1616,7 +1735,7 @@ button.badge {
 
 .utm {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
     gap: 0.75rem;
     border: 1px solid var(--line);
     border-radius: var(--radius-s);
@@ -1960,14 +2079,26 @@ input[type='color'] {
 
 @media (prefers-reduced-motion: no-preference) {
     .toast {
-        animation: toast-in 160ms ease-out;
+        animation: toast-in 280ms cubic-bezier(0.22, 1.2, 0.36, 1);
+    }
+
+    /* LEAVE_MS in Toast.tsx matches this duration. */
+    .toast-leaving {
+        animation: toast-out 200ms ease-in forwards;
     }
 }
 
 @keyframes toast-in {
     from {
         opacity: 0;
-        transform: translateY(6px);
+        transform: translateY(14px) scale(0.96);
+    }
+}
+
+@keyframes toast-out {
+    to {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
     }
 }
 
@@ -2039,7 +2170,18 @@ input[type='color'] {
     }
 
     .totals {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 2rem;
+    }
+
+    /* Too narrow for one line, so always two: the height stays put as the number changes. */
+    .total-delta {
+        white-space: normal;
+        min-height: 2lh;
+    }
+
+    .total-delta-vs {
+        display: block;
     }
 
     .filter-bar .export {

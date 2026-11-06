@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 
 import { isDiscordWebhookUrl } from '../../../shared/discord.ts';
 import {
@@ -8,7 +8,7 @@ import {
     type WebhookSkipCategory
 } from '../../../shared/types.ts';
 import { api, ApiRequestError } from '../api.ts';
-import { Dialog } from './Dialog.tsx';
+import { Dialog, DialogClose, type DialogHandle } from './Dialog.tsx';
 import { LinkPicker, type PickedLink } from './LinkPicker.tsx';
 import { useToast } from './Toast.tsx';
 
@@ -45,6 +45,8 @@ export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEd
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
     const [secret, setSecret] = useState<string | null>(null);
+    // Closes the animated way after a save, like Cancel.
+    const dialog = useRef<DialogHandle>(null);
 
     const kind = endpoint?.kind ?? (isDiscordWebhookUrl(url.trim()) ? 'discord' : 'standard');
 
@@ -71,14 +73,17 @@ export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEd
                     ...(changedUrl && { url: changedUrl })
                 });
                 onSaved();
-                onClose();
+                dialog.current?.close();
             } else {
                 const created = await api.createWebhook({ url: url.trim(), ...fields });
                 onSaved();
                 if (created.secret) setSecret(created.secret);
-                else onClose();
+                else dialog.current?.close();
             }
         } catch (error) {
+            // Only on failure: after a save the editor animates out, and flipping the
+            // button back to its idle label would flicker during that.
+            setSaving(false);
             if (error instanceof ApiRequestError) {
                 const fieldErrors: Record<string, string> = { form: error.message };
                 for (const issue of error.issues ?? []) {
@@ -88,15 +93,18 @@ export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEd
             } else {
                 setErrors({ form: String(error) });
             }
-        } finally {
-            setSaving(false);
         }
     };
 
     if (secret) return <SecretDialog secret={secret} onClose={onClose} />;
 
     return (
-        <Dialog title={endpoint ? 'Edit webhook' : 'Add a webhook'} onClose={onClose} wide>
+        <Dialog
+            ref={dialog}
+            title={endpoint ? 'Edit webhook' : 'Add a webhook'}
+            onClose={onClose}
+            wide
+        >
             <form className="editor" onSubmit={e => void save(e)}>
                 <label className="field">
                     <span>
@@ -221,9 +229,7 @@ export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEd
                 <div className="button-row spread">
                     <span />
                     <span className="button-row">
-                        <button type="button" className="button" onClick={onClose}>
-                            Cancel
-                        </button>
+                        <DialogClose className="button">Cancel</DialogClose>
                         <button type="submit" className="button primary" disabled={saving}>
                             {saving ? 'Saving…' : endpoint ? 'Save changes' : 'Add webhook'}
                         </button>
@@ -256,9 +262,7 @@ export function SecretDialog({ secret, onClose }: { secret: string; onClose: () 
                 <button type="button" className="button" onClick={() => void copy()}>
                     Copy secret
                 </button>
-                <button type="button" className="button primary" onClick={onClose}>
-                    Done
-                </button>
+                <DialogClose className="button primary">Done</DialogClose>
             </div>
         </Dialog>
     );

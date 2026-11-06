@@ -1,9 +1,9 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 
 import type { Link, RedirectType } from '../../../shared/types.ts';
 import { api, ApiRequestError } from '../api.ts';
 import { hostOf } from '../format.ts';
-import { Dialog } from './Dialog.tsx';
+import { Dialog, DialogClose, type DialogHandle } from './Dialog.tsx';
 
 const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
 
@@ -57,6 +57,11 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const dialog = useRef<DialogHandle>(null);
+    // The slug the editor opened with. After a save that renames it, the parent's refresh
+    // can land while the editor is still fading out, and the heading shouldn't change then.
+    // eslint-disable-next-line react/hook-use-state -- a snapshot; it never changes
+    const [openedSlug] = useState(link.slug);
 
     const save = async (event: FormEvent) => {
         event.preventDefault();
@@ -76,7 +81,12 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                 expiresAt: expires ? new Date(expires).getTime() : null
             });
             onSaved(saved);
+            // Animates out like Cancel; its onClose then unmounts it.
+            dialog.current?.close();
         } catch (error) {
+            // Only on failure: after a save the editor animates out, and flipping the
+            // button back to its idle label would flicker during that.
+            setSaving(false);
             if (error instanceof ApiRequestError) {
                 const fieldErrors: Record<string, string> = { form: error.message };
                 for (const issue of error.issues ?? []) fieldErrors[issue.path] = issue.message;
@@ -84,8 +94,6 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
             } else {
                 setErrors({ form: String(error) });
             }
-        } finally {
-            setSaving(false);
         }
     };
 
@@ -95,7 +103,12 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     };
 
     return (
-        <Dialog title={`Edit ${hostOf(shortOrigin)}/${link.slug}`} onClose={onClose} wide>
+        <Dialog
+            ref={dialog}
+            title={`Edit ${hostOf(shortOrigin)}/${openedSlug}`}
+            onClose={onClose}
+            wide
+        >
             <form className="editor" onSubmit={e => void save(e)}>
                 <label className="field">
                     <span>Destination</span>
@@ -145,7 +158,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                     ))}
                 </fieldset>
                 <div className="field-row">
-                    <label className="field">
+                    <label className="field field-expires">
                         <span>Expires</span>
                         <input
                             type="datetime-local"
@@ -153,7 +166,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                             onChange={e => setExpires(e.target.value)}
                         />
                     </label>
-                    <label className="field">
+                    <label className="field field-redirect">
                         <span>Redirect type</span>
                         <select
                             value={redirectType}
@@ -213,9 +226,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                         </button>
                     )}
                     <span className="button-row">
-                        <button type="button" className="button" onClick={onClose}>
-                            Cancel
-                        </button>
+                        <DialogClose className="button">Cancel</DialogClose>
                         <button type="submit" className="button primary" disabled={saving}>
                             {saving ? 'Saving…' : 'Save changes'}
                         </button>

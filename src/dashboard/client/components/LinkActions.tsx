@@ -57,8 +57,8 @@ export function LinkActions({ link, onChanged, onDeleted }: LinkActionsProps) {
                     link={link}
                     shortOrigin={shortOrigin}
                     onClose={() => setOpen(null)}
+                    // The editor closes itself after a save, animating out.
                     onSaved={saved => {
-                        setOpen(null);
                         toast.show('Changes saved');
                         onChanged(saved);
                     }}

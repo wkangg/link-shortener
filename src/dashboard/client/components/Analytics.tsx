@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import type { TopRow } from '../../../shared/types.ts';
 import { api, localTz } from '../api.ts';
 import { useConfig } from '../config.tsx';
-import { formatCount, formatDelta } from '../format.ts';
+import { formatCount, formatPercent, percentChange } from '../format.ts';
 import { useApi } from '../useApi.ts';
+import { useCountUp } from '../useCountUp.ts';
 import { Chart } from './Chart.tsx';
 import { ClickHistory, type Toggle } from './ClickHistory.tsx';
 import { exactTerm, hasTerm, toggleTerm, withTerm } from './SearchBox.tsx';
@@ -251,16 +252,22 @@ export function Analytics({ linkId }: AnalyticsProps) {
             </div>
 
             <div className="totals">
-                <Total label="Clicks" value={s?.clicks} previous={s?.previous?.clicks} />
+                <Total
+                    label="Clicks"
+                    value={s?.clicks}
+                    previous={s?.previous?.clicks}
+                    failed={summary.error !== undefined}
+                />
                 <Total
                     label="Unique visitors"
                     value={s?.visitors}
                     previous={s?.previous?.visitors}
+                    failed={summary.error !== undefined}
                 />
             </div>
             {summary.error && <p className="error">{summary.error.message}</p>}
 
-            {series.data && <Chart data={series.data} />}
+            <Chart data={series.data} error={series.error} />
 
             <div className="panels">
                 {PANELS.filter(p => !(p.linksOnly && linkId !== undefined)).map(panel => (
@@ -292,24 +299,44 @@ export function Analytics({ linkId }: AnalyticsProps) {
     );
 }
 
-function Total({ label, value, previous }: { label: string; value?: number; previous?: number }) {
-    const delta =
-        value === undefined || previous === undefined ? null : formatDelta(value, previous);
-    const trend =
-        value === undefined || previous === undefined || delta === 'no change'
-            ? undefined
-            : value > previous
-              ? 'up'
-              : 'down';
+interface TotalProps {
+    label: string;
+    value?: number;
+    previous?: number;
+    /** Show a dash rather than a 0 that would look like real data. */
+    failed: boolean;
+}
+
+function Total({ label, value, previous, failed }: TotalProps) {
+    // Counts up from 0 while the first load is in flight.
+    const shown = useCountUp(value ?? 0);
+    const loaded = value !== undefined && previous !== undefined;
+    const pct = loaded ? percentChange(value, previous) : null;
+    // Counts to the new change alongside the total, colored by the sign it shows.
+    const shownPct = useCountUp(pct ?? 0);
+    const isNew = loaded && previous === 0 && value > 0;
+    const delta = isNew
+        ? 'new'
+        : pct === null
+          ? null
+          : pct === 0 && shownPct === 0
+            ? 'no change'
+            : formatPercent(shownPct);
+    const trend = isNew || shownPct > 0 ? 'up' : shownPct < 0 ? 'down' : undefined;
     return (
         <div className="total">
             <span className="total-label">{label}</span>
-            <span className="total-value">{value === undefined ? '–' : formatCount(value)}</span>
-            {delta && (
-                <span className="total-delta">
-                    <span className={trend}>{delta}</span> vs previous period
-                </span>
-            )}
+            <span className="total-value">
+                {failed && value === undefined ? '–' : formatCount(shown)}
+            </span>
+            <span className="total-delta">
+                {delta && (
+                    <>
+                        <span className={trend}>{delta}</span>
+                        <span className="total-delta-vs"> vs previous period</span>
+                    </>
+                )}
+            </span>
         </div>
     );
 }

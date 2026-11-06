@@ -15,11 +15,12 @@ export function formatBytes(n: number): string {
     return `${unit === 0 ? n : n.toFixed(n < 10 ? 1 : 0)} ${BYTE_UNITS[unit]}`;
 }
 
-export function formatDelta(current: number, previous: number): string | null {
-    if (previous === 0) return current === 0 ? null : 'new';
-    const pct = Math.round(((current - previous) / previous) * 100);
-    return pct === 0 ? 'no change' : `${pct > 0 ? '+' : ''}${pct}%`;
-}
+/** Whole-percent change from `previous` to `current`; null when there's nothing to compare with. */
+export const percentChange = (current: number, previous: number): number | null =>
+    previous === 0 ? null : Math.round(((current - previous) / previous) * 100);
+
+/** "+12%", "-3%", "0%". */
+export const formatPercent = (pct: number) => `${pct > 0 ? '+' : ''}${pct}%`;
 
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
