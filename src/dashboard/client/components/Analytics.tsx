@@ -267,7 +267,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
             </div>
             {summary.error && <p className="error">{summary.error.message}</p>}
 
-            {series.data && <Chart data={series.data} />}
+            <Chart data={series.data} />
 
             <div className="panels">
                 {PANELS.filter(p => !(p.linksOnly && linkId !== undefined)).map(panel => (

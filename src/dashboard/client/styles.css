@@ -856,6 +856,8 @@ button.tag {
 
 .chart-plot {
     position: relative;
+    /* The plot's height, held while the first data loads. */
+    min-height: 240px;
 }
 
 .chart-tooltip {
