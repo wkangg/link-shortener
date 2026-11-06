@@ -101,6 +101,65 @@ export function withTerm(search: string, term: string): string {
     return `${current.includes('||') ? `(${current})` : current} ${term}`;
 }
 
+/**
+ * The terms AND-ed at the top level of `search`: split at whitespace outside quotes and
+ * brackets. Null when `||` or `&&` joins them there, since taking one out would leave
+ * the operator dangling.
+ */
+function topLevelTerms(search: string): string[] | null {
+    const terms: string[] = [];
+    let depth = 0;
+    let quoted = false;
+    let start = 0;
+    for (let i = 0; i < search.length; i++) {
+        const c = search.charAt(i);
+        if (quoted) {
+            if (c === '\\') i++;
+            else if (c === '"') quoted = false;
+        } else if (c === '"') quoted = true;
+        else if (c === '(') depth++;
+        else if (c === ')') depth = Math.max(0, depth - 1);
+        else if (depth > 0) continue;
+        else if (search.startsWith('||', i) || search.startsWith('&&', i)) return null;
+        else if (/\s/.test(c)) {
+            if (i > start) terms.push(search.slice(start, i));
+            start = i + 1;
+        }
+    }
+    if (start < search.length) terms.push(search.slice(start));
+    return terms;
+}
+
+/**
+ * How the search reads a term, so `Country:=ca` and `os:="iOS"` match `country:=CA` and
+ * `os:=iOS`. Values ignore case like the server's NOCASE and LIKE, which fold only A–Z;
+ * query parameter keys keep theirs (they're in `field`).
+ */
+function parsedTerm(text: string): string {
+    return JSON.stringify(
+        tokenize(text).map(token =>
+            'value' in token
+                ? { ...token, value: token.value.replaceAll(/[A-Z]/g, c => c.toLowerCase()) }
+                : token
+        )
+    );
+}
+
+/** Whether `term` stands on its own at the top level of `search`, so `toggleTerm` would remove it. */
+export function hasTerm(search: string, term: string): boolean {
+    const parsed = parsedTerm(term);
+    return topLevelTerms(search.trim())?.some(t => parsedTerm(t) === parsed) ?? false;
+}
+
+/** `search` without `term` where it stands on its own at the top level, or with it added (as `withTerm`). */
+export function toggleTerm(search: string, term: string): string {
+    const parsed = parsedTerm(term);
+    const terms = topLevelTerms(search.trim());
+    return terms?.some(t => parsedTerm(t) === parsed)
+        ? terms.filter(t => parsedTerm(t) !== parsed).join(' ')
+        : withTerm(search, term);
+}
+
 /** `field:=value`, quoted (and escaped) when a bare value couldn't hold it. */
 export function exactTerm(field: string, value: string): string {
     return `${field}:=${quoteValue(value)}`;

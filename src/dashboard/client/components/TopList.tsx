@@ -17,6 +17,8 @@ interface TopListProps {
     params: URLSearchParams;
     refreshKey: string;
     onSelect: (dim: string, row: TopRow) => void;
+    /** Whether the row's filter is in the search, so clicking it again takes it off. */
+    isActive: (dim: string, row: TopRow) => boolean;
     /** For `param`: clicking a key drills into its values instead of filtering. */
     drill?: boolean;
 }
@@ -34,6 +36,7 @@ export function TopList({
     params,
     refreshKey,
     onSelect,
+    isActive,
     drill = false
 }: TopListProps) {
     const [tabIndex, setTabIndex] = useState(0);
@@ -78,26 +81,30 @@ export function TopList({
             {error && <p className="panel-empty">Couldn’t load: {error.message}</p>}
             {!error && rows.length === 0 && <p className="panel-empty">Nothing yet</p>}
             <ol className="top-rows">
-                {rows.map(row => (
-                    <li key={row.value ?? '∅'}>
-                        <button
-                            type="button"
-                            className="top-row"
-                            title={`${row.clicks} clicks, ${row.visitors} unique visitors`}
-                            onClick={() => {
-                                if (drill && drillKey === null && row.value) setDrillKey(row.value);
-                                else onSelect(dim, row);
-                            }}
-                        >
-                            <span
-                                className="top-bar"
-                                style={{ width: `${(row.clicks / max) * 100}%` }}
-                            />
-                            <span className="top-label">{rowLabel(dim, row)}</span>
-                            <span className="top-count">{formatCount(row.clicks)}</span>
-                        </button>
-                    </li>
-                ))}
+                {rows.map(row => {
+                    const drills = drill && drillKey === null && Boolean(row.value);
+                    return (
+                        <li key={row.value ?? '∅'}>
+                            <button
+                                type="button"
+                                className="top-row"
+                                aria-pressed={drills ? undefined : isActive(dim, row)}
+                                title={`${row.clicks} clicks, ${row.visitors} unique visitors`}
+                                onClick={() => {
+                                    if (drills && row.value) setDrillKey(row.value);
+                                    else onSelect(dim, row);
+                                }}
+                            >
+                                <span
+                                    className="top-bar"
+                                    style={{ width: `${(row.clicks / max) * 100}%` }}
+                                />
+                                <span className="top-label">{rowLabel(dim, row)}</span>
+                                <span className="top-count">{formatCount(row.clicks)}</span>
+                            </button>
+                        </li>
+                    );
+                })}
             </ol>
         </section>
     );
