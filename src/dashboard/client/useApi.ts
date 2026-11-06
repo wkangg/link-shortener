@@ -16,8 +16,14 @@ interface Settled<T> {
 /** The last data loaded under each `keep` name, for as long as the page is open. */
 const kept = new Map<string, unknown>();
 
+/** Bumped by forgetKept, so a request sent before then can't keep what it loads. */
+let generation = 0;
+
 /** Drops all kept data, so nothing from before a change is shown again (api.ts, on writes). */
-export const forgetKept = () => kept.clear();
+export function forgetKept() {
+    kept.clear();
+    generation++;
+}
 
 /**
  * Fetches whenever `key` changes. The previous data stays visible while the
@@ -36,10 +42,11 @@ export function useApi<T>(key: string | null, load: () => Promise<T>, keep?: str
     useEffect(() => {
         if (key === null) return;
         let cancelled = false;
+        const sentIn = generation;
         load().then(
             data => {
                 if (cancelled) return;
-                if (keep !== undefined) kept.set(keep, data);
+                if (keep !== undefined && sentIn === generation) kept.set(keep, data);
                 setSettled({ key, data });
             },
             (error: unknown) => {

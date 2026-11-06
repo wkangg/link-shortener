@@ -32,13 +32,17 @@ export class ApiRequestError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    // A write may change data pages kept to show on return (useApi), even if it fails. Forget
+    // it before (for loads already on their way) and after (for loads sent meanwhile).
+    const write = method !== 'GET';
+    if (write) forgetKept();
     const res = await fetch(path, {
         method,
         headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body)
+    }).finally(() => {
+        if (write) forgetKept();
     });
-    // A write may have changed data a page kept to show on return (useApi), even if it failed.
-    if (method !== 'GET') forgetKept();
     if (res.status === 204) return undefined as T;
     const data: unknown = await res.json().catch(() => ({ error: res.statusText }));
     if (!res.ok) throw new ApiRequestError(res.status, data as ApiError);

@@ -9,22 +9,23 @@ const listeners = new Set<() => void>();
 let renderedPath = location.pathname;
 
 /**
- * Re-renders subscribers. A change of page runs inside a view transition, so the old page
- * fades out as the new one rises in (`::view-transition-*(page)` in styles.css). Query-only
- * changes, like the links filter, update in place.
+ * Re-renders subscribers. A new page opened from a link (`pushed`) starts at the top, and
+ * runs in a view transition, so the old page fades out as the new one rises in
+ * (`::view-transition-*(page)` in styles.css). Query-only changes, like the links filter,
+ * update in place.
  *
- * `pushed`: a new page opened from a link starts at the top; back and forward leave the
- * browser's scroll restoration alone. `animated`: the browser already animated it, like a
- * back swipe in Safari, so a second animation would play over it.
+ * Back and forward switch instantly: the browser restores their scroll position right after
+ * `popstate`, which only works if the page it belongs to renders before a transition would.
  */
-function notify({ pushed = false, animated = false } = {}) {
+function notify(pushed: boolean) {
     const pageChanged = location.pathname !== renderedPath;
     const update = () => {
         renderedPath = location.pathname;
-        if (pushed && pageChanged) scrollTo(0, 0);
         for (const listener of listeners) listener();
     };
-    if (!pageChanged || animated || !document.startViewTransition || prefersReducedMotion()) {
+    // Before the old page's snapshot, so the snapshots line up and only the pill moves sideways.
+    if (pushed && pageChanged) scrollTo(0, 0);
+    if (!pushed || !pageChanged || !document.startViewTransition || prefersReducedMotion()) {
         update();
         return;
     }
@@ -32,7 +33,7 @@ function notify({ pushed = false, animated = false } = {}) {
     document.startViewTransition(() => flushSync(update));
 }
 
-const onPopState = (event: PopStateEvent) => notify({ animated: event.hasUAVisualTransition });
+const onPopState = () => notify(false);
 
 function subscribe(listener: () => void) {
     if (listeners.size === 0) globalThis.addEventListener('popstate', onPopState);
@@ -48,7 +49,7 @@ const snapshot = () => location.pathname + location.search;
 export function navigate(to: string, replace = false) {
     if (replace) history.replaceState(null, '', to);
     else history.pushState(null, '', to);
-    notify({ pushed: true });
+    notify(true);
 }
 
 /** Current path + query, re-rendering on navigation. */

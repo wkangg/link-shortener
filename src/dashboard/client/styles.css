@@ -212,14 +212,6 @@ h3 {
  * dialog, the new one rises in like an opening one, and the nav pill slides to its tab.
  * router.ts skips it with reduced motion, which `*` above can't reach.
  */
-/*
- * Drawn where the new page is, not slid from where the old one was, so a change of scroll
- * position (a new page starts at the top) doesn't move the new page into place.
- */
-::view-transition-group(page) {
-    animation: none;
-}
-
 ::view-transition-old(page) {
     animation: page-out 160ms ease-in forwards;
 }
