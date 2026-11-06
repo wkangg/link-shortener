@@ -61,7 +61,8 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
         const tip = tooltip.current;
         if (!el || !tip || !data) return;
 
-        const xs = data.points.map(p => p.t / 1000);
+        // By bucket start in seconds, as drawn on the x axis.
+        const points = new Map(data.points.map(p => [p.t / 1000, p]));
         const transition = chartTransition(drawn.current, data);
         let progress = reduce || !transition.moves ? 1 : 0;
         // Read by the scales below, so the view moves with the lines while they ease.
@@ -123,13 +124,15 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
                 hooks: {
                     setCursor: [
                         u => {
+                            // Look the point up by time, not index: while the view eases, the
+                            // plot also draws buckets that are leaving, which have no tooltip.
                             const i = u.cursor.idx;
-                            if (i === null || i === undefined) {
+                            const x = i === null || i === undefined ? undefined : u.data[0][i];
+                            const point = x === undefined ? undefined : points.get(x);
+                            if (x === undefined || !point) {
                                 tip.hidden = true;
                                 return;
                             }
-                            const point = data.points[i];
-                            if (!point) return;
                             tip.hidden = false;
                             tip.replaceChildren(
                                 Object.assign(document.createElement('strong'), {
@@ -139,7 +142,7 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
                                     textContent: `${point.clicks} clicks, ${point.visitors} unique`
                                 })
                             );
-                            const left = u.valToPos(xs[i] ?? 0, 'x');
+                            const left = u.valToPos(x, 'x');
                             tip.style.transform = `translateX(${Math.min(left, el.clientWidth - 180)}px)`;
                         }
                     ]
