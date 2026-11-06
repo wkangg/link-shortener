@@ -99,6 +99,13 @@ export function Chart({
         lastRange.current = range;
         rangeChanged.current = true;
     }, [range]);
+    // Read by the data effect below rather than one of its deps: `stale` flips at the start
+    // of every request, and re-running that effect then would restart an ease in progress.
+    // Declared first, so it's current whenever the data changes in the same render.
+    const staleNow = useRef(stale);
+    useEffect(() => {
+        staleNow.current = stale;
+    }, [stale]);
     // Eases the plot below to new data, in the current zoom.
     const render = useRef<((data: TimeseriesResponse) => void) | null>(null);
     const hasData = data !== undefined;
@@ -289,13 +296,13 @@ export function Chart({
     useEffect(() => {
         if (!data) return;
         if (data !== zoomedData.current) {
-            const reset = rangeChanged.current && !stale;
+            const reset = rangeChanged.current && !staleNow.current;
             zoom.current = reset ? null : carryZoom(zoom.current, zoomedData.current, data);
             if (reset) rangeChanged.current = false;
             zoomedData.current = data;
         }
         render.current?.(data);
-    }, [data, stale, dark, reduce]);
+    }, [data, dark, reduce]);
 
     const empty = data !== undefined && !data.points.some(p => p.clicks > 0);
 
