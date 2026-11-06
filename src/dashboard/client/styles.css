@@ -786,7 +786,10 @@ button.tag {
 }
 
 .totals {
-    display: flex;
+    display: grid;
+    /* Fixed columns, wide enough for "9,999" or "no change vs previous period", so a
+       total changing width as it counts doesn't push the one beside it. */
+    grid-template-columns: repeat(2, 11.5rem);
     gap: 3.5rem;
     margin: 0.5rem 0 1.5rem;
 }
@@ -815,6 +818,10 @@ button.tag {
 .total-delta {
     font-size: 0.8rem;
     color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    /* Held while loading or with nothing to compare, so what's below doesn't move. */
+    min-height: 1lh;
 }
 
 .total-delta .up {
@@ -2055,7 +2062,18 @@ input[type='color'] {
     }
 
     .totals {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 2rem;
+    }
+
+    /* Too narrow for one line, so always two: the height stays put as the number changes. */
+    .total-delta {
+        white-space: normal;
+        min-height: 2lh;
+    }
+
+    .total-delta-vs {
+        display: block;
     }
 
     .filter-bar .export {
