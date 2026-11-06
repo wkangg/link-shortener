@@ -252,11 +252,17 @@ export function Analytics({ linkId }: AnalyticsProps) {
             </div>
 
             <div className="totals">
-                <Total label="Clicks" value={s?.clicks} previous={s?.previous?.clicks} />
+                <Total
+                    label="Clicks"
+                    value={s?.clicks}
+                    previous={s?.previous?.clicks}
+                    failed={summary.error !== undefined}
+                />
                 <Total
                     label="Unique visitors"
                     value={s?.visitors}
                     previous={s?.previous?.visitors}
+                    failed={summary.error !== undefined}
                 />
             </div>
             {summary.error && <p className="error">{summary.error.message}</p>}
@@ -293,7 +299,15 @@ export function Analytics({ linkId }: AnalyticsProps) {
     );
 }
 
-function Total({ label, value, previous }: { label: string; value?: number; previous?: number }) {
+interface TotalProps {
+    label: string;
+    value?: number;
+    previous?: number;
+    /** Show a dash rather than a 0 that would look like real data. */
+    failed: boolean;
+}
+
+function Total({ label, value, previous, failed }: TotalProps) {
     const delta =
         value === undefined || previous === undefined ? null : formatDelta(value, previous);
     const trend =
@@ -302,11 +316,14 @@ function Total({ label, value, previous }: { label: string; value?: number; prev
             : value > previous
               ? 'up'
               : 'down';
-    const shown = useCountUp(value);
+    // Counts up from 0 while the first load is in flight.
+    const shown = useCountUp(value ?? 0);
     return (
         <div className="total">
             <span className="total-label">{label}</span>
-            <span className="total-value">{shown === undefined ? '–' : formatCount(shown)}</span>
+            <span className="total-value">
+                {failed && value === undefined ? '–' : formatCount(shown)}
+            </span>
             {delta && (
                 <span className="total-delta">
                     <span className={trend}>{delta}</span> vs previous period

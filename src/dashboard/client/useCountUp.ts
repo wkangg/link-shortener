@@ -21,14 +21,13 @@ export function useReducedMotion(): boolean {
  * Eases a displayed number from its last value to `target` whenever `target` changes,
  * starting from 0 the first time. Jumps straight there with reduced motion on.
  */
-export function useCountUp(target: number | undefined): number | undefined {
+export function useCountUp(target: number): number {
     const reduce = useReducedMotion();
     const [shown, setShown] = useState(0);
     // The value on screen, so a change mid-animation continues from there.
     const current = useRef(0);
 
     useEffect(() => {
-        if (target === undefined) return;
         if (reduce) {
             current.current = target;
             return;
@@ -48,6 +47,5 @@ export function useCountUp(target: number | undefined): number | undefined {
         return () => cancelAnimationFrame(frame);
     }, [target, reduce]);
 
-    if (target === undefined || reduce) return target;
-    return shown;
+    return reduce ? target : shown;
 }

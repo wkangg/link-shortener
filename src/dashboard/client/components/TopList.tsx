@@ -33,7 +33,7 @@ function rowLabel(dim: string, row: TopRow): string {
 
 /** A row's click count, easing to its new value when the filters change. */
 function Count({ value }: { value: number }) {
-    return <span className="top-count">{formatCount(useCountUp(value) ?? value)}</span>;
+    return <span className="top-count">{formatCount(useCountUp(value))}</span>;
 }
 
 export function TopList({
