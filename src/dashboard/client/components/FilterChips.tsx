@@ -53,21 +53,26 @@ export function FilterChips({ search, onChange }: FilterChipsProps) {
         setShown(reduce ? next.filter(c => !c.leaving) : next);
     }
 
+    // At once if reduced motion turns on while a chip is leaving.
     useEffect(() => {
         if (!shown.some(c => c.leaving)) return;
-        const timer = setTimeout(() => setShown(s => s.filter(c => !c.leaving)), LEAVE_MS);
+        const timer = setTimeout(
+            () => setShown(s => s.filter(c => !c.leaving)),
+            reduce ? 0 : LEAVE_MS
+        );
         return () => clearTimeout(timer);
-    }, [shown]);
+    }, [shown, reduce]);
 
-    // So removing a chip with the keyboard moves focus to its neighbour, not the page.
+    // So removing a chip with the keyboard moves focus to the chip that takes its place,
+    // not the page. Found by position in the chips the removal leaves (as the next render
+    // merges them), since with a repeated term the chip that stays may be the one clicked.
     const buttons = useRef(new Map<string, HTMLButtonElement>());
     const remove = (chip: ShownChip, button: HTMLButtonElement) => {
-        const staying = shown.filter(c => !c.leaving);
-        const i = staying.findIndex(c => c.key === chip.key);
-        const neighbour = staying[i + 1] ?? staying[i - 1];
+        const i = shown.filter(c => !c.leaving).findIndex(c => c.key === chip.key);
+        const left = mergeChips(shown, searchChips(chip.rest)).filter(c => !c.leaving);
+        const next = left[i] ?? left[i - 1];
         onChange(chip.rest);
-        if (document.activeElement === button && neighbour)
-            buttons.current.get(neighbour.key)?.focus();
+        if (document.activeElement === button && next) buttons.current.get(next.key)?.focus();
     };
 
     return (

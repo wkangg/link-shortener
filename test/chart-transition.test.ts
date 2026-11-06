@@ -151,6 +151,25 @@ describe('chartTransition with a zoom', () => {
         expect(at(1).x).toEqual([0, 4 * DAY]);
     });
 
+    test('zooming out lifts the y axis for a peak the view reaches before the axis would', () => {
+        const data = days(0, [10, 100, 10, 20, 30]);
+        const zoomed = {
+            ...chartTransition(null, data, [2 * DAY, 4 * DAY]).at(1),
+            interval: data.interval
+        };
+        const { at } = chartTransition(zoomed, data);
+        // Halfway, the view reaches back to day 1 (100 clicks), though the eased top is 71.5.
+        expect(at(0.5).x).toEqual([DAY, 4 * DAY]);
+        expect(at(0.5).top).toBeCloseTo(110);
+        for (const k of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+            const { data: frame, x, top } = at(k);
+            const inView = frame[0].flatMap((t, i) =>
+                t >= x[0] && t <= x[1] ? [frame[1][i] ?? 0, frame[2][i] ?? 0] : []
+            );
+            expect(top).toBeGreaterThanOrEqual(Math.max(...inView));
+        }
+    });
+
     test('new data eases from the zoomed view into the same zoom', () => {
         const zoom: [number, number] = [1 * DAY, 3 * DAY];
         const before = {
@@ -216,6 +235,26 @@ describe('carryZoom', () => {
     test('a zoom from the oldest bucket survives it rolling out of range', () => {
         const zoom: [number, number] = [0, 6 * 3600];
         expect(carryZoom(zoom, hours(0, 24), hours(1, 24))).toEqual([3600, 6 * 3600]);
+    });
+
+    test('a drag that lands a float short of the newest bucket still follows it', () => {
+        const before = days(0, [1, 2, 3, 4, 5]);
+        const after = days(1, [2, 3, 4, 5, 6]);
+        expect(carryZoom([2 * DAY, 4 * DAY - 0.5], before, after)).toEqual([
+            3 * DAY + 0.5,
+            5 * DAY
+        ]);
+    });
+
+    test('resets when the bucket size changes', () => {
+        // The last 6 of 24 hours, then the last 7 days: at most one day point would be in view.
+        expect(
+            carryZoom([18 * 3600, 23 * 3600], hours(0, 24), days(-6, [1, 2, 3, 4, 5, 6, 7]))
+        ).toBeNull();
+        // The last of 7 days, then the last 24 hours.
+        expect(
+            carryZoom([5 * DAY, 6 * DAY], days(0, [1, 2, 3, 4, 5, 6, 7]), hours(144, 24))
+        ).toBeNull();
     });
 
     test('no zoom stays no zoom', () => {

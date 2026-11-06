@@ -583,7 +583,15 @@ button.chip {
     grid-template-columns: minmax(0, 1fr);
 }
 
+/* Long chips (a URL, a quoted value, an OR-ed search) wrap inside the row on a phone,
+   breaking within a word if they must, with the × kept beside the text. */
 .chip-item .chip {
+    overflow-wrap: anywhere;
+    text-align: left;
+}
+
+/* Kept on one line only while it folds away. */
+.chip-leaving .chip {
     white-space: nowrap;
 }
 

@@ -133,7 +133,6 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
         function zoomTo(span: Span | null) {
             if (!shown) return;
             zoom.current = span;
-            zoomedData.current = shown;
             show(shown);
         }
 
