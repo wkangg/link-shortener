@@ -145,7 +145,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                     ))}
                 </fieldset>
                 <div className="field-row">
-                    <label className="field">
+                    <label className="field field-expires">
                         <span>Expires</span>
                         <input
                             type="datetime-local"
@@ -153,7 +153,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                             onChange={e => setExpires(e.target.value)}
                         />
                     </label>
-                    <label className="field">
+                    <label className="field field-redirect">
                         <span>Redirect type</span>
                         <select
                             value={redirectType}

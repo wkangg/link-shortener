@@ -404,6 +404,16 @@ input::placeholder {
     flex-wrap: wrap;
 }
 
+/* A date and time needs less than half the row and the redirect type beside it more;
+   when both don't fit, they wrap onto their own lines. */
+.field-expires {
+    flex: 0 1 16rem;
+}
+
+.field-redirect {
+    flex: 1 1 14rem;
+}
+
 .field-inline.grow {
     flex: 1;
 }
@@ -1641,7 +1651,9 @@ button.badge {
 }
 
 .dialog-wide {
-    width: min(44rem, calc(100vw - 2rem));
+    /* Room for "302 temporary (every click counted)" beside the expiry, and for the
+       five UTM fields in one row, which keeps the editor short enough not to scroll. */
+    width: min(48rem, calc(100vw - 2rem));
 }
 
 .dialog::backdrop {
@@ -1726,7 +1738,7 @@ button.badge {
 
 .utm {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
     gap: 0.75rem;
     border: 1px solid var(--line);
     border-radius: var(--radius-s);
