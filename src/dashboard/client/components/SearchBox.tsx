@@ -84,12 +84,14 @@ export function termAt(text: string, caret: number) {
 }
 
 /**
- * `search` with `term` added (AND-ed), unless it's already there. A search with `||`
- * is bracketed first, so the term applies to all of it.
+ * `search` with `term` added (AND-ed), unless it already stands on its own at the top
+ * level (see `hasTerm`). Elsewhere, such as inside brackets or beside a top-level `||`,
+ * it doesn't filter all of the search, so it's still added. A search with `||` is
+ * bracketed first, so the term applies to all of it.
  */
 export function withTerm(search: string, term: string): string {
     let current = search.trim();
-    if (current.split(/\s+/).includes(term)) return current;
+    if (hasTerm(current, term)) return current;
     if (current === '') return term;
     // Close brackets still open while typing (`-(is:bot`), so the term isn't added inside them.
     let open = 0;

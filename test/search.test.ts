@@ -292,6 +292,20 @@ describe('second review', () => {
         expect(withTerm('os:"a (b"', 'c')).toBe('os:"a (b" c');
     });
 
+    test('a clicked term is skipped only when it already filters all of the search', () => {
+        // However the || is spaced, the term isn't AND-ed with all of it yet.
+        expect(withTerm('is:qr || country:=CA', 'country:=CA')).toBe(
+            '(is:qr || country:=CA) country:=CA'
+        );
+        expect(withTerm('is:qr||country:=CA', 'country:=CA')).toBe(
+            '(is:qr||country:=CA) country:=CA'
+        );
+        expect(withTerm('(a country:=CA b)', 'country:=CA')).toBe('(a country:=CA b) country:=CA');
+        // A quoted value with a space, or different case, is still the same filter.
+        expect(withTerm('city:="New York"', 'city:="New York"')).toBe('city:="New York"');
+        expect(withTerm('Country:=ca', 'country:=CA')).toBe('Country:=ca');
+    });
+
     test('clicking a row again removes its term', () => {
         expect(toggleTerm('', 'country:=CA')).toBe('country:=CA');
         expect(toggleTerm('country:=CA', 'country:=CA')).toBe('');
@@ -309,12 +323,14 @@ describe('second review', () => {
         expect(hasTerm('is:QR', 'is:qr')).toBe(true);
         expect(hasTerm('query.Ref:=x', 'query.ref:=x')).toBe(false);
         // Only top-level AND-ed terms come out: not one inside brackets or quotes, or
-        // beside a top-level || or && (which would be left dangling). `withTerm` then
-        // leaves the search alone, as before, since the term is already in it.
+        // beside a top-level || or && (which would be left dangling). There it doesn't
+        // filter all of the search, so `withTerm` adds it, narrowing the results.
         expect(toggleTerm('is:qr || (a country:=CA b)', 'country:=CA')).toBe(
-            'is:qr || (a country:=CA b)'
+            '(is:qr || (a country:=CA b)) country:=CA'
         );
-        expect(toggleTerm('is:qr || country:=CA', 'country:=CA')).toBe('is:qr || country:=CA');
+        expect(toggleTerm('is:qr || country:=CA', 'country:=CA')).toBe(
+            '(is:qr || country:=CA) country:=CA'
+        );
         expect(hasTerm('is:qr || country:=CA', 'country:=CA')).toBe(false);
         expect(hasTerm('is:bot && country:=CA', 'country:=CA')).toBe(false);
         expect(hasTerm('os:"x country:=CA y"', 'country:=CA')).toBe(false);
