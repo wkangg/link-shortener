@@ -88,7 +88,7 @@ export function App() {
                         ))}
                     </nav>
                 </header>
-                {route(path)}
+                <div className="page-view">{route(path)}</div>
             </ToastProvider>
         </ConfigContext>
     );
