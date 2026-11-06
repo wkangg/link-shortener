@@ -56,6 +56,8 @@ interface ClickHistoryProps {
     /** Stats query params (range, link, filters, bots). */
     params: URLSearchParams;
     refreshKey: string;
+    /** useApi `keep` name while the filters are at their defaults. */
+    keep?: string;
     /** Hide the link column on a single link's page. */
     showLink: boolean;
     toggles: Toggle[];
@@ -298,6 +300,7 @@ function IpCell({
 export function ClickHistory({
     params,
     refreshKey,
+    keep,
     showLink,
     toggles,
     text,
@@ -336,7 +339,8 @@ export function ClickHistory({
     const { data, error, loading } = useApi(
         `clicks|${refreshKey}|${query}`,
         () => api.clicks(query),
-        `clicks|${params.get('link')}`
+        // The page opens on page 1, so only page 1 is kept.
+        keep && requested === 0 ? `${keep}|${size}` : undefined
     );
     const clicks = data?.clicks ?? [];
     const total = data?.total ?? 0;

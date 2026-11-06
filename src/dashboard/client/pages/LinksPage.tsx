@@ -37,10 +37,12 @@ export function LinksPage() {
     if (q.trim()) params.set('q', q.trim());
     if (tag) params.set('tag', tag);
     if (archived) params.set('archived', '1');
+    // Kept only in the state the page opens in, so returning never shows other filters' rows.
+    const atDefaults = !q.trim() && !tag && sort === 'created' && !archived && limit === PAGE;
     const { data, error, loading } = useApi(
         `${version}|${params}`,
         () => api.links(params),
-        'links'
+        atDefaults ? 'links' : undefined
     );
     const tags = useApi(`tags|${version}`, () => api.tags(), 'tags');
 

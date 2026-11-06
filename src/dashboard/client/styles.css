@@ -173,9 +173,7 @@ h3 {
     font-weight: 500;
     font-size: 0.925rem;
     text-decoration: none;
-    transition:
-        color 0.15s,
-        background 0.15s;
+    transition: color 0.15s;
 }
 
 .topbar nav a:hover {
@@ -214,12 +212,10 @@ h3 {
  * dialog, the new one rises in like an opening one, and the nav pill slides to its tab.
  * router.ts skips it with reduced motion, which `*` above can't reach.
  */
-::view-transition-old(root),
-::view-transition-new(root) {
-    animation-duration: 240ms;
-}
-
-/* Pages differ in height; resizing the snapshot between them would stretch it. */
+/*
+ * Drawn where the new page is, not slid from where the old one was, so a change of scroll
+ * position (a new page starts at the top) doesn't move the new page into place.
+ */
 ::view-transition-group(page) {
     animation: none;
 }
@@ -235,6 +231,12 @@ h3 {
 ::view-transition-group(nav-pill) {
     animation-duration: 320ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Tabs differ in width; without this the pill's height would follow its aspect ratio. */
+::view-transition-old(nav-pill),
+::view-transition-new(nav-pill) {
+    height: 100%;
 }
 
 /* The tab labels (App.tsx) stay above the sliding pill and fade to their new color with it. */
@@ -2207,6 +2209,8 @@ input[type='color'] {
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
+    /* Its own layer, so a toast stays above the page while it changes (router.ts). */
+    view-transition-name: toast;
 }
 
 .toast {
