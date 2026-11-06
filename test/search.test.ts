@@ -350,8 +350,8 @@ describe('second review', () => {
         expect(hasTerm('is:QR', 'is:qr')).toBe(true);
         expect(hasTerm('query.Ref:=x', 'query.ref:=x')).toBe(false);
         // Only top-level AND-ed terms come out: not one inside brackets or quotes, or
-        // beside a top-level || or && (which would be left dangling). There it doesn't
-        // filter all of the search, so `withTerm` adds it, narrowing the results.
+        // beside a top-level || or && (which would be left dangling). `withTerm` adds it
+        // instead, which narrows the results when it was one side of an ||.
         expect(toggleTerm('is:qr || (a country:=CA b)', 'country:=CA')).toBe(
             '(is:qr || (a country:=CA b)) country:=CA'
         );
