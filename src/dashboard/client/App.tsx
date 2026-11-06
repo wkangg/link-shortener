@@ -17,11 +17,14 @@ const NAV = [
     { href: '/settings', label: 'Settings' }
 ];
 
+/** A link's own page, "/links/123"; shared by the router and the tab title. */
+const LINK_PAGE = /^\/links\/(\d+)$/;
+
 function route(path: string): ReactNode {
     if (path === '/') return <OverviewPage />;
     if (path === '/links') return <LinksPage />;
     if (path === '/settings') return <SettingsPage />;
-    const match = /^\/links\/(\d+)$/.exec(path);
+    const match = LINK_PAGE.exec(path);
     if (match) return <LinkPage key={match[1]} id={Number(match[1])} />;
     return (
         <main className="page">
@@ -38,7 +41,7 @@ export function App() {
     // "Links · s.example". A link's own page swaps in its slug once it loads (LinkPage).
     useEffect(() => {
         if (!shortOrigin) return;
-        const page = /^\/links\/\d+$/.test(path)
+        const page = LINK_PAGE.test(path)
             ? 'Link'
             : (NAV.find(item => item.href === path)?.label ?? 'Not found');
         document.title = pageTitle(page, shortOrigin);

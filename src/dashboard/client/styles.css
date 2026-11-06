@@ -913,8 +913,7 @@ button.tag {
     box-shadow: var(--shadow);
 }
 
-/* Title, then the tabs on their own row (see .tabs). The min-height reserves that row
-   (title line + row gap + tabs) in panels without tabs too, so lists line up across a row. */
+/* Title, then the tabs on their own row (see .tabs). */
 .panel-header {
     display: flex;
     flex-wrap: wrap;
@@ -922,8 +921,13 @@ button.tag {
     align-items: baseline;
     align-content: flex-start;
     gap: 0.4rem 1rem;
-    min-height: calc(1.1rem * 1.15 + 0.4rem + 1.5rem);
     margin-bottom: 0.6rem;
+}
+
+/* In the grid, reserve the tab row (title line + row gap + tabs) in panels without tabs
+   too, so lists line up across a row. Not the click history, which stands alone. */
+.panels .panel-header {
+    min-height: calc(1.1rem * 1.15 + 0.4rem + 1.5rem);
 }
 
 .panel-header h3 {

@@ -18,10 +18,12 @@ export function LinkPage({ id }: { id: number }) {
     const { data: link, error } = useApi(`${id}|${version}`, () => api.link(id));
     const slug = link?.slug;
 
-    // Replaces App's "Link · …" placeholder once the slug is known: "nl-oct · s.example".
+    // Replaces App's "Link · …" placeholder once the slug is known ("nl-oct · s.example"),
+    // or with "Not found" when the link doesn't exist, like unknown paths.
     useEffect(() => {
         if (slug !== undefined) document.title = pageTitle(slug, shortOrigin);
-    }, [slug, shortOrigin]);
+        else if (error) document.title = pageTitle('Not found', shortOrigin);
+    }, [slug, error, shortOrigin]);
 
     if (error) {
         return (
