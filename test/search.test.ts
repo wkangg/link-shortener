@@ -301,6 +301,9 @@ describe('second review', () => {
         expect(toggleTerm('-country:=CA', 'country:=CA')).toBe('-country:=CA country:=CA');
         expect(toggleTerm('country:=CAN', 'country:=CA')).toBe('country:=CAN country:=CA');
         expect(hasTerm('is:qr country:=CA', 'country:=CA')).toBe(true);
+        // Spelled differently but read the same: field case, optional quotes.
+        expect(toggleTerm('Country:=CA is:qr', 'country:=CA')).toBe('is:qr');
+        expect(hasTerm('os:="iOS"', 'os:=iOS')).toBe(true);
         // Only top-level AND-ed terms come out: not one inside brackets or quotes, or
         // beside a top-level || or && (which would be left dangling). `withTerm` then
         // leaves the search alone, as before, since the term is already in it.

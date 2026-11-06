@@ -130,15 +130,24 @@ function topLevelTerms(search: string): string[] | null {
     return terms;
 }
 
+/** How the search reads a term, so `Country:=CA` and `os:="iOS"` match `country:=CA` and `os:=iOS`. */
+function parsedTerm(text: string): string {
+    return JSON.stringify(tokenize(text));
+}
+
 /** Whether `term` stands on its own at the top level of `search`, so `toggleTerm` would remove it. */
 export function hasTerm(search: string, term: string): boolean {
-    return topLevelTerms(search.trim())?.includes(term) ?? false;
+    const parsed = parsedTerm(term);
+    return topLevelTerms(search.trim())?.some(t => parsedTerm(t) === parsed) ?? false;
 }
 
 /** `search` without `term` where it stands on its own at the top level, or with it added (as `withTerm`). */
 export function toggleTerm(search: string, term: string): string {
+    const parsed = parsedTerm(term);
     const terms = topLevelTerms(search.trim());
-    return terms?.includes(term) ? terms.filter(t => t !== term).join(' ') : withTerm(search, term);
+    return terms?.some(t => parsedTerm(t) === parsed)
+        ? terms.filter(t => parsedTerm(t) !== parsed).join(' ')
+        : withTerm(search, term);
 }
 
 /** `field:=value`, quoted (and escaped) when a bare value couldn't hold it. */
