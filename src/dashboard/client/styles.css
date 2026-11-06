@@ -147,25 +147,12 @@ h3 {
 }
 
 .wordmark {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
     font-family: var(--display);
     font-size: 1.35rem;
     font-weight: 800;
     color: var(--ink);
     text-decoration: none;
     letter-spacing: -0.03em;
-}
-
-/* Small accent mark before the host name. */
-.wordmark::before {
-    content: '';
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 4px;
-    background: linear-gradient(135deg, var(--accent), #e8336d);
-    rotate: 8deg;
 }
 
 .topbar nav {
