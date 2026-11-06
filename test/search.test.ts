@@ -304,6 +304,10 @@ describe('second review', () => {
         // Spelled differently but read the same: field case, optional quotes.
         expect(toggleTerm('Country:=CA is:qr', 'country:=CA')).toBe('is:qr');
         expect(hasTerm('os:="iOS"', 'os:=iOS')).toBe(true);
+        // Values ignore case, as the server's comparisons do; query parameter keys don't.
+        expect(toggleTerm('country:=ca is:QR', 'country:=CA')).toBe('is:QR');
+        expect(hasTerm('is:QR', 'is:qr')).toBe(true);
+        expect(hasTerm('query.Ref:=x', 'query.ref:=x')).toBe(false);
         // Only top-level AND-ed terms come out: not one inside brackets or quotes, or
         // beside a top-level || or && (which would be left dangling). `withTerm` then
         // leaves the search alone, as before, since the term is already in it.

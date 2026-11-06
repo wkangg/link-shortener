@@ -130,9 +130,19 @@ function topLevelTerms(search: string): string[] | null {
     return terms;
 }
 
-/** How the search reads a term, so `Country:=CA` and `os:="iOS"` match `country:=CA` and `os:=iOS`. */
+/**
+ * How the search reads a term, so `Country:=ca` and `os:="iOS"` match `country:=CA` and
+ * `os:=iOS`. Values ignore case like the server's NOCASE and LIKE, which fold only A–Z;
+ * query parameter keys keep theirs (they're in `field`).
+ */
 function parsedTerm(text: string): string {
-    return JSON.stringify(tokenize(text));
+    return JSON.stringify(
+        tokenize(text).map(token =>
+            'value' in token
+                ? { ...token, value: token.value.replaceAll(/[A-Z]/g, c => c.toLowerCase()) }
+                : token
+        )
+    );
 }
 
 /** Whether `term` stands on its own at the top level of `search`, so `toggleTerm` would remove it. */
