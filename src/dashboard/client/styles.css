@@ -577,6 +577,46 @@ button.chip {
     color: var(--ink);
 }
 
+/* A filter chip in a grid of one column, so its width can collapse as it leaves. */
+.chip-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.chip-item .chip {
+    white-space: nowrap;
+}
+
+/* Filter chips pop in, and fade as they fold away so the chips after them slide over. */
+@media (prefers-reduced-motion: no-preference) {
+    .chip-item {
+        animation: chip-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* LEAVE_MS in FilterChips.tsx matches this duration. */
+    .chip-item.chip-leaving {
+        overflow: hidden;
+        animation: chip-out 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+}
+
+@keyframes chip-in {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+}
+
+@keyframes chip-out {
+    to {
+        opacity: 0;
+        transform: scale(0.9);
+        grid-template-columns: minmax(0, 0fr);
+        /* Takes back the gap after it (.chips), so nothing is left behind. */
+        margin-right: -0.4rem;
+    }
+}
+
 .link-list {
     list-style: none;
     margin: 0;
@@ -831,6 +871,17 @@ button.tag {
 
 .filter-bar .export {
     margin-left: auto;
+}
+
+/* The filter chips get a row of their own, so adding or removing one never moves them
+   between rows. */
+.filter-bar .chips {
+    order: 1;
+    flex-basis: 100%;
+}
+
+.filter-bar .chips:empty {
+    display: none;
 }
 
 .totals {

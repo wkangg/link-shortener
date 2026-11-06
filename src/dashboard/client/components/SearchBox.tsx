@@ -163,6 +163,39 @@ export function toggleTerm(search: string, term: string): string {
         : withTerm(search, term);
 }
 
+/** One filter in a search, shown as a chip that takes it back off. */
+export interface SearchChip {
+    /** Stable while the chip stays: the term, numbered when it appears more than once. */
+    key: string;
+    /** What the chip shows. */
+    label: string;
+    /** The search without this filter. */
+    rest: string;
+}
+
+/**
+ * The filters in `search`, one chip each: the terms AND-ed at its top level, as
+ * `hasTerm` and `toggleTerm` see them, with a bracketed group as one chip. A search
+ * joined by `||` or `&&` at the top level can't lose one side without changing what the
+ * other means, so it's a single chip that clears it.
+ */
+export function searchChips(search: string): SearchChip[] {
+    const whole = search.trim();
+    if (whole === '') return [];
+    const terms = topLevelTerms(whole);
+    if (!terms) return [{ key: whole, label: whole, rest: '' }];
+    const seen = new Map<string, number>();
+    return terms.map((term, i) => {
+        const n = (seen.get(term) ?? 0) + 1;
+        seen.set(term, n);
+        return {
+            key: n === 1 ? term : `${term}#${n}`,
+            label: term,
+            rest: terms.filter((_, j) => j !== i).join(' ')
+        };
+    });
+}
+
 /** `field:=value`, quoted (and escaped) when a bare value couldn't hold it. */
 export function exactTerm(field: string, value: string): string {
     return `${field}:=${quoteValue(value)}`;
