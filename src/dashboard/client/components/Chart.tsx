@@ -68,12 +68,15 @@ const tooltipDay = new Intl.DateTimeFormat(undefined, {
 export function Chart({
     data,
     error,
-    range
+    range,
+    stale = false
 }: {
     data: TimeseriesResponse | undefined;
     error?: Error;
-    /** The selected date range. Changing it drops the zoom when the next data arrives. */
+    /** The selected date range. Changing it drops the zoom once its data arrives. */
     range: string;
+    /** Whether `data` is from an earlier request while the current one loads (`useApi`'s `loading`). */
+    stale?: boolean;
 }) {
     const host = useRef<HTMLDivElement>(null);
     const tooltip = useRef<HTMLDivElement>(null);
@@ -84,10 +87,11 @@ export function Chart({
     // The span dragged into (null for the whole range), and the data it was fitted to.
     const zoom = useRef<Span | null>(null);
     const zoomedData = useRef<TimeseriesResponse | null>(null);
-    // Set when the date range changes and spent on the next new data, which is the new
-    // range's because useApi drops responses for an old key. The old data stays on screen
-    // while the new range loads, so dropping the zoom straight away would zoom out on the
-    // old data first. A rebuild (same data) doesn't spend it.
+    // Set when the date range changes and spent on the first new data that isn't `stale`,
+    // which is the new range's. The old data stays on screen while the new range loads, so
+    // dropping the zoom straight away would zoom out on the old data first; and a response
+    // for the old range that lands just after the change is stale, so it doesn't spend it
+    // either. Nor does a rebuild, which re-renders the same data.
     const rangeChanged = useRef(false);
     const lastRange = useRef(range);
     useEffect(() => {
@@ -285,14 +289,13 @@ export function Chart({
     useEffect(() => {
         if (!data) return;
         if (data !== zoomedData.current) {
-            zoom.current = rangeChanged.current
-                ? null
-                : carryZoom(zoom.current, zoomedData.current, data);
-            rangeChanged.current = false;
+            const reset = rangeChanged.current && !stale;
+            zoom.current = reset ? null : carryZoom(zoom.current, zoomedData.current, data);
+            if (reset) rangeChanged.current = false;
             zoomedData.current = data;
         }
         render.current?.(data);
-    }, [data, dark, reduce]);
+    }, [data, stale, dark, reduce]);
 
     const empty = data !== undefined && !data.points.some(p => p.clicks > 0);
 
