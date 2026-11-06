@@ -62,12 +62,12 @@ export function clampZoom(zoom: Span | null, data: TimeseriesResponse): Span | n
 }
 
 /**
- * The zoom to keep when `before` is replaced by `data` (a refresh or a filter change). A
- * zoom that reached the newest bucket follows the newest bucket, keeping its width, so
- * new buckets slide into view. Otherwise it stays put while `data` still covers it (see
- * `clampZoom`), and resets to the whole range when it doesn't. It also resets when the
- * bucket size changes: a zoom into the hourly chart (under two days) holds at most one
- * day point, which draws as no line at all.
+ * The zoom to keep when `before` is replaced by `data` for the same date range (a refresh
+ * or a filter change). A zoom that reached the newest bucket follows the newest bucket,
+ * keeping its width, so new buckets slide into view. Otherwise it stays put while `data`
+ * still covers it (see `clampZoom`), and resets to the whole range when it doesn't. It
+ * also resets if the bucket size changed (a zoom into hours holds at most one day point).
+ * Today the bucket size only changes with the date range, which resets the zoom first.
  */
 export function carryZoom(
     zoom: Span | null,

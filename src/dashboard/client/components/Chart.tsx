@@ -61,10 +61,20 @@ const tooltipDay = new Intl.DateTimeFormat(undefined, {
  * when the request fails.
  *
  * Dragging across the plot zooms into that span and double-clicking zooms back out,
- * both easing like a change of data. The zoom outlasts refreshes and filter changes
- * while the new data still covers it (see `carryZoom`).
+ * both easing like a change of data. The zoom outlasts refreshes and other filter
+ * changes while the new data still covers it (see `carryZoom`), but not a change of
+ * date range, which shows the whole new range.
  */
-export function Chart({ data, error }: { data: TimeseriesResponse | undefined; error?: Error }) {
+export function Chart({
+    data,
+    error,
+    range
+}: {
+    data: TimeseriesResponse | undefined;
+    error?: Error;
+    /** The selected date range. Changing it drops the zoom when the next data arrives. */
+    range: string;
+}) {
     const host = useRef<HTMLDivElement>(null);
     const tooltip = useRef<HTMLDivElement>(null);
     const dark = useDarkScheme();
@@ -74,6 +84,17 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
     // The span dragged into (null for the whole range), and the data it was fitted to.
     const zoom = useRef<Span | null>(null);
     const zoomedData = useRef<TimeseriesResponse | null>(null);
+    // Set when the date range changes and spent on the next new data, which is the new
+    // range's because useApi drops responses for an old key. The old data stays on screen
+    // while the new range loads, so dropping the zoom straight away would zoom out on the
+    // old data first. A rebuild (same data) doesn't spend it.
+    const rangeChanged = useRef(false);
+    const lastRange = useRef(range);
+    useEffect(() => {
+        if (range === lastRange.current) return;
+        lastRange.current = range;
+        rangeChanged.current = true;
+    }, [range]);
     // Eases the plot below to new data, in the current zoom.
     const render = useRef<((data: TimeseriesResponse) => void) | null>(null);
     const hasData = data !== undefined;
@@ -263,8 +284,13 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
     // came mid-transition.
     useEffect(() => {
         if (!data) return;
-        zoom.current = carryZoom(zoom.current, zoomedData.current, data);
-        zoomedData.current = data;
+        if (data !== zoomedData.current) {
+            zoom.current = rangeChanged.current
+                ? null
+                : carryZoom(zoom.current, zoomedData.current, data);
+            rangeChanged.current = false;
+            zoomedData.current = data;
+        }
         render.current?.(data);
     }, [data, dark, reduce]);
 
