@@ -85,9 +85,10 @@ export function termAt(text: string, caret: number) {
 
 /**
  * `search` with `term` added (AND-ed), unless it already stands on its own at the top
- * level (see `hasTerm`). Elsewhere, such as inside brackets or beside a top-level `||`,
- * it doesn't filter all of the search, so it's still added. A search with `||` is
- * bracketed first, so the term applies to all of it.
+ * level (see `hasTerm`). Anywhere else, such as inside brackets or beside a top-level
+ * `||`, it's added again, which narrows the search when it was one side of an `||`.
+ * A search with a top-level `||` or `&&` is bracketed first, so the term applies to
+ * all of it and `hasTerm` finds it afterwards.
  */
 export function withTerm(search: string, term: string): string {
     let current = search.trim();
@@ -100,7 +101,7 @@ export function withTerm(search: string, term: string): string {
             open = Math.max(0, open + (token.op === ')' ? -1 : 1));
     }
     current += ')'.repeat(open);
-    return `${current.includes('||') ? `(${current})` : current} ${term}`;
+    return `${topLevelTerms(current) === null ? `(${current})` : current} ${term}`;
 }
 
 /**
