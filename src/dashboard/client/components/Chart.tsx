@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import uPlot from 'uplot';
 
 import type { TimeseriesResponse } from '../../../shared/types.ts';
@@ -10,6 +10,18 @@ const SERIES = [
 
 function cssVar(el: Element, name: string): string {
     return getComputedStyle(el).getPropertyValue(name).trim();
+}
+
+// The canvas reads its colors from CSS once, so it's rebuilt when the color scheme flips.
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+
+function subscribeToScheme(onChange: () => void): () => void {
+    darkQuery.addEventListener('change', onChange);
+    return () => darkQuery.removeEventListener('change', onChange);
+}
+
+function useDarkScheme(): boolean {
+    return useSyncExternalStore(subscribeToScheme, () => darkQuery.matches);
 }
 
 const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
@@ -29,6 +41,7 @@ const tooltipDay = new Intl.DateTimeFormat(undefined, {
 export function Chart({ data }: { data: TimeseriesResponse }) {
     const host = useRef<HTMLDivElement>(null);
     const tooltip = useRef<HTMLDivElement>(null);
+    const dark = useDarkScheme();
 
     useEffect(() => {
         const el = host.current;
@@ -122,16 +135,19 @@ export function Chart({ data }: { data: TimeseriesResponse }) {
         // Canvas text neither loads web fonts nor repaints when one arrives, so the axis
         // labels keep the fallback font if the chart draws first. Redraw once it's loaded.
         let alive = true;
-        void document.fonts.load(font).then(() => {
-            if (alive) plot.redraw(false, true);
-        });
+        void document.fonts.load(font).then(
+            () => {
+                if (alive) plot.redraw(false, true);
+            },
+            () => {} // Font failed to load: the fallback already drawn is fine.
+        );
 
         return () => {
             alive = false;
             observer.disconnect();
             plot.destroy();
         };
-    }, [data]);
+    }, [data, dark]);
 
     const empty = !data.points.some(p => p.clicks > 0);
 

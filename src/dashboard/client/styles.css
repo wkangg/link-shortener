@@ -19,6 +19,8 @@
     --accent-soft: #ffeee6;
     --bar: #ffe3d6;
     --danger: #c43c3b;
+    /* Filled red buttons, both themes: white on dark mode's lighter --danger is only 3.2:1. */
+    --danger-fill: #c43c3b;
     --success: #1f8a4c;
     --warn: #a35f00;
     --series-1: #f05a1f;
@@ -76,7 +78,7 @@ body {
 /* Like the portfolio: links keep the text color and turn orange on hover. */
 a {
     color: inherit;
-    text-decoration-color: var(--line);
+    text-decoration-color: var(--muted);
     text-underline-offset: 3px;
     transition:
         color 0.15s,
@@ -307,7 +309,7 @@ input::placeholder {
         filter 0.15s;
 }
 
-.button:not(:disabled):hover {
+.button:where(:not(:disabled)):hover {
     border-color: var(--ink);
     transform: translateY(-1px);
 }
@@ -324,8 +326,8 @@ input::placeholder {
 }
 
 .button.danger {
-    background: var(--danger);
-    border-color: var(--danger);
+    background: var(--danger-fill);
+    border-color: var(--danger-fill);
     color: #fff;
 }
 
@@ -452,7 +454,7 @@ a.slug:hover {
 }
 
 .slug-large {
-    font-size: clamp(2.25rem, 6vw, 3.5rem);
+    font-size: clamp(1.75rem, 6vw, 3.5rem);
     font-weight: 800;
     line-height: 1.05;
     margin: 0 0 0.5rem;
@@ -550,6 +552,7 @@ a.slug:hover {
     margin-bottom: 1rem;
 }
 
+/* The one chip rule; the read-only chips in click details shrink it (.click-details-chips). */
 .chip {
     display: inline-flex;
     gap: 0.4rem;
@@ -559,13 +562,17 @@ a.slug:hover {
     border-radius: 999px;
     background: var(--surface);
     font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+button.chip {
     cursor: pointer;
 }
 
 .chip[aria-pressed='true'],
 .filter-bar .chip {
     background: var(--accent-soft);
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     color: var(--ink);
 }
 
@@ -906,7 +913,7 @@ button.tag {
     box-shadow: var(--shadow);
 }
 
-/* Wraps the tabs under the title when they don't fit beside it. */
+/* Title, then the tabs on their own row (see .tabs). */
 .panel-header {
     display: flex;
     flex-wrap: wrap;
@@ -922,17 +929,19 @@ button.tag {
     margin: 0;
 }
 
+/* Always on their own row, so every panel's list starts at the same height. */
 .tabs {
     display: flex;
+    flex-basis: 100%;
     flex-wrap: wrap;
-    gap: 0.15rem;
+    gap: 0.1rem;
 }
 
 .tab {
     border: 0;
     border-radius: 999px;
     background: none;
-    padding: 0.15rem 0.6rem;
+    padding: 0.15rem 0.5rem;
     font-size: 0.8rem;
     font-weight: 500;
     color: var(--muted);
@@ -1404,13 +1413,9 @@ button.tag {
     margin: 0.5rem 0 0.3rem;
 }
 
-.chip {
+.click-details-chips .chip {
     padding: 0.05rem 0.45rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--surface);
     font-size: 0.75rem;
-    color: var(--text-secondary);
 }
 
 /* Pager under the click history; wraps under the range on narrow screens. */

@@ -19,6 +19,7 @@ export function loadFonts(): void {
             display: 'swap'
         });
         document.fonts.add(face);
-        void face.load();
+        // A failed load just leaves the fallback font in place.
+        void face.load().catch(() => {});
     }
 }
