@@ -1,4 +1,19 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import {
+    createContext,
+    type ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState
+} from 'react';
+
+import { useReducedMotion } from '../motion.ts';
+
+/** How long closing takes; matches `.dialog-closing` in styles.css. */
+const CLOSE_MS = 160;
+
+const DialogCloseContext = createContext<() => void>(() => {});
 
 interface DialogProps {
     title: string;
@@ -7,9 +22,14 @@ interface DialogProps {
     wide?: boolean;
 }
 
-/** A native modal <dialog>: focus trapping, Esc and the backdrop come for free. */
+/**
+ * A native modal <dialog>: focus trapping, Esc and the backdrop come for free. It
+ * animates in, and out when closed with ×, Esc, the backdrop or a `DialogClose` button.
+ */
 export function Dialog({ title, onClose, children, wide = false }: DialogProps) {
     const ref = useRef<HTMLDialogElement>(null);
+    const reduce = useReducedMotion();
+    const [closing, setClosing] = useState(false);
 
     useEffect(() => {
         const dialog = ref.current;
@@ -17,30 +37,60 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
         return () => dialog?.close();
     }, []);
 
+    // Plays the closing animation, then lets the parent unmount the dialog.
+    const close = useCallback(() => {
+        if (reduce) {
+            onClose();
+            return;
+        }
+        if (closing) return;
+        setClosing(true);
+        setTimeout(onClose, CLOSE_MS);
+    }, [closing, onClose, reduce]);
+
+    const classes = ['dialog', wide && 'dialog-wide', closing && 'dialog-closing'];
     return (
         <dialog
             ref={ref}
-            className={wide ? 'dialog dialog-wide' : 'dialog'}
+            className={classes.filter(Boolean).join(' ')}
             aria-label={title}
+            // Esc: animate out instead of the browser closing it at once.
+            onCancel={event => {
+                event.preventDefault();
+                close();
+            }}
+            // Anything else that closes it natively.
             onClose={onClose}
             onClick={event => {
-                if (event.target === ref.current) onClose();
+                if (event.target === ref.current) close();
             }}
         >
-            <div className="dialog-body">
-                <header className="dialog-header">
-                    <h2>{title}</h2>
-                    <button
-                        type="button"
-                        className="icon-button"
-                        aria-label="Close"
-                        onClick={onClose}
-                    >
-                        ×
-                    </button>
-                </header>
-                {children}
-            </div>
+            <DialogCloseContext value={close}>
+                <div className="dialog-body">
+                    <header className="dialog-header">
+                        <h2>{title}</h2>
+                        <button
+                            type="button"
+                            className="icon-button"
+                            aria-label="Close"
+                            onClick={close}
+                        >
+                            ×
+                        </button>
+                    </header>
+                    {children}
+                </div>
+            </DialogCloseContext>
         </dialog>
+    );
+}
+
+/** A button that closes the dialog it's in, animating it out like ×. */
+export function DialogClose({ className, children }: { className: string; children: ReactNode }) {
+    const close = useContext(DialogCloseContext);
+    return (
+        <button type="button" className={className} onClick={close}>
+            {children}
+        </button>
     );
 }

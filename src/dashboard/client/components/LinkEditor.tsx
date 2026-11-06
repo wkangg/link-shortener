@@ -3,7 +3,7 @@ import { type FormEvent, useState } from 'react';
 import type { Link, RedirectType } from '../../../shared/types.ts';
 import { api, ApiRequestError } from '../api.ts';
 import { hostOf } from '../format.ts';
-import { Dialog } from './Dialog.tsx';
+import { Dialog, DialogClose } from './Dialog.tsx';
 
 const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
 
@@ -213,9 +213,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                         </button>
                     )}
                     <span className="button-row">
-                        <button type="button" className="button" onClick={onClose}>
-                            Cancel
-                        </button>
+                        <DialogClose className="button">Cancel</DialogClose>
                         <button type="submit" className="button primary" disabled={saving}>
                             {saving ? 'Saving…' : 'Save changes'}
                         </button>

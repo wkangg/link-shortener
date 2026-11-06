@@ -8,7 +8,7 @@ import {
     type WebhookSkipCategory
 } from '../../../shared/types.ts';
 import { api, ApiRequestError } from '../api.ts';
-import { Dialog } from './Dialog.tsx';
+import { Dialog, DialogClose } from './Dialog.tsx';
 import { LinkPicker, type PickedLink } from './LinkPicker.tsx';
 import { useToast } from './Toast.tsx';
 
@@ -221,9 +221,7 @@ export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEd
                 <div className="button-row spread">
                     <span />
                     <span className="button-row">
-                        <button type="button" className="button" onClick={onClose}>
-                            Cancel
-                        </button>
+                        <DialogClose className="button">Cancel</DialogClose>
                         <button type="submit" className="button primary" disabled={saving}>
                             {saving ? 'Saving…' : endpoint ? 'Save changes' : 'Add webhook'}
                         </button>
@@ -256,9 +254,7 @@ export function SecretDialog({ secret, onClose }: { secret: string; onClose: () 
                 <button type="button" className="button" onClick={() => void copy()}>
                     Copy secret
                 </button>
-                <button type="button" className="button primary" onClick={onClose}>
-                    Done
-                </button>
+                <DialogClose className="button primary">Done</DialogClose>
             </div>
         </Dialog>
     );
