@@ -58,6 +58,10 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const dialog = useRef<DialogHandle>(null);
+    // The slug the editor opened with. After a save that renames it, the parent's refresh
+    // can land while the editor is still fading out, and the heading shouldn't change then.
+    // eslint-disable-next-line react/hook-use-state -- a snapshot; it never changes
+    const [openedSlug] = useState(link.slug);
 
     const save = async (event: FormEvent) => {
         event.preventDefault();
@@ -101,7 +105,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     return (
         <Dialog
             ref={dialog}
-            title={`Edit ${hostOf(shortOrigin)}/${link.slug}`}
+            title={`Edit ${hostOf(shortOrigin)}/${openedSlug}`}
             onClose={onClose}
             wide
         >
