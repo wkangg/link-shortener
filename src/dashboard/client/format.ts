@@ -49,6 +49,9 @@ export function formatRelative(ms: number, now = Date.now()): string {
 /** "s.example" from "https://s.example". */
 export const hostOf = (origin: string) => origin.replace(/^https?:\/\//, '');
 
+/** A tab title that says which page it is, not just the short domain: "Links · s.example". */
+export const pageTitle = (page: string, shortOrigin: string) => `${page} · ${hostOf(shortOrigin)}`;
+
 const regionNames =
     typeof Intl.DisplayNames === 'function'
         ? new Intl.DisplayNames(undefined, { type: 'region' })

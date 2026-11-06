@@ -46,42 +46,55 @@ export function LinkWebhooks({ link, onClose }: { link: Link; onClose: () => voi
         );
     }
 
+    const list = endpoints.data;
+
     return (
         <Dialog title={`Webhooks for /${link.slug}`} onClose={onClose}>
-            <p className="muted">Send this link’s clicks to:</p>
             {endpoints.error && <p className="error">{endpoints.error.message}</p>}
-            {endpoints.data?.length === 0 && <p className="empty">No webhooks yet.</p>}
-            {endpoints.data && endpoints.data.length > 0 && (
-                <ul className="link-webhooks">
-                    {endpoints.data.map(endpoint => {
-                        const { on, fixed } = coverage(endpoint, link);
-                        return (
-                            <li key={endpoint.id}>
-                                <label className="checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={on}
-                                        disabled={fixed !== null}
-                                        onChange={e => void toggle(endpoint, e.target.checked)}
-                                    />
-                                    <span>
-                                        {endpoint.description ?? endpoint.url}
-                                        <span className="badge">{KIND_LABELS[endpoint.kind]}</span>
-                                        {!endpoint.enabled && <span className="badge">Off</span>}
-                                        {fixed && <small>{fixed}: change it in Settings</small>}
-                                    </span>
-                                </label>
-                            </li>
-                        );
-                    })}
-                </ul>
+            {list?.length === 0 && (
+                <p className="link-webhooks-intro">
+                    A webhook sends this link’s clicks somewhere else, such as a Discord channel or
+                    your own server. You haven’t set one up yet.
+                </p>
+            )}
+            {list && list.length > 0 && (
+                <>
+                    <p className="link-webhooks-intro muted">Send this link’s clicks to:</p>
+                    <ul className="link-webhooks">
+                        {list.map(endpoint => {
+                            const { on, fixed } = coverage(endpoint, link);
+                            return (
+                                <li key={endpoint.id}>
+                                    <label className="checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={on}
+                                            disabled={fixed !== null}
+                                            onChange={e => void toggle(endpoint, e.target.checked)}
+                                        />
+                                        <span>
+                                            {endpoint.description ?? endpoint.url}
+                                            <span className="badge">
+                                                {KIND_LABELS[endpoint.kind]}
+                                            </span>
+                                            {!endpoint.enabled && (
+                                                <span className="badge">Off</span>
+                                            )}
+                                            {fixed && <small>{fixed}: change it in Settings</small>}
+                                        </span>
+                                    </label>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </>
             )}
             <div className="button-row spread">
                 <a href="/settings" onClick={linkClick}>
-                    Manage webhooks
+                    All webhooks in Settings
                 </a>
                 <button type="button" className="button primary" onClick={() => setAdding(true)}>
-                    Add a webhook for this link
+                    Add webhook
                 </button>
             </div>
         </Dialog>

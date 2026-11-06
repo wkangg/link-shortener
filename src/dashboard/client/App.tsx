@@ -3,7 +3,7 @@ import { type ReactNode, useEffect } from 'react';
 import { api } from './api.ts';
 import { ToastProvider } from './components/Toast.tsx';
 import { ConfigContext } from './config.tsx';
-import { hostOf } from './format.ts';
+import { hostOf, pageTitle } from './format.ts';
 import { LinkPage } from './pages/LinkPage.tsx';
 import { LinksPage } from './pages/LinksPage.tsx';
 import { OverviewPage } from './pages/OverviewPage.tsx';
@@ -17,11 +17,14 @@ const NAV = [
     { href: '/settings', label: 'Settings' }
 ];
 
+/** A link's own page, "/links/123"; shared by the router and the tab title. */
+const LINK_PAGE = /^\/links\/(\d+)$/;
+
 function route(path: string): ReactNode {
     if (path === '/') return <OverviewPage />;
     if (path === '/links') return <LinksPage />;
     if (path === '/settings') return <SettingsPage />;
-    const match = /^\/links\/(\d+)$/.exec(path);
+    const match = LINK_PAGE.exec(path);
     if (match) return <LinkPage key={match[1]} id={Number(match[1])} />;
     return (
         <main className="page">
@@ -35,9 +38,14 @@ export function App() {
     const config = useApi('config', () => api.config());
     const shortOrigin = config.data?.shortOrigin;
 
+    // "Links · s.example". A link's own page swaps in its slug once it loads (LinkPage).
     useEffect(() => {
-        if (shortOrigin) document.title = hostOf(shortOrigin);
-    }, [shortOrigin]);
+        if (!shortOrigin) return;
+        const page = LINK_PAGE.test(path)
+            ? 'Link'
+            : (NAV.find(item => item.href === path)?.label ?? 'Not found');
+        document.title = pageTitle(page, shortOrigin);
+    }, [path, shortOrigin]);
 
     if (config.error) {
         return (
