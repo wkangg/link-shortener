@@ -966,6 +966,15 @@ button.tag {
     min-height: 240px;
 }
 
+/* The span being dragged to zoom into. uPlot's default is a faint black that vanishes
+   on the dark background, so it's tinted with the accent, edges and all, in both themes. */
+.chart .u-select {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    box-shadow:
+        inset 1px 0 var(--accent),
+        inset -1px 0 var(--accent);
+}
+
 .chart-tooltip {
     position: absolute;
     top: 0;
