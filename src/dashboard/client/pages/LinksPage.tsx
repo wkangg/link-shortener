@@ -37,8 +37,12 @@ export function LinksPage() {
     if (q.trim()) params.set('q', q.trim());
     if (tag) params.set('tag', tag);
     if (archived) params.set('archived', '1');
-    const { data, error, loading } = useApi(`${version}|${params}`, () => api.links(params));
-    const tags = useApi(`tags|${version}`, () => api.tags());
+    const { data, error, loading } = useApi(
+        `${version}|${params}`,
+        () => api.links(params),
+        'links'
+    );
+    const tags = useApi(`tags|${version}`, () => api.tags(), 'tags');
 
     return (
         <main className="page">

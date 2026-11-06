@@ -53,7 +53,11 @@ export function TopList({
     const query = new URLSearchParams(params);
     query.set('dim', dim);
     query.set('limit', '10');
-    const { data, error } = useApi(`${refreshKey}|${query}`, () => api.top(query));
+    const { data, error } = useApi(
+        `${refreshKey}|${query}`,
+        () => api.top(query),
+        `top|${params.get('link')}|${dim}`
+    );
     const rows = data?.rows ?? [];
     const max = Math.max(1, ...rows.map(r => r.clicks));
 

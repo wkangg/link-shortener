@@ -333,8 +333,10 @@ export function ClickHistory({
     const query = new URLSearchParams(params);
     query.set('limit', String(size));
     query.set('offset', String(requested * size));
-    const { data, error, loading } = useApi(`clicks|${refreshKey}|${query}`, () =>
-        api.clicks(query)
+    const { data, error, loading } = useApi(
+        `clicks|${refreshKey}|${query}`,
+        () => api.clicks(query),
+        `clicks|${params.get('link')}`
     );
     const clicks = data?.clicks ?? [];
     const total = data?.total ?? 0;

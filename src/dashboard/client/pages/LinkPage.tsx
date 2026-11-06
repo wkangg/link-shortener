@@ -18,7 +18,7 @@ export function LinkPage({ id }: { id: number }) {
     // The archived state the last toggle started from, so only the label that replaces it
     // animates in: not the old one while the refresh is in flight, and not on load.
     const [toggledFrom, setToggledFrom] = useState<boolean | null>(null);
-    const { data: link, error } = useApi(`${id}|${version}`, () => api.link(id));
+    const { data: link, error } = useApi(`${id}|${version}`, () => api.link(id), `link|${id}`);
     const slug = link?.slug;
     // Only a 404 means the link is gone; a network or server error says nothing about it.
     const missing = error instanceof ApiRequestError && error.status === 404;

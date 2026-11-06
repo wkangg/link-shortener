@@ -157,8 +157,8 @@ export function Analytics({ linkId }: AnalyticsProps) {
         now
     });
     const key = `${tick}|${params}`;
-    const summary = useApi(`summary|${key}`, () => api.summary(params));
-    const series = useApi(`series|${key}`, () => api.timeseries(params));
+    const summary = useApi(`summary|${key}`, () => api.summary(params), `summary|${linkId}`);
+    const series = useApi(`series|${key}`, () => api.timeseries(params), `series|${linkId}`);
 
     const selectRow = (dim: string, row: TopRow) => {
         if (dim === 'link' && linkId !== undefined) return;
