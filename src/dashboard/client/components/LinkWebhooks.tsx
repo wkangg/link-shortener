@@ -58,32 +58,36 @@ export function LinkWebhooks({ link, onClose }: { link: Link; onClose: () => voi
                 </p>
             )}
             {list && list.length > 0 && (
-                <p className="link-webhooks-intro muted">Send this link’s clicks to:</p>
-            )}
-            {list && list.length > 0 && (
-                <ul className="link-webhooks">
-                    {list.map(endpoint => {
-                        const { on, fixed } = coverage(endpoint, link);
-                        return (
-                            <li key={endpoint.id}>
-                                <label className="checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={on}
-                                        disabled={fixed !== null}
-                                        onChange={e => void toggle(endpoint, e.target.checked)}
-                                    />
-                                    <span>
-                                        {endpoint.description ?? endpoint.url}
-                                        <span className="badge">{KIND_LABELS[endpoint.kind]}</span>
-                                        {!endpoint.enabled && <span className="badge">Off</span>}
-                                        {fixed && <small>{fixed}: change it in Settings</small>}
-                                    </span>
-                                </label>
-                            </li>
-                        );
-                    })}
-                </ul>
+                <>
+                    <p className="link-webhooks-intro muted">Send this link’s clicks to:</p>
+                    <ul className="link-webhooks">
+                        {list.map(endpoint => {
+                            const { on, fixed } = coverage(endpoint, link);
+                            return (
+                                <li key={endpoint.id}>
+                                    <label className="checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={on}
+                                            disabled={fixed !== null}
+                                            onChange={e => void toggle(endpoint, e.target.checked)}
+                                        />
+                                        <span>
+                                            {endpoint.description ?? endpoint.url}
+                                            <span className="badge">
+                                                {KIND_LABELS[endpoint.kind]}
+                                            </span>
+                                            {!endpoint.enabled && (
+                                                <span className="badge">Off</span>
+                                            )}
+                                            {fixed && <small>{fixed}: change it in Settings</small>}
+                                        </span>
+                                    </label>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </>
             )}
             <div className="button-row spread">
                 <a href="/settings" onClick={linkClick}>
