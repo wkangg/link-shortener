@@ -64,13 +64,18 @@ export function Dialog({ title, onClose, children, wide = false }: DialogProps) 
             aria-label={title}
             // No typing, clicking or submitting into a dialog that's on its way out.
             inert={closing}
-            // Esc: animate out instead of the browser closing it at once.
+            // Esc: animate out instead of the browser closing it at once. React passes
+            // cancel and close up from children (a nested dialog, a file picker), so act
+            // only on this dialog's own.
             onCancel={event => {
+                if (event.target !== event.currentTarget) return;
                 event.preventDefault();
                 close();
             }}
             // Every close ends here, ours included.
-            onClose={onClose}
+            onClose={event => {
+                if (event.target === event.currentTarget) onClose();
+            }}
             onClick={event => {
                 if (event.target === ref.current) close();
             }}
