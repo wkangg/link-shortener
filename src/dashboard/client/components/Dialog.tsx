@@ -41,6 +41,12 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Set once we've closed it ourselves, so its later `close` event doesn't call onClose twice.
     const closedByUs = useRef(false);
+    // The parent's latest onClose: a close finishes up to CLOSE_MS later, and parents pass
+    // a new arrow each render, so the timer shouldn't call the one from when it started.
+    const onCloseRef = useRef(onClose);
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    });
 
     useEffect(() => {
         const dialog = ref.current;
@@ -62,7 +68,7 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
             if (closedByUs.current) return;
             closedByUs.current = true;
             ref.current?.close();
-            onClose();
+            onCloseRef.current();
         };
         if (reduce) {
             if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -72,7 +78,7 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
         if (closing) return;
         setClosing(true);
         closeTimer.current = setTimeout(finish, CLOSE_MS);
-    }, [closing, onClose, reduce]);
+    }, [closing, reduce]);
     useImperativeHandle(handle, () => ({ close }), [close]);
 
     const classes = ['dialog', wide && 'dialog-wide', closing && 'dialog-closing'];
@@ -93,7 +99,9 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
             }}
             // Closes we didn't start, e.g. a second Esc that the browser won't let us cancel.
             onClose={event => {
-                if (event.target === event.currentTarget && !closedByUs.current) onClose();
+                if (event.target === event.currentTarget && !closedByUs.current) {
+                    onCloseRef.current();
+                }
             }}
             onClick={event => {
                 if (event.target === ref.current) close();
