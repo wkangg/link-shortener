@@ -173,9 +173,7 @@ h3 {
     font-weight: 500;
     font-size: 0.925rem;
     text-decoration: none;
-    transition:
-        color 0.15s,
-        background 0.15s;
+    transition: color 0.15s;
 }
 
 .topbar nav a:hover {
@@ -183,14 +181,100 @@ h3 {
 }
 
 .topbar nav a[aria-current='page'] {
-    background: var(--ink);
+    position: relative;
+    isolation: isolate;
     color: var(--bg);
+}
+
+/* The current tab's background, its own element so it can slide between tabs. */
+.nav-pill {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--ink);
+    view-transition-name: nav-pill;
 }
 
 .page {
     max-width: 72rem;
     margin: 0 auto;
     padding: 1rem 1.25rem 5rem;
+}
+
+/* Around every page (App.tsx), full width so pages of any width animate as the same box. */
+.page-view {
+    view-transition-name: page;
+}
+
+/*
+ * Changing page (router.ts) runs a view transition: the old page sinks out like a closing
+ * dialog, the new one rises in like an opening one, and the nav pill slides to its tab.
+ * router.ts skips it with reduced motion, which `*` above can't reach.
+ */
+/*
+ * The page layer is drawn where the new page is, not slid from where the old one was, and
+ * the old page is moved back by however far the scroll changed (--page-shift, router.ts),
+ * so it fades out where it was on screen.
+ */
+::view-transition-group(page) {
+    animation: none;
+}
+
+::view-transition-old(page) {
+    top: var(--page-shift, 0px);
+    animation: page-out 160ms ease-in forwards;
+}
+
+::view-transition-new(page) {
+    animation: page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) 80ms backwards;
+}
+
+::view-transition-group(nav-pill) {
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Tabs differ in width; without this the pill's height would follow its aspect ratio. */
+::view-transition-old(nav-pill),
+::view-transition-new(nav-pill) {
+    height: 100%;
+}
+
+/* When the nav is off screen before or after (router.ts), it changes with the page instead. */
+:root[data-nav-still] .nav-pill,
+:root[data-nav-still] .topbar nav a span {
+    view-transition-name: none !important;
+}
+
+/* The tab labels (App.tsx) stay above the sliding pill and fade to their new color with it. */
+::view-transition-group(nav-overview),
+::view-transition-group(nav-links),
+::view-transition-group(nav-settings) {
+    z-index: 1;
+}
+
+::view-transition-old(nav-overview),
+::view-transition-new(nav-overview),
+::view-transition-old(nav-links),
+::view-transition-new(nav-links),
+::view-transition-old(nav-settings),
+::view-transition-new(nav-settings) {
+    animation-duration: 320ms;
+}
+
+@keyframes page-out {
+    to {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+}
+
+@keyframes page-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
 }
 
 .page-title {
@@ -2133,6 +2217,8 @@ input[type='color'] {
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
+    /* Its own layer, so a toast stays above the page while it changes (router.ts). */
+    view-transition-name: toast;
 }
 
 .toast {

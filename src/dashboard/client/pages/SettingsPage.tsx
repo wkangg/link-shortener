@@ -148,7 +148,7 @@ export function SettingsPage() {
 }
 
 function AboutFacts() {
-    const { data, error } = useApi('about', () => api.about());
+    const { data, error } = useApi('about', () => api.about(), 'about');
     if (error) return <p className="muted">Couldn’t load server details: {error.message}</p>;
     if (!data) return <p className="muted">Loading…</p>;
     const db = data.database;
