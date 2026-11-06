@@ -81,6 +81,9 @@ export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEd
                 else dialog.current?.close();
             }
         } catch (error) {
+            // Only on failure: after a save the editor animates out, and flipping the
+            // button back to its idle label would flicker during that.
+            setSaving(false);
             if (error instanceof ApiRequestError) {
                 const fieldErrors: Record<string, string> = { form: error.message };
                 for (const issue of error.issues ?? []) {
@@ -90,8 +93,6 @@ export function WebhookEditor({ endpoint, forLink, onClose, onSaved }: WebhookEd
             } else {
                 setErrors({ form: String(error) });
             }
-        } finally {
-            setSaving(false);
         }
     };
 

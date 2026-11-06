@@ -80,6 +80,9 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
             // Animates out like Cancel; its onClose then unmounts it.
             dialog.current?.close();
         } catch (error) {
+            // Only on failure: after a save the editor animates out, and flipping the
+            // button back to its idle label would flicker during that.
+            setSaving(false);
             if (error instanceof ApiRequestError) {
                 const fieldErrors: Record<string, string> = { form: error.message };
                 for (const issue of error.issues ?? []) fieldErrors[issue.path] = issue.message;
@@ -87,8 +90,6 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
             } else {
                 setErrors({ form: String(error) });
             }
-        } finally {
-            setSaving(false);
         }
     };
 
