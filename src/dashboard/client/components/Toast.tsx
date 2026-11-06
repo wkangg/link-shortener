@@ -6,13 +6,24 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue>({ show: () => {} });
 
+const VISIBLE_MS = 2500;
+/** How long the toast takes to leave; matches `.toast-leaving` in styles.css. */
+const LEAVE_MS = 200;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
-    const [message, setMessage] = useState<{ text: string; id: number } | null>(null);
+    const [message, setMessage] = useState<{ text: string; id: number; leaving: boolean } | null>(
+        null
+    );
 
     const show = useCallback((text: string) => {
         const id = Date.now();
-        setMessage({ text, id });
-        setTimeout(() => setMessage(current => (current?.id === id ? null : current)), 2500);
+        setMessage({ text, id, leaving: false });
+        setTimeout(() => {
+            setMessage(current => (current?.id === id ? { ...current, leaving: true } : current));
+        }, VISIBLE_MS);
+        setTimeout(() => {
+            setMessage(current => (current?.id === id ? null : current));
+        }, VISIBLE_MS + LEAVE_MS);
     }, []);
     const value = useMemo(() => ({ show }), [show]);
 
@@ -20,7 +31,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <ToastContext value={value}>
             {children}
             <div className="toast-region" role="status" aria-live="polite">
-                {message && <div className="toast">{message.text}</div>}
+                {/* Keyed so a new message animates in rather than swapping text in place. */}
+                {message && (
+                    <div
+                        key={message.id}
+                        className={message.leaving ? 'toast toast-leaving' : 'toast'}
+                    >
+                        {message.text}
+                    </div>
+                )}
             </div>
         </ToastContext>
     );

@@ -674,6 +674,43 @@ button.chip {
     color: var(--muted);
 }
 
+/* Collapses rather than unmounting, so archiving grows it in and restoring shrinks it
+   away, with the tags after it sliding over instead of jumping. */
+.archived-flag {
+    /* Just over the word's width, so the whole transition shows. */
+    max-width: 4rem;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.archived-flag.off {
+    max-width: 0;
+    opacity: 0;
+    /* Cancels the row gap after it, so nothing is left behind. */
+    margin-right: -0.9rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .archived-flag {
+        transition:
+            max-width 300ms ease,
+            margin-right 300ms ease,
+            opacity 200ms ease;
+    }
+
+    .swap-in {
+        display: inline-block;
+        animation: swap-in 220ms ease-out;
+    }
+}
+
+@keyframes swap-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+
 .tag {
     border: 0;
     padding: 0 0.5rem;
@@ -1983,14 +2020,26 @@ input[type='color'] {
 
 @media (prefers-reduced-motion: no-preference) {
     .toast {
-        animation: toast-in 160ms ease-out;
+        animation: toast-in 280ms cubic-bezier(0.22, 1.2, 0.36, 1);
+    }
+
+    /* LEAVE_MS in Toast.tsx matches this duration. */
+    .toast-leaving {
+        animation: toast-out 200ms ease-in forwards;
     }
 }
 
 @keyframes toast-in {
     from {
         opacity: 0;
-        transform: translateY(6px);
+        transform: translateY(14px) scale(0.96);
+    }
+}
+
+@keyframes toast-out {
+    to {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
     }
 }
 
