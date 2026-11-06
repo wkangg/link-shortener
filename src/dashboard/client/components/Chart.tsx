@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import uPlot from 'uplot';
 
 import type { TimeseriesResponse } from '../../../shared/types.ts';
+import { type ChartSnapshot, chartTransition, yTop } from '../chartTransition.ts';
 import { animate, useReducedMotion } from '../motion.ts';
 
 const SERIES = [
@@ -40,16 +41,6 @@ const tooltipDay = new Intl.DateTimeFormat(undefined, {
     day: 'numeric'
 });
 
-/** Each value `k` of the way from `from` to `to`. */
-const lerp = (from: number[], to: number[], k: number) =>
-    to.map((v, i) => (from[i] ?? 0) + (v - (from[i] ?? 0)) * k);
-
-/** Clicks and unique visitors per bucket, keyed by bucket start (unix ms). */
-interface Drawn {
-    interval: TimeseriesResponse['interval'];
-    points: Map<number, readonly [clicks: number, visitors: number]>;
-}
-
 /**
  * Clicks and unique visitors over time, with a crosshair tooltip. Empty until `data`
  * arrives, so the card holds its place while the first request loads.
@@ -59,9 +50,8 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
     const tooltip = useRef<HTMLDivElement>(null);
     const dark = useDarkScheme();
     const reduce = useReducedMotion();
-    // What the lines show now, so new data eases from there. Buckets that weren't
-    // drawn before (the first load, a longer date range, hours after days) rise from 0.
-    const drawn = useRef<Drawn | null>(null);
+    // What's on screen now, so new data eases from there.
+    const drawn = useRef<ChartSnapshot | null>(null);
 
     useEffect(() => {
         const el = host.current;
@@ -69,18 +59,10 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
         if (!el || !tip || !data) return;
 
         const xs = data.points.map(p => p.t / 1000);
-        const clicks = data.points.map(p => p.clicks);
-        const visitors = data.points.map(p => p.visitors);
-        // An hour and a day can start at the same time, so only like buckets carry over.
-        const before = drawn.current?.interval === data.interval ? drawn.current.points : null;
-        const fromClicks = data.points.map(p => before?.get(p.t)?.[0] ?? 0);
-        const fromVisitors = data.points.map(p => before?.get(p.t)?.[1] ?? 0);
-        const linesAt = (k: number) =>
-            [lerp(fromClicks, clicks, k), lerp(fromVisitors, visitors, k)] as const;
-        const moves = clicks.some((v, i) => v !== fromClicks[i] || visitors[i] !== fromVisitors[i]);
-        let progress = reduce || !moves ? 1 : 0;
-        // While the lines ease, the y axis already fits the final data instead of following them.
-        const top = Math.max(0, ...clicks, ...visitors);
+        const transition = chartTransition(drawn.current, data);
+        let progress = reduce || !transition.moves ? 1 : 0;
+        // Read by the scales below, so the view moves with the lines while they ease.
+        let frame = transition.at(progress);
         const ink = cssVar(el, '--text-secondary');
         const grid = cssVar(el, '--grid');
         const font = `12px ${cssVar(el, '--sans')}`;
@@ -100,9 +82,12 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
                 legend: { show: false },
                 cursor: { y: false, points: { size: 8 } },
                 scales: {
-                    x: { time: true },
+                    x: {
+                        time: true,
+                        range: (_u, min, max) => (progress < 1 ? frame.x : [min, max])
+                    },
                     y: {
-                        range: (_u, _min, max) => [0, Math.max(4, (progress < 1 ? top : max) * 1.1)]
+                        range: (_u, _min, max) => [0, progress < 1 ? frame.top : yTop(max)]
                     }
                 },
                 axes: [
@@ -152,16 +137,16 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
                     ]
                 }
             },
-            [xs, ...linesAt(progress)],
+            frame.data,
             el
         );
 
-        // Eases the lines from where they were to the new data.
         const stop =
             progress < 1
                 ? animate(k => {
                       progress = k;
-                      plot.setData([xs, ...linesAt(k)]);
+                      frame = transition.at(k);
+                      plot.setData(frame.data);
                   })
                 : undefined;
 
@@ -183,11 +168,7 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
         return () => {
             alive = false;
             stop?.();
-            const [c, u] = linesAt(progress);
-            drawn.current = {
-                interval: data.interval,
-                points: new Map(data.points.map((p, i) => [p.t, [c[i] ?? 0, u[i] ?? 0]]))
-            };
+            drawn.current = { ...frame, interval: data.interval };
             observer.disconnect();
             plot.destroy();
         };
