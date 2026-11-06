@@ -39,6 +39,8 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
     const reduce = useReducedMotion();
     const [closing, setClosing] = useState(false);
     const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Set once we've closed it ourselves, so its later `close` event doesn't call onClose twice.
+    const closedByUs = useRef(false);
 
     useEffect(() => {
         const dialog = ref.current;
@@ -50,11 +52,16 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
         };
     }, []);
 
-    // Plays the closing animation, then closes the dialog natively: its `close` event
-    // unmounts it, and the browser returns focus to whatever opened it, which it skips
-    // for a dialog that's already gone from the page.
+    // Plays the closing animation, then closes the dialog natively while it's still on the
+    // page, so the browser returns focus to whatever opened it (it skips that for a dialog
+    // that's already gone), and only then lets the parent unmount it. The parent is told
+    // directly rather than through the `close` event, which some browsers deliver late.
     const close = useCallback(() => {
-        const finish = () => ref.current?.close();
+        const finish = () => {
+            closedByUs.current = true;
+            ref.current?.close();
+            onClose();
+        };
         if (reduce) {
             finish();
             return;
@@ -62,7 +69,7 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
         if (closing) return;
         setClosing(true);
         closeTimer.current = setTimeout(finish, CLOSE_MS);
-    }, [closing, reduce]);
+    }, [closing, onClose, reduce]);
     useImperativeHandle(handle, () => ({ close }), [close]);
 
     const classes = ['dialog', wide && 'dialog-wide', closing && 'dialog-closing'];
@@ -81,9 +88,9 @@ export function Dialog({ title, onClose, children, wide = false, ref: handle }: 
                 event.preventDefault();
                 close();
             }}
-            // Every close ends here, ours included.
+            // Closes we didn't start, e.g. a second Esc that the browser won't let us cancel.
             onClose={event => {
-                if (event.target === event.currentTarget) onClose();
+                if (event.target === event.currentTarget && !closedByUs.current) onClose();
             }}
             onClick={event => {
                 if (event.target === ref.current) close();
