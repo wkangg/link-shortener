@@ -60,7 +60,13 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
     useEffect(() => {
         const el = host.current;
         const tip = tooltip.current;
-        if (!el || !tip || !data) return;
+        if (!el || !tip) return;
+        // Nothing drawn (still loading, or the request failed): the next data rises from 0,
+        // like the totals, rather than easing from lines that are no longer on screen.
+        if (!data) {
+            drawn.current = null;
+            return;
+        }
 
         // By bucket start in seconds, as drawn on the x axis.
         const points = new Map(data.points.map(p => [p.t / 1000, p]));
@@ -125,8 +131,14 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
                 hooks: {
                     setCursor: [
                         u => {
-                            // Look the point up by time, not index: while the view eases, the
-                            // plot also draws buckets that are leaving, which have no tooltip.
+                            // No tooltip while the lines ease: it would show the final counts
+                            // beside a line that's still on its way there.
+                            if (progress < 1) {
+                                tip.hidden = true;
+                                return;
+                            }
+                            // Look the point up by time rather than index, which also holds
+                            // while the plot draws buckets that are leaving.
                             const i = u.cursor.idx;
                             const x = i === null || i === undefined ? undefined : u.data[0][i];
                             const point = x === undefined ? undefined : points.get(x);

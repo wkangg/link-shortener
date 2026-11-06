@@ -8,6 +8,8 @@ import {
     useState
 } from 'react';
 
+import { useReducedMotion } from '../motion.ts';
+
 interface ToastContextValue {
     show: (message: string) => void;
 }
@@ -25,17 +27,27 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
     // Unique per toast, unlike a timestamp, so timers and keys never mix up two toasts.
     const lastId = useRef(0);
+    const reduce = useReducedMotion();
 
-    const show = useCallback((text: string) => {
-        const id = ++lastId.current;
-        setMessage({ text, id, leaving: false });
-        setTimeout(() => {
-            setMessage(current => (current?.id === id ? { ...current, leaving: true } : current));
-        }, VISIBLE_MS);
-        setTimeout(() => {
-            setMessage(current => (current?.id === id ? null : current));
-        }, VISIBLE_MS + LEAVE_MS);
-    }, []);
+    const show = useCallback(
+        (text: string) => {
+            const id = ++lastId.current;
+            setMessage({ text, id, leaving: false });
+            const remove = () => setMessage(current => (current?.id === id ? null : current));
+            // With reduced motion there's no exit animation to wait for.
+            if (reduce) {
+                setTimeout(remove, VISIBLE_MS);
+                return;
+            }
+            setTimeout(() => {
+                setMessage(current =>
+                    current?.id === id ? { ...current, leaving: true } : current
+                );
+            }, VISIBLE_MS);
+            setTimeout(remove, VISIBLE_MS + LEAVE_MS);
+        },
+        [reduce]
+    );
     const value = useMemo(() => ({ show }), [show]);
 
     return (
