@@ -2,7 +2,15 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import uPlot from 'uplot';
 
 import type { TimeseriesResponse } from '../../../shared/types.ts';
-import { type ChartSnapshot, chartTransition, yTop } from '../chartTransition.ts';
+import {
+    carryZoom,
+    type ChartFrame,
+    type ChartSnapshot,
+    chartTransition,
+    clampZoom,
+    type Span,
+    yTop
+} from '../chartTransition.ts';
 import { animate, useReducedMotion } from '../motion.ts';
 
 const SERIES = [
@@ -31,6 +39,9 @@ function useDarkScheme(): boolean {
 /** The longest span charted in hours (the server's cutoff), in seconds. */
 const HOURLY_SPAN_S = 3 * 86_400;
 
+/** A drag narrower than this (CSS pixels) is a click, not a zoom. */
+const MIN_DRAG_PX = 4;
+
 const hourFmt = new Intl.DateTimeFormat(undefined, { hour: 'numeric' });
 const dayFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 const tooltipHour = new Intl.DateTimeFormat(undefined, {
@@ -48,32 +59,45 @@ const tooltipDay = new Intl.DateTimeFormat(undefined, {
  * Clicks and unique visitors over time, with a crosshair tooltip. Empty until `data`
  * arrives, so the card holds its place while the first request loads, or says why
  * when the request fails.
+ *
+ * Dragging across the plot zooms into that span and double-clicking zooms back out,
+ * both easing like a change of data. The zoom outlasts refreshes and filter changes
+ * while the new data still covers it (see `carryZoom`).
  */
 export function Chart({ data, error }: { data: TimeseriesResponse | undefined; error?: Error }) {
     const host = useRef<HTMLDivElement>(null);
     const tooltip = useRef<HTMLDivElement>(null);
     const dark = useDarkScheme();
     const reduce = useReducedMotion();
-    // What's on screen now, so new data eases from there.
+    // What's on screen now, zoom included, so new data and zooms ease from there.
     const drawn = useRef<ChartSnapshot | null>(null);
+    // The span dragged into (null for the whole range), and the data it was fitted to.
+    const zoom = useRef<Span | null>(null);
+    const zoomedData = useRef<TimeseriesResponse | null>(null);
+    // Eases the plot below to new data, in the current zoom.
+    const render = useRef<((data: TimeseriesResponse) => void) | null>(null);
+    const hasData = data !== undefined;
 
+    // One plot for as long as there's data, so refreshes and filter changes update it in
+    // place rather than losing the zoom with it. Rebuilt when its colors or motion change.
     useEffect(() => {
         const el = host.current;
         const tip = tooltip.current;
         if (!el || !tip) return;
         // Nothing drawn (still loading, or the request failed): the next data rises from 0,
         // like the totals, rather than easing from lines that are no longer on screen.
-        if (!data) {
+        if (!hasData) {
             drawn.current = null;
             return;
         }
 
-        // By bucket start in seconds, as drawn on the x axis.
-        const points = new Map(data.points.map(p => [p.t / 1000, p]));
-        const transition = chartTransition(drawn.current, data);
-        let progress = reduce || !transition.moves ? 1 : 0;
+        // The data shown, and its points by bucket start in seconds, as drawn on the x axis.
+        let shown: TimeseriesResponse | undefined;
+        let points = new Map<number, TimeseriesResponse['points'][number]>();
+        let tipFmt = tooltipDay;
         // Read by the scales below, so the view moves with the lines while they ease.
-        let frame = transition.at(progress);
+        let frame: ChartFrame = drawn.current ?? { data: [[], [], []], x: [0, 1], top: yTop(0) };
+        let stop: (() => void) | undefined;
         const ink = cssVar(el, '--text-secondary');
         const grid = cssVar(el, '--grid');
         const font = `12px ${cssVar(el, '--sans')}`;
@@ -83,22 +107,57 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
             ticks: { show: false },
             font
         };
-        const tipFmt = data.interval === 'hour' ? tooltipHour : tooltipDay;
+
+        /** Eases from what's drawn to `next`, in the current zoom. */
+        function show(next: TimeseriesResponse) {
+            stop?.();
+            stop = undefined;
+            shown = next;
+            points = new Map(next.points.map(p => [p.t / 1000, p]));
+            tipFmt = next.interval === 'hour' ? tooltipHour : tooltipDay;
+            const transition = chartTransition(drawn.current, next, zoom.current);
+            const draw = (k: number) => {
+                frame = transition.at(k);
+                drawn.current = { ...frame, interval: next.interval };
+                plot.setData(frame.data);
+            };
+            if (reduce || !transition.moves) {
+                draw(1);
+                return;
+            }
+            draw(0);
+            stop = animate(draw);
+        }
+
+        /** Zooms into `span` (null for the whole range), easing like new data. */
+        function zoomTo(span: Span | null) {
+            if (!shown) return;
+            zoom.current = span;
+            zoomedData.current = shown;
+            show(shown);
+        }
 
         const plot = new uPlot(
             {
                 width: el.clientWidth,
                 height: 240,
                 legend: { show: false },
-                cursor: { y: false, points: { size: 8 } },
-                scales: {
-                    x: {
-                        time: true,
-                        range: (_u, min, max) => (progress < 1 ? frame.x : [min, max])
-                    },
-                    y: {
-                        range: (_u, _min, max) => [0, progress < 1 ? frame.top : yTop(max)]
+                cursor: {
+                    y: false,
+                    points: { size: 8 },
+                    // uPlot would set the scale at once; the setSelect hook eases it instead.
+                    drag: { x: true, y: false, setScale: false },
+                    // In place of uPlot's own reset, which would snap back to the whole range.
+                    bind: {
+                        dblclick: () => () => {
+                            zoomTo(null);
+                            return null;
+                        }
                     }
+                },
+                scales: {
+                    x: { time: true, range: () => frame.x },
+                    y: { range: () => [0, frame.top] }
                 },
                 axes: [
                     {
@@ -152,21 +211,27 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
                             const left = u.valToPos(x, 'x');
                             tip.style.transform = `translateX(${Math.min(left, el.clientWidth - 180)}px)`;
                         }
+                    ],
+                    setSelect: [
+                        u => {
+                            const { left, width } = u.select;
+                            if (width === 0) return;
+                            // The view eases to the span instead, so the selection box goes.
+                            u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+                            if (width < MIN_DRAG_PX || !shown) return;
+                            const span: Span = [
+                                u.posToVal(left, 'x'),
+                                u.posToVal(left + width, 'x')
+                            ];
+                            zoomTo(clampZoom(span, shown));
+                        }
                     ]
                 }
             },
             frame.data,
             el
         );
-
-        const stop =
-            progress < 1
-                ? animate(k => {
-                      progress = k;
-                      frame = transition.at(k);
-                      plot.setData(frame.data);
-                  })
-                : undefined;
+        render.current = show;
 
         const observer = new ResizeObserver(() =>
             plot.setSize({ width: el.clientWidth, height: 240 })
@@ -186,12 +251,21 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
         return () => {
             alive = false;
             stop?.();
-            drawn.current = { ...frame, interval: data.interval };
+            render.current = null;
             observer.disconnect();
             plot.destroy();
             // Or a hover from before a failed refresh stays on screen.
             tip.hidden = true;
         };
+    }, [hasData, dark, reduce]);
+
+    // Runs after the effect above, so also right after it rebuilds the plot, which then
+    // shows what was drawn before without easing.
+    useEffect(() => {
+        if (!data) return;
+        zoom.current = carryZoom(zoom.current, zoomedData.current, data);
+        zoomedData.current = data;
+        render.current?.(data);
     }, [data, dark, reduce]);
 
     const empty = data !== undefined && !data.points.some(p => p.clicks > 0);
