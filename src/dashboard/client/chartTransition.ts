@@ -1,11 +1,14 @@
 import type { TimeseriesResponse } from '../../shared/types.ts';
 
+/** A time span (unix seconds), first to last. */
+export type Span = [min: number, max: number];
+
 /** What the chart shows at one moment: its lines and the view around them. */
 export interface ChartFrame {
     /** Bucket starts (unix seconds), then clicks and unique visitors per bucket. */
     data: [xs: number[], clicks: number[], visitors: number[]];
-    /** The visible time span (unix seconds). */
-    x: [min: number, max: number];
+    /** The visible time span. */
+    x: Span;
     /** The top of the y axis. */
     top: number;
 }
@@ -36,6 +39,64 @@ function valueAt(xs: number[], ys: number[], x: number): number | null {
     return mix(y0, y1, (x - x0) / (x1 - x0));
 }
 
+/** The span `data` covers, from its first bucket to its last. */
+export function fullSpan(data: TimeseriesResponse): Span {
+    return [(data.points[0]?.t ?? 0) / 1000, (data.points.at(-1)?.t ?? 0) / 1000];
+}
+
+/**
+ * `zoom` fitted to `data`: null (the whole range) when it covers all of the data, falls
+ * outside it or has no width. An edge up to one bucket past the data is pulled in,
+ * so a zoom onto the oldest bucket survives that bucket rolling out of a refreshed range.
+ */
+export function clampZoom(zoom: Span | null, data: TimeseriesResponse): Span | null {
+    if (!zoom || data.points.length < 2) return null;
+    const [first, last] = fullSpan(data);
+    const bucket = BUCKET[data.interval];
+    let [min, max] = zoom;
+    if (min < first && first - min <= bucket) min = first;
+    if (max > last && max - last <= bucket) max = last;
+    if (min < first || max > last || max <= min) return null;
+    if (min === first && max === last) return null;
+    return [min, max];
+}
+
+/**
+ * The zoom to keep when `before` is replaced by `data` for the same date range (a refresh
+ * or a filter change). A zoom that reached the newest bucket follows the newest bucket,
+ * keeping its width, so new buckets slide into view. Otherwise it stays put while `data`
+ * still covers it (see `clampZoom`), and resets to the whole range when it doesn't. It
+ * also resets if the bucket size changed (a zoom into hours holds at most one day point).
+ * Today the bucket size only changes with the date range, which resets the zoom first.
+ */
+export function carryZoom(
+    zoom: Span | null,
+    before: TimeseriesResponse | null,
+    data: TimeseriesResponse
+): Span | null {
+    if (!zoom || (before && before.interval !== data.interval)) return null;
+    let [min, max] = zoom;
+    // Within a second, since a drag to the plot's edge can land a float's error short of it.
+    if (before && before.points.length > 0 && max >= fullSpan(before)[1] - 1) {
+        const shift = fullSpan(data)[1] - max;
+        min += shift;
+        max += shift;
+    }
+    return clampZoom([min, max], data);
+}
+
+/** The highest value of `lines` in `view`: their points in it, and where they cross its edges. */
+function peakIn(xs: number[], lines: number[][], [min, max]: Span): number {
+    let peak = 0;
+    for (const ys of lines) {
+        for (const [i, x] of xs.entries()) {
+            if (x >= min && x <= max) peak = Math.max(peak, ys[i] ?? 0);
+        }
+        peak = Math.max(peak, valueAt(xs, ys, min) ?? 0, valueAt(xs, ys, max) ?? 0);
+    }
+    return peak;
+}
+
 /**
  * Frames from what was on screen (`before`) to `data`, for progress `k` from 0 to 1.
  *
@@ -46,18 +107,23 @@ function valueAt(xs: number[], ys: number[], x: number): number | null {
  * Between hours and days, the old line is first rescaled to the new bucket size (a day's
  * clicks / 24 per hour), with its y axis, so it starts exactly where it was drawn. With
  * nothing before, the lines rise from 0 in the final view.
+ *
+ * The final view is `zoom` when given (from `clampZoom` or `carryZoom`), with the y axis
+ * fitted to the lines in it, or else the whole range. Zooming in or out on the same data
+ * is a transition like any other, in which only the view moves.
  */
 export function chartTransition(
     before: ChartSnapshot | null,
-    data: TimeseriesResponse
+    data: TimeseriesResponse,
+    zoom: Span | null = null
 ): { at: (k: number) => ChartFrame; moves: boolean } {
     const xs = data.points.map(p => p.t / 1000);
     const clicks = data.points.map(p => p.clicks);
     const visitors = data.points.map(p => p.visitors);
     const final: ChartFrame = {
         data: [xs, clicks, visitors],
-        x: [xs[0] ?? 0, xs.at(-1) ?? 0],
-        top: yTop(Math.max(0, ...clicks, ...visitors))
+        x: zoom ?? fullSpan(data),
+        top: yTop(zoom ? peakIn(xs, [clicks, visitors], zoom) : Math.max(0, ...clicks, ...visitors))
     };
 
     let start: ChartFrame = { ...final, data: [xs, xs.map(() => 0), xs.map(() => 0)] };
@@ -90,18 +156,16 @@ export function chartTransition(
         union.length !== xs.length ||
         lines.some(l => l.from[0] !== l.to[0] || l.from[1] !== l.to[1]);
 
-    const at = (k: number): ChartFrame =>
-        k >= 1
-            ? final
-            : {
-                  data: [
-                      union,
-                      lines.map(l => mix(l.from[0] ?? 0, l.to[0] ?? 0, k)),
-                      lines.map(l => mix(l.from[1] ?? 0, l.to[1] ?? 0, k))
-                  ],
-                  x: [mix(start.x[0], final.x[0], k), mix(start.x[1], final.x[1], k)],
-                  top: mix(start.top, final.top, k)
-              };
+    const at = (k: number): ChartFrame => {
+        if (k >= 1) return final;
+        const c = lines.map(l => mix(l.from[0] ?? 0, l.to[0] ?? 0, k));
+        const v = lines.map(l => mix(l.from[1] ?? 0, l.to[1] ?? 0, k));
+        const x: Span = [mix(start.x[0], final.x[0], k), mix(start.x[1], final.x[1], k)];
+        // The top eases between the two views, but lifts (with the same headroom as yTop)
+        // for a peak the widening view reaches sooner, e.g. zooming out from a quiet span.
+        const top = Math.max(mix(start.top, final.top, k), 1.1 * peakIn(union, [c, v], x));
+        return { data: [union, c, v], x, top };
+    };
 
     return { at, moves };
 }

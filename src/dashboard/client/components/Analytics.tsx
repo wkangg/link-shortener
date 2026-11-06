@@ -8,6 +8,7 @@ import { useApi } from '../useApi.ts';
 import { useCountUp } from '../useCountUp.ts';
 import { Chart } from './Chart.tsx';
 import { ClickHistory, type Toggle } from './ClickHistory.tsx';
+import { FilterChips } from './FilterChips.tsx';
 import { exactTerm, hasTerm, toggleTerm, withTerm } from './SearchBox.tsx';
 import { type Tab, TopList } from './TopList.tsx';
 
@@ -231,21 +232,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
                         Include abusive IPs
                     </label>
                 )}
-                <ul className="chips" aria-label="Active filters">
-                    {search && (
-                        <li>
-                            <button
-                                type="button"
-                                className="chip mono"
-                                aria-label={`Clear search ${search}`}
-                                onClick={() => applySearch('')}
-                            >
-                                Search: {search}
-                                <span aria-hidden="true">×</span>
-                            </button>
-                        </li>
-                    )}
-                </ul>
+                <FilterChips search={search} onChange={applySearch} />
                 <a className="text-button export" href={exportUrl} download>
                     Export CSV
                 </a>
@@ -267,7 +254,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
             </div>
             {summary.error && <p className="error">{summary.error.message}</p>}
 
-            <Chart data={series.data} error={series.error} />
+            <Chart data={series.data} error={series.error} range={preset} stale={series.loading} />
 
             <div className="panels">
                 {PANELS.filter(p => !(p.linksOnly && linkId !== undefined)).map(panel => (
