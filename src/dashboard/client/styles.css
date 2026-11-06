@@ -183,14 +183,84 @@ h3 {
 }
 
 .topbar nav a[aria-current='page'] {
-    background: var(--ink);
+    position: relative;
+    isolation: isolate;
     color: var(--bg);
+}
+
+/* The current tab's background, its own element so it can slide between tabs. */
+.nav-pill {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--ink);
+    view-transition-name: nav-pill;
 }
 
 .page {
     max-width: 72rem;
     margin: 0 auto;
     padding: 1rem 1.25rem 5rem;
+    view-transition-name: page;
+}
+
+/*
+ * Changing page (router.ts) runs a view transition: the old page sinks out like a closing
+ * dialog, the new one rises in like an opening one, and the nav pill slides to its tab.
+ * router.ts skips it with reduced motion, which `*` above can't reach.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 240ms;
+}
+
+/* Pages differ in height; resizing the snapshot between them would stretch it. */
+::view-transition-group(page) {
+    animation: none;
+}
+
+::view-transition-old(page) {
+    animation: page-out 160ms ease-in forwards;
+}
+
+::view-transition-new(page) {
+    animation: page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) 80ms backwards;
+}
+
+::view-transition-group(nav-pill) {
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The tab labels (App.tsx) stay above the sliding pill and fade to their new color with it. */
+::view-transition-group(nav-overview),
+::view-transition-group(nav-links),
+::view-transition-group(nav-settings) {
+    z-index: 1;
+}
+
+::view-transition-old(nav-overview),
+::view-transition-new(nav-overview),
+::view-transition-old(nav-links),
+::view-transition-new(nav-links),
+::view-transition-old(nav-settings),
+::view-transition-new(nav-settings) {
+    animation-duration: 320ms;
+}
+
+@keyframes page-out {
+    to {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+}
+
+@keyframes page-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
 }
 
 .page-title {

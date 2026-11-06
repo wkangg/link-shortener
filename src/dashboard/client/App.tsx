@@ -75,7 +75,15 @@ export function App() {
                                 onClick={linkClick}
                                 aria-current={current === item.href ? 'page' : undefined}
                             >
-                                {item.label}
+                                {current === item.href && <span className="nav-pill" />}
+                                {/* Named so it's drawn above the pill as the pill slides (styles.css). */}
+                                <span
+                                    style={{
+                                        viewTransitionName: `nav-${item.label.toLowerCase()}`
+                                    }}
+                                >
+                                    {item.label}
+                                </span>
                             </a>
                         ))}
                     </nav>

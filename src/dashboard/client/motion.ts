@@ -8,6 +8,9 @@ export const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 // Called lazily so importing this module without a DOM (tests) doesn't throw.
 const reducedMotionQuery = () => matchMedia('(prefers-reduced-motion: reduce)');
 
+/** Whether the user asked for reduced motion, for code outside React. */
+export const prefersReducedMotion = () => reducedMotionQuery().matches;
+
 function subscribeToReducedMotion(onChange: () => void): () => void {
     const query = reducedMotionQuery();
     query.addEventListener('change', onChange);
@@ -16,7 +19,7 @@ function subscribeToReducedMotion(onChange: () => void): () => void {
 
 /** Whether the user asked for reduced motion, updating if they change it. */
 export function useReducedMotion(): boolean {
-    return useSyncExternalStore(subscribeToReducedMotion, () => reducedMotionQuery().matches);
+    return useSyncExternalStore(subscribeToReducedMotion, prefersReducedMotion);
 }
 
 /**

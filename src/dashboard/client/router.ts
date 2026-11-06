@@ -1,13 +1,41 @@
 import { type MouseEvent, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
+
+import { prefersReducedMotion } from './motion.ts';
 
 const listeners = new Set<() => void>();
 
+/** The pathname the page last rendered, to tell a page change from a query change. */
+let renderedPath = location.pathname;
+
+/**
+ * Re-renders subscribers. A change of page runs inside a view transition, so the old page
+ * fades out as the new one rises in (`::view-transition-*(page)` in styles.css). Query-only
+ * changes, like the links filter, update in place.
+ */
+function notify() {
+    const update = () => {
+        renderedPath = location.pathname;
+        for (const listener of listeners) listener();
+    };
+    if (
+        location.pathname === renderedPath ||
+        !document.startViewTransition ||
+        prefersReducedMotion()
+    ) {
+        update();
+        return;
+    }
+    // The new page has to be in the DOM when the callback returns, for its snapshot.
+    document.startViewTransition(() => flushSync(update));
+}
+
 function subscribe(listener: () => void) {
+    if (listeners.size === 0) globalThis.addEventListener('popstate', notify);
     listeners.add(listener);
-    globalThis.addEventListener('popstate', listener);
     return () => {
         listeners.delete(listener);
-        globalThis.removeEventListener('popstate', listener);
+        if (listeners.size === 0) globalThis.removeEventListener('popstate', notify);
     };
 }
 
@@ -16,7 +44,7 @@ const snapshot = () => location.pathname + location.search;
 export function navigate(to: string, replace = false) {
     if (replace) history.replaceState(null, '', to);
     else history.pushState(null, '', to);
-    for (const listener of listeners) listener();
+    notify();
 }
 
 /** Current path + query, re-rendering on navigation. */
