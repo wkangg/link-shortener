@@ -131,14 +131,8 @@ export function Chart({ data, error }: { data: TimeseriesResponse | undefined; e
                 hooks: {
                     setCursor: [
                         u => {
-                            // No tooltip while the lines ease: it would show the final counts
-                            // beside a line that's still on its way there.
-                            if (progress < 1) {
-                                tip.hidden = true;
-                                return;
-                            }
-                            // Look the point up by time rather than index, which also holds
-                            // while the plot draws buckets that are leaving.
+                            // Look the point up by time, not index: while the view eases, the
+                            // plot also draws buckets that are leaving, which have no tooltip.
                             const i = u.cursor.idx;
                             const x = i === null || i === undefined ? undefined : u.data[0][i];
                             const point = x === undefined ? undefined : points.get(x);
