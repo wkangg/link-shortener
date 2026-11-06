@@ -1,4 +1,12 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import {
+    createContext,
+    type ReactNode,
+    useCallback,
+    useContext,
+    useMemo,
+    useRef,
+    useState
+} from 'react';
 
 interface ToastContextValue {
     show: (message: string) => void;
@@ -15,8 +23,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         null
     );
 
+    // Unique per toast, unlike a timestamp, so timers and keys never mix up two toasts.
+    const lastId = useRef(0);
+
     const show = useCallback((text: string) => {
-        const id = Date.now();
+        const id = ++lastId.current;
         setMessage({ text, id, leaving: false });
         setTimeout(() => {
             setMessage(current => (current?.id === id ? { ...current, leaving: true } : current));

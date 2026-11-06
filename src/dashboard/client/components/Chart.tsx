@@ -46,9 +46,10 @@ const tooltipDay = new Intl.DateTimeFormat(undefined, {
 
 /**
  * Clicks and unique visitors over time, with a crosshair tooltip. Empty until `data`
- * arrives, so the card holds its place while the first request loads.
+ * arrives, so the card holds its place while the first request loads, or says why
+ * when the request fails.
  */
-export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
+export function Chart({ data, error }: { data: TimeseriesResponse | undefined; error?: Error }) {
     const host = useRef<HTMLDivElement>(null);
     const tooltip = useRef<HTMLDivElement>(null);
     const dark = useDarkScheme();
@@ -182,6 +183,8 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
             drawn.current = { ...frame, interval: data.interval };
             observer.disconnect();
             plot.destroy();
+            // Or a hover from before a failed refresh stays on screen.
+            tip.hidden = true;
         };
     }, [data, dark, reduce]);
 
@@ -201,6 +204,9 @@ export function Chart({ data }: { data: TimeseriesResponse | undefined }) {
                 <div ref={host} />
                 <div ref={tooltip} className="chart-tooltip" hidden />
                 {empty && <p className="chart-empty">No clicks in this period</p>}
+                {!data && error && (
+                    <p className="chart-empty">Couldn’t load the chart: {error.message}</p>
+                )}
             </div>
         </figure>
     );

@@ -15,8 +15,9 @@ export function LinkPage({ id }: { id: number }) {
     const toast = useToast();
     const [version, setVersion] = useState(0);
     const [webhooksOpen, setWebhooksOpen] = useState(false);
-    // Whether archive was toggled on this page, so its label animates on a change but not on load.
-    const [toggled, setToggled] = useState(false);
+    // The archived state the last toggle started from, so only the label that replaces it
+    // animates in: not the old one while the refresh is in flight, and not on load.
+    const [toggledFrom, setToggledFrom] = useState<boolean | null>(null);
     const { data: link, error } = useApi(`${id}|${version}`, () => api.link(id));
     const slug = link?.slug;
     // Only a 404 means the link is gone; a network or server error says nothing about it.
@@ -48,7 +49,7 @@ export function LinkPage({ id }: { id: number }) {
     const toggleArchived = async () => {
         await api.updateLink(link.id, { archived: !link.archived });
         toast.show(link.archived ? 'Restored' : 'Archived: the short link now returns 404');
-        setToggled(true);
+        setToggledFrom(link.archived);
         setVersion(v => v + 1);
     };
 
@@ -107,7 +108,11 @@ export function LinkPage({ id }: { id: number }) {
                     >
                         <span
                             key={String(link.archived)}
-                            className={toggled ? 'swap-in' : undefined}
+                            className={
+                                toggledFrom !== null && link.archived !== toggledFrom
+                                    ? 'swap-in'
+                                    : undefined
+                            }
                         >
                             {link.archived ? 'Restore' : 'Archive'}
                         </span>

@@ -91,8 +91,8 @@ export function TopList({
                     const drills = drill && drillKey === null && Boolean(row.value);
                     return (
                         // Keyed by the data's own dim so a row only carries over (and animates)
-                        // within a dim.
-                        <li key={`${data?.dim}|${row.value ?? '∅'}`}>
+                        // within a dim; JSON keeps a missing value apart from a literal "∅".
+                        <li key={JSON.stringify([data?.dim, row.value])}>
                             <button
                                 type="button"
                                 className="top-row"
