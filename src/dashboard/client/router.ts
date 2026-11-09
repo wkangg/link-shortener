@@ -15,6 +15,8 @@ history.scrollRestoration = 'manual';
 
 /** Where scroll positions outlive a reload: per tab, like the history they belong to. */
 const SCROLL_STORE = 'scroll-positions';
+/** How many entries' positions are saved, most recently left first. */
+const SCROLL_SAVED = 200;
 
 /** How far each history entry was scrolled when it was left, by the key in its state. */
 const scrollOf = new Map<number, number>(readScrollPositions());
@@ -40,15 +42,32 @@ function entryKey(): number {
 }
 
 let currentKey = entryKey();
+/**
+ * The entry whose page is on screen. It trails `currentKey` for the frame before a
+ * transition's update runs, when the scroll position still belongs to the page being left.
+ */
+let renderedKey = currentKey;
+
+/** Remembers how far the page on screen is scrolled, as its entry's most recent position. */
+function rememberScroll() {
+    scrollOf.delete(renderedKey);
+    scrollOf.set(renderedKey, scrollY);
+}
 
 // Leaving or reloading the page saves where every entry was, the current one included.
-addEventListener('pagehide', () => {
-    scrollOf.set(currentKey, scrollY);
+// Hidden tabs are saved too: mobile browsers can discard them without a `pagehide`.
+function saveScroll() {
+    rememberScroll();
     try {
-        sessionStorage.setItem(SCROLL_STORE, JSON.stringify([...scrollOf]));
+        const recent = [...scrollOf].slice(-SCROLL_SAVED);
+        sessionStorage.setItem(SCROLL_STORE, JSON.stringify(recent));
     } catch {
         // Storage is off or full; positions just don't survive the reload.
     }
+}
+addEventListener('pagehide', saveScroll);
+addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveScroll();
 });
 
 /** Stops restoring a scroll position, if one is still being restored. */
@@ -94,14 +113,19 @@ function navBottom(): number {
  * Re-renders subscribers, then scrolls to `top` if given. A change of page runs inside a view
  * transition, so the old page fades out where it was as the new one rises in
  * (`::view-transition-*(page)` in styles.css). Query-only changes, like the links filter,
- * update in place.
+ * update in place. `animated`: the browser already animated it, like a back swipe in
+ * Safari, so a second animation would replay the page just swiped away.
  */
-function notify(top?: number) {
+function notify(top?: number, animated = false) {
     stopRestoring();
+    // A transition still waiting to update has nothing left to animate: its update renders
+    // where this navigation goes, and this one animates (or doesn't) itself.
+    latest?.skipTransition();
     const navigation = ++navigations;
     const pageChanged = location.pathname !== renderedPath;
     const update = () => {
         renderedPath = location.pathname;
+        renderedKey = currentKey;
         // Rendered now rather than on React's schedule, so there's a page to scroll.
         flushSync(() => {
             for (const listener of listeners) listener();
@@ -110,7 +134,7 @@ function notify(top?: number) {
         // first, it rendered the current page above, but the scroll position is no longer its.
         if (top !== undefined && navigation === navigations) restoreScroll(top);
     };
-    if (!pageChanged || !document.startViewTransition || prefersReducedMotion()) {
+    if (!pageChanged || animated || !document.startViewTransition || prefersReducedMotion()) {
         update();
         return;
     }
@@ -118,14 +142,18 @@ function notify(top?: number) {
     const root = document.documentElement;
     const from = scrollY;
     const to = top ?? from;
-    // The page layer is drawn where the new page is; this keeps the old one where it was.
-    root.style.setProperty('--page-shift', `${to - from}px`);
     // The pill only slides when the nav is on screen before and after. Otherwise it would
-    // fly in from, or off to, wherever the scroll put the nav.
+    // fly in from, or off to, wherever the scroll put the nav. Set before the old snapshot.
     const bottom = navBottom();
     root.toggleAttribute('data-nav-still', from >= bottom || to >= bottom);
 
-    const transition = document.startViewTransition(update);
+    const transition = document.startViewTransition(() => {
+        update();
+        // The page layer is drawn where the new page is; this keeps the old one where it was.
+        // Measured after scrolling, which falls short of `to` while the page is loading.
+        if (navigation === navigations)
+            root.style.setProperty('--page-shift', `${scrollY - from}px`);
+    });
     void transition.finished.finally(() => {
         // A newer transition skips this one and sets these for itself.
         if (latest !== transition) return;
@@ -139,10 +167,10 @@ let latest: ViewTransition | undefined;
 /** Counts navigations, so a late update can tell whether a newer one has started. */
 let navigations = 0;
 
-function onPopState() {
-    scrollOf.set(currentKey, scrollY);
+function onPopState(event: PopStateEvent) {
+    rememberScroll();
     currentKey = entryKey();
-    notify(scrollOf.get(currentKey) ?? 0);
+    notify(scrollOf.get(currentKey) ?? 0, event.hasUAVisualTransition);
 }
 
 function subscribe(listener: () => void) {
@@ -163,7 +191,7 @@ export function navigate(to: string, replace = false) {
         notify();
         return;
     }
-    scrollOf.set(currentKey, scrollY);
+    rememberScroll();
     currentKey = nextKey++;
     history.pushState({ key: currentKey }, '', to);
     notify(0);
