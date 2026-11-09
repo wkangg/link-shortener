@@ -48,10 +48,13 @@ let currentKey = entryKey();
  */
 let renderedKey = currentKey;
 
-/** Remembers how far the page on screen is scrolled, as its entry's most recent position. */
+/**
+ * Remembers how far the page on screen is scrolled, as its entry's most recent position.
+ * While a position is still being restored, that's the one it's on its way to.
+ */
 function rememberScroll() {
     scrollOf.delete(renderedKey);
-    scrollOf.set(renderedKey, scrollY);
+    scrollOf.set(renderedKey, restoringTo ?? scrollY);
 }
 
 // Leaving or reloading the page saves where every entry was, the current one included.
@@ -72,6 +75,17 @@ addEventListener('visibilitychange', () => {
 
 /** Stops restoring a scroll position, if one is still being restored. */
 let stopRestoring = () => {};
+/** The position being restored, until it's reached or restoring stops. */
+let restoringTo: number | undefined;
+
+/** Where the scroll was when the old page's snapshot was taken, during a transition. */
+let snapshotAt: number | undefined;
+
+/** Keeps the old page where it was on screen, however far the scroll has moved since. */
+function placeOldPage() {
+    if (snapshotAt === undefined) return;
+    document.documentElement.style.setProperty('--page-shift', `${scrollY - snapshotAt}px`);
+}
 
 /**
  * Scrolls to `top`. A page whose data is still loading (after a reload, or going back to one
@@ -86,11 +100,15 @@ function restoreScroll(top: number) {
     const stopOn = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
     const attempt = () => {
         scrollTo(0, top);
+        // Data arriving mid-fade scrolls the new page on, and the old one with it otherwise.
+        placeOldPage();
         if (Math.abs(scrollY - top) < 1) stopRestoring();
     };
     const observer = new ResizeObserver(attempt);
     const timer = setTimeout(() => stopRestoring(), 5000);
+    restoringTo = top;
     stopRestoring = () => {
+        restoringTo = undefined;
         observer.disconnect();
         clearTimeout(timer);
         for (const type of stopOn) removeEventListener(type, stopRestoring);
@@ -124,15 +142,16 @@ function notify(top?: number, animated = false) {
     const navigation = ++navigations;
     const pageChanged = location.pathname !== renderedPath;
     const update = () => {
+        // A transition's update runs a frame later. If another navigation came in first, that
+        // one renders and scrolls; rendering here would put its page into its old snapshot.
+        if (navigation !== navigations) return;
         renderedPath = location.pathname;
         renderedKey = currentKey;
         // Rendered now rather than on React's schedule, so there's a page to scroll.
         flushSync(() => {
             for (const listener of listeners) listener();
         });
-        // A transition's update runs a frame later. If Back or another navigation came in
-        // first, it rendered the current page above, but the scroll position is no longer its.
-        if (top !== undefined && navigation === navigations) restoreScroll(top);
+        if (top !== undefined) restoreScroll(top);
     };
     if (!pageChanged || animated || !document.startViewTransition || prefersReducedMotion()) {
         update();
@@ -151,12 +170,14 @@ function notify(top?: number, animated = false) {
         update();
         // The page layer is drawn where the new page is; this keeps the old one where it was.
         // Measured after scrolling, which falls short of `to` while the page is loading.
-        if (navigation === navigations)
-            root.style.setProperty('--page-shift', `${scrollY - from}px`);
+        if (navigation !== navigations) return;
+        snapshotAt = from;
+        placeOldPage();
     });
     void transition.finished.finally(() => {
         // A newer transition skips this one and sets these for itself.
         if (latest !== transition) return;
+        snapshotAt = undefined;
         root.style.removeProperty('--page-shift');
         root.removeAttribute('data-nav-still');
     });
