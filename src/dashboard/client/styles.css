@@ -245,7 +245,11 @@ h3 {
     animation: page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) 80ms backwards;
 }
 
-::view-transition-group(nav-pill) {
+/* The labels (below) move with the pill, on the same timing, so they stay on it. */
+::view-transition-group(nav-pill),
+::view-transition-group(nav-overview),
+::view-transition-group(nav-links),
+::view-transition-group(nav-settings) {
     animation-duration: 320ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -256,7 +260,7 @@ h3 {
     height: 100%;
 }
 
-/* When the nav is off screen before or after (router.ts), it changes with the page instead. */
+/* When the nav moves with the scroll (router.ts), the pill and labels change in place instead. */
 :root[data-nav-still] .nav-pill,
 :root[data-nav-still] .topbar nav a span {
     view-transition-name: none !important;

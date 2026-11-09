@@ -161,6 +161,8 @@ function navBottom(): number {
 function notify(top?: number, animated = false) {
     // Callers have saved this page's position (rememberScroll) by now.
     settleScroll();
+    // A click missed while an earlier transition was set up is overtaken by this navigation.
+    missedClick = undefined;
     // A transition still waiting to update has nothing left to animate: its update renders
     // where this navigation goes, and this one animates (or doesn't) itself.
     latest?.skipTransition();
@@ -189,7 +191,9 @@ function notify(top?: number, animated = false) {
     // The pill only slides when the nav is on screen before and after. Otherwise it would
     // fly in from, or off to, wherever the scroll put the nav. Set before the old snapshot.
     const bottom = navBottom();
-    root.toggleAttribute('data-nav-still', from >= bottom || to >= bottom);
+    // The pill only slides when the nav stays put. When the scroll changes, the nav moves
+    // straight to its new place, and the pill and labels would drift apart from it.
+    root.toggleAttribute('data-nav-still', from !== to || from >= bottom);
 
     settingUp = true;
     const transition = document.startViewTransition(() => {
@@ -206,7 +210,7 @@ function notify(top?: number, animated = false) {
             // A newer transition skips this one and is set up itself.
             if (latest !== transition) return;
             settingUp = false;
-            replayMissedClick();
+            replayMissedClick(from);
         });
     void transition.finished.finally(() => {
         // A newer transition skips this one and sets these for itself.
@@ -234,18 +238,30 @@ let missedClick: { x: number; y: number } | undefined;
 document.addEventListener(
     'click',
     event => {
-        if (settingUp && event.target === document.documentElement) {
+        const plain =
+            event.button === 0 &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.shiftKey &&
+            !event.altKey;
+        // Modified clicks (new tab and so on) aren't replayed: the replay can only navigate here.
+        if (settingUp && plain && event.target === document.documentElement) {
             missedClick = { x: event.clientX, y: event.clientY };
         }
     },
     true
 );
 
-/** Clicks the link a click missed during setup was on, now that it can be hit. */
-function replayMissedClick() {
-    if (!missedClick) return;
-    const link = document.elementFromPoint(missedClick.x, missedClick.y)?.closest('a[href]');
+/**
+ * Clicks the header link a click missed during setup was on, now that it can be hit. The
+ * click was aimed at the old page as scrolled at `scrolledTo`; if the new one is scrolled
+ * elsewhere, something else is at that point, so it's dropped.
+ */
+function replayMissedClick(scrolledTo: number) {
+    const missed = missedClick;
     missedClick = undefined;
+    if (!missed || Math.abs(scrollY - scrolledTo) >= 1) return;
+    const link = document.elementFromPoint(missed.x, missed.y)?.closest('.topbar a[href]');
     if (link instanceof HTMLAnchorElement) link.click();
 }
 
@@ -295,5 +311,9 @@ export function linkClick(event: MouseEvent<HTMLAnchorElement>) {
         return;
     }
     event.preventDefault();
-    navigate(event.currentTarget.getAttribute('href') ?? '/');
+    const href = event.currentTarget.getAttribute('href') ?? '/';
+    // Already there, like the second click of a double-click: navigating again would cut the
+    // running transition short and add a history entry that Back seems to ignore.
+    if (href === location.pathname + location.search) return;
+    navigate(href);
 }
