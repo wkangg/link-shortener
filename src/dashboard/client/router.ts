@@ -191,6 +191,7 @@ function notify(top?: number, animated = false) {
     const bottom = navBottom();
     root.toggleAttribute('data-nav-still', from >= bottom || to >= bottom);
 
+    settingUp = true;
     const transition = document.startViewTransition(() => {
         update();
         // The page layer is drawn where the new page is; this keeps the old one where it was.
@@ -199,6 +200,14 @@ function notify(top?: number, animated = false) {
         snapshotAt = from;
         placeOldPage();
     });
+    void transition.ready
+        .catch(() => {})
+        .finally(() => {
+            // A newer transition skips this one and is set up itself.
+            if (latest !== transition) return;
+            settingUp = false;
+            replayMissedClick();
+        });
     void transition.finished.finally(() => {
         // A newer transition skips this one and sets these for itself.
         if (latest !== transition) return;
@@ -212,6 +221,33 @@ function notify(top?: number, animated = false) {
 let latest: ViewTransition | undefined;
 /** Counts navigations, so a late update can tell whether a newer one has started. */
 let navigations = 0;
+
+/**
+ * Whether a transition is being set up. From the old page's snapshot until the new one's,
+ * the browser hit-tests every click to <html> (styles.css lets them through after that), so
+ * clicking the tabs in quick succession would lose the clicks landing in between.
+ */
+let settingUp = false;
+/** Where a click landed while a transition was being set up, to replay once it's running. */
+let missedClick: { x: number; y: number } | undefined;
+
+document.addEventListener(
+    'click',
+    event => {
+        if (settingUp && event.target === document.documentElement) {
+            missedClick = { x: event.clientX, y: event.clientY };
+        }
+    },
+    true
+);
+
+/** Clicks the link a click missed during setup was on, now that it can be hit. */
+function replayMissedClick() {
+    if (!missedClick) return;
+    const link = document.elementFromPoint(missedClick.x, missedClick.y)?.closest('a[href]');
+    missedClick = undefined;
+    if (link instanceof HTMLAnchorElement) link.click();
+}
 
 function onPopState(event: PopStateEvent) {
     rememberScroll();

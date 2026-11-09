@@ -213,9 +213,16 @@ h3 {
  * router.ts skips it with reduced motion, which `*` above can't reach.
  */
 /*
- * Clicks go through the animation to the page underneath, so the tabs can be clicked in
- * quick succession. A new page change cuts the running one short (router.ts).
+ * The page stays clickable while it animates, so the tabs can be clicked in quick
+ * succession; a new page change cuts the running one short (router.ts). Clicks go through
+ * the animation to the page underneath, and the root isn't captured, which would otherwise
+ * stand in for the whole page and take every click. Without it, everything but the named
+ * parts below (the page, nav pill and labels, toasts) just changes in place.
  */
+:root {
+    view-transition-name: none;
+}
+
 ::view-transition {
     pointer-events: none;
 }
