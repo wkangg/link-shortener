@@ -73,10 +73,17 @@ addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') saveScroll();
 });
 
-/** Stops restoring a scroll position, if one is still being restored. */
+/** Stops scrolling toward a position being restored, if that's still going. */
 let stopRestoring = () => {};
-/** The position being restored, until it's reached or restoring stops. */
+/** The position being restored, until it's reached, the user scrolls, or a navigation. */
 let restoringTo: number | undefined;
+
+/** Stops restoring and forgets the target: the page is now wherever it's scrolled to. */
+function settleScroll() {
+    stopRestoring();
+    restoringTo = undefined;
+    removeEventListener('scroll', settleScroll);
+}
 
 /** Where the scroll was when the old page's snapshot was taken, during a transition. */
 let snapshotAt: number | undefined;
@@ -93,7 +100,7 @@ function placeOldPage() {
  * grows, until it arrives, the user scrolls or navigates, or 5 s pass.
  */
 function restoreScroll(top: number) {
-    stopRestoring();
+    settleScroll();
     scrollTo(0, top);
     if (Math.abs(scrollY - top) < 1) return;
 
@@ -102,19 +109,24 @@ function restoreScroll(top: number) {
         scrollTo(0, top);
         // Data arriving mid-fade scrolls the new page on, and the old one with it otherwise.
         placeOldPage();
-        if (Math.abs(scrollY - top) < 1) stopRestoring();
+        if (Math.abs(scrollY - top) < 1) settleScroll();
+    };
+    // The user taking over stops the scrolling, but a click or key may be on its way to a link
+    // or Back: `top` stays the position to save for this page until they actually scroll.
+    const onInput = () => {
+        stopRestoring();
+        addEventListener('scroll', settleScroll, { once: true, passive: true });
     };
     const observer = new ResizeObserver(attempt);
-    const timer = setTimeout(() => stopRestoring(), 5000);
+    const timer = setTimeout(settleScroll, 5000);
     restoringTo = top;
     stopRestoring = () => {
-        restoringTo = undefined;
         observer.disconnect();
         clearTimeout(timer);
-        for (const type of stopOn) removeEventListener(type, stopRestoring);
+        for (const type of stopOn) removeEventListener(type, onInput);
         stopRestoring = () => {};
     };
-    for (const type of stopOn) addEventListener(type, stopRestoring, { passive: true });
+    for (const type of stopOn) addEventListener(type, onInput, { passive: true });
     observer.observe(document.documentElement);
 }
 
@@ -135,7 +147,8 @@ function navBottom(): number {
  * Safari, so a second animation would replay the page just swiped away.
  */
 function notify(top?: number, animated = false) {
-    stopRestoring();
+    // Callers have saved this page's position (rememberScroll) by now.
+    settleScroll();
     // A transition still waiting to update has nothing left to animate: its update renders
     // where this navigation goes, and this one animates (or doesn't) itself.
     latest?.skipTransition();
