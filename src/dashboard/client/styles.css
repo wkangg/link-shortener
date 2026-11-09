@@ -213,6 +213,14 @@ h3 {
  * router.ts skips it with reduced motion, which `*` above can't reach.
  */
 /*
+ * Clicks go through the animation to the page underneath, so the tabs can be clicked in
+ * quick succession. A new page change cuts the running one short (router.ts).
+ */
+::view-transition {
+    pointer-events: none;
+}
+
+/*
  * The page layer is drawn where the new page is, not slid from where the old one was, and
  * the old page is moved back by however far the scroll changed (--page-shift, router.ts),
  * so it fades out where it was on screen.
