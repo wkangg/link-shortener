@@ -82,7 +82,18 @@ let restoringTo: number | undefined;
 function settleScroll() {
     stopRestoring();
     restoringTo = undefined;
-    removeEventListener('scroll', settleScroll);
+    removeEventListener('scroll', onScrollAfterInput);
+}
+
+/** Where the page was when the user's input stopped a restore. */
+let inputAt = 0;
+
+/**
+ * Settles once the user scrolls after stopping a restore. The restore's own last scroll can
+ * still fire its event a frame later, so only a scroll that moves the page counts.
+ */
+function onScrollAfterInput() {
+    if (Math.abs(scrollY - inputAt) >= 1) settleScroll();
 }
 
 /** Where the scroll was when the old page's snapshot was taken, during a transition. */
@@ -115,7 +126,8 @@ function restoreScroll(top: number) {
     // or Back: `top` stays the position to save for this page until they actually scroll.
     const onInput = () => {
         stopRestoring();
-        addEventListener('scroll', settleScroll, { once: true, passive: true });
+        inputAt = scrollY;
+        addEventListener('scroll', onScrollAfterInput, { passive: true });
     };
     const observer = new ResizeObserver(attempt);
     const timer = setTimeout(settleScroll, 5000);
