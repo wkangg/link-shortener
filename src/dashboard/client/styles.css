@@ -273,15 +273,6 @@ h3 {
     z-index: 1;
 }
 
-::view-transition-old(nav-overview),
-::view-transition-new(nav-overview),
-::view-transition-old(nav-links),
-::view-transition-new(nav-links),
-::view-transition-old(nav-settings),
-::view-transition-new(nav-settings) {
-    animation-duration: 320ms;
-}
-
 @keyframes page-out {
     to {
         opacity: 0;

@@ -188,12 +188,11 @@ function notify(top?: number, animated = false) {
     const root = document.documentElement;
     const from = scrollY;
     const to = top ?? from;
-    // The pill only slides when the nav is on screen before and after. Otherwise it would
-    // fly in from, or off to, wherever the scroll put the nav. Set before the old snapshot.
+    // The pill only slides when the nav is on screen and stays put. When the scroll changes,
+    // the nav moves straight to its new place and the pill and labels would drift off it;
+    // off screen, they'd fly in from wherever it was. Set before the old snapshot.
     const bottom = navBottom();
-    // The pill only slides when the nav stays put. When the scroll changes, the nav moves
-    // straight to its new place, and the pill and labels would drift apart from it.
-    root.toggleAttribute('data-nav-still', from !== to || from >= bottom);
+    root.toggleAttribute('data-nav-still', Math.abs(from - to) >= 1 || from >= bottom);
 
     settingUp = true;
     const transition = document.startViewTransition(() => {
@@ -313,7 +312,12 @@ export function linkClick(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
     const href = event.currentTarget.getAttribute('href') ?? '/';
     // Already there, like the second click of a double-click: navigating again would cut the
-    // running transition short and add a history entry that Back seems to ignore.
-    if (href === location.pathname + location.search) return;
+    // running transition short and add a history entry that Back seems to ignore. It still
+    // goes back to the top, as opening the page does.
+    if (href === location.pathname + location.search) {
+        settleScroll();
+        scrollTo(0, 0);
+        return;
+    }
     navigate(href);
 }
