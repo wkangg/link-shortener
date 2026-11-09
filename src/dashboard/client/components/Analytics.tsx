@@ -157,8 +157,11 @@ export function Analytics({ linkId }: AnalyticsProps) {
         now
     });
     const key = `${tick}|${params}`;
-    const summary = useApi(`summary|${key}`, () => api.summary(params));
-    const series = useApi(`series|${key}`, () => api.timeseries(params));
+    // Data is kept for next time only with the filters the page opens with (useApi).
+    const atDefaults = preset === '30d' && !bots && !dc && !scrapers && vpn && !abusive && !search;
+    const keep = atDefaults ? `stats|${linkId}` : undefined;
+    const summary = useApi(`summary|${key}`, () => api.summary(params), keep && `${keep}|summary`);
+    const series = useApi(`series|${key}`, () => api.timeseries(params), keep && `${keep}|series`);
 
     const selectRow = (dim: string, row: TopRow) => {
         if (dim === 'link' && linkId !== undefined) return;
@@ -264,6 +267,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
                         tabs={panel.tabs}
                         params={params}
                         refreshKey={String(tick)}
+                        keep={keep && `${keep}|${panel.title}`}
                         drill={panel.drill}
                         onSelect={selectRow}
                         isActive={isRowActive}
@@ -274,6 +278,7 @@ export function Analytics({ linkId }: AnalyticsProps) {
             <ClickHistory
                 params={params}
                 refreshKey={String(tick)}
+                keep={keep && `${keep}|clicks`}
                 showLink={linkId === undefined}
                 toggles={toggles}
                 text={text}

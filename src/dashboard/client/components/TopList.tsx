@@ -17,6 +17,8 @@ interface TopListProps {
     /** Stats query params without `dim`. */
     params: URLSearchParams;
     refreshKey: string;
+    /** useApi `keep` name while the filters are at their defaults. */
+    keep?: string;
     onSelect: (dim: string, row: TopRow) => void;
     /** Whether the row's filter is in the search, so clicking it again takes it off. */
     isActive: (dim: string, row: TopRow) => boolean;
@@ -41,6 +43,7 @@ export function TopList({
     tabs,
     params,
     refreshKey,
+    keep,
     onSelect,
     isActive,
     drill = false
@@ -53,7 +56,11 @@ export function TopList({
     const query = new URLSearchParams(params);
     query.set('dim', dim);
     query.set('limit', '10');
-    const { data, error } = useApi(`${refreshKey}|${query}`, () => api.top(query));
+    const { data, error } = useApi(
+        `${refreshKey}|${query}`,
+        () => api.top(query),
+        keep && `${keep}|${dim}`
+    );
     const rows = data?.rows ?? [];
     const max = Math.max(1, ...rows.map(r => r.clicks));
 

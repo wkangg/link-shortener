@@ -27,7 +27,7 @@ export function WebhooksSection() {
     const toast = useToast();
     const [version, setVersion] = useState(0);
     const [open, setOpen] = useState<Open | null>(null);
-    const endpoints = useApi(`webhooks:${version}`, () => api.webhooks());
+    const endpoints = useApi(`webhooks:${version}`, () => api.webhooks(), 'webhooks');
     const reload = () => setVersion(v => v + 1);
 
     const act = async (run: () => Promise<unknown>, done: string) => {

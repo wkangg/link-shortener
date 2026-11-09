@@ -17,6 +17,7 @@ import type {
     WebhookSecretResponse,
     WebhookSkipCategory
 } from '../../shared/types.ts';
+import { forgetKept } from './useApi.ts';
 
 export class ApiRequestError extends Error {
     readonly status: number;
@@ -31,10 +32,16 @@ export class ApiRequestError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    // A write may change data pages kept to show on return (useApi), even if it fails. Forget
+    // it before (for loads already on their way) and after (for loads sent meanwhile).
+    const write = method !== 'GET';
+    if (write) forgetKept();
     const res = await fetch(path, {
         method,
         headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body)
+    }).finally(() => {
+        if (write) forgetKept();
     });
     if (res.status === 204) return undefined as T;
     const data: unknown = await res.json().catch(() => ({ error: res.statusText }));
