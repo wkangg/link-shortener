@@ -383,7 +383,7 @@ export function apiRoutes(deps: ApiDeps) {
                         next = pages.next();
                     },
                     cancel() {
-                        pages.return(undefined);
+                        pages.return(null);
                     }
                 });
                 const date = new Date().toISOString().slice(0, 10);
