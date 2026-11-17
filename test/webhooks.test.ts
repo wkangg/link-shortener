@@ -1085,6 +1085,36 @@ describe('discord formatting', () => {
         expect(clicks.every(e => e.title === 'Click on s.example/gh')).toBe(true);
     });
 
+    test('a long summary gives way when it and one click are over the limit', () => {
+        // 150 different links fill the summary; the newest clicks are as long as they get.
+        const events = Array.from({ length: 160 }, (_, i) => {
+            const e = bigEvent();
+            e.data.link.shortUrl = `${SHORT}/${String(i).padStart(3, '0')}${'s'.repeat(40)}`;
+            e.data.link.title = '*'.repeat(200);
+            e.data.click.utm = {
+                source: '_'.repeat(200),
+                medium: '_'.repeat(200),
+                campaign: '_'.repeat(200),
+                term: null,
+                content: null
+            };
+            e.data.click.userAgent = '_'.repeat(512);
+            return e;
+        });
+        const message = clicksMessage(events, DASH);
+        const text = message.embeds
+            .flatMap(e => [
+                e.title,
+                e.description,
+                e.footer?.text,
+                ...(e.fields ?? []).flatMap(f => [f.name, f.value])
+            ])
+            .join('');
+        expect(text.length).toBeLessThanOrEqual(6000);
+        expect(message.embeds).toHaveLength(2);
+        expect(message.embeds[0]?.title).toBe('+159 more clicks');
+    });
+
     test('rate-limit waits come from the 429 body or the bucket headers', async () => {
         expect(await discordWaitMs(Response.json({ retry_after: 1.5 }, { status: 429 }))).toBe(
             1500

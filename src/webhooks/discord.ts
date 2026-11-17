@@ -44,6 +44,7 @@ function flag(code: string | null): string {
 }
 
 function clip(text: string, max: number): string {
+    if (max <= 0) return '';
     return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
@@ -147,8 +148,18 @@ export function clicksMessage(events: LinkClickedEvent[], dashOrigin: string): D
             embeds: [...(rest.length > 0 ? [summaryEmbed(rest)] : []), ...embeds.slice(-shown)],
             allowed_mentions: { parse: [] }
         };
-        if (shown <= 1 || textLength(message.embeds) <= MESSAGE_MAX) return message;
-        shown--;
+        const over = textLength(message.embeds) - MESSAGE_MAX;
+        if (over <= 0) return message;
+        if (shown > 1) {
+            shown--;
+            continue;
+        }
+        // One click left and still too long: the summary's list of links gives way.
+        const summary = message.embeds[0];
+        if (rest.length > 0 && summary?.description) {
+            summary.description = clip(summary.description, summary.description.length - over);
+        }
+        return message;
     }
 }
 
