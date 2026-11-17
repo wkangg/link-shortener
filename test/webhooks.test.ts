@@ -389,6 +389,28 @@ describe('outbox', () => {
         expect(p.events()).toEqual([]);
     });
 
+    test('a click still buffered when its link is deleted is dropped', () => {
+        const p = pipeline();
+        p.addEndpoint();
+        const kept = p.links.create({ url: 'https://example.org' });
+        const gone = p.links.create({ url: 'https://example.com' });
+        for (const c of [raw(gone.id), raw(kept.id)]) p.buffer.push(c);
+        p.links.delete(gone.id);
+
+        expect(p.buffer.flush()).toBe(1);
+        // SQLite hands the deleted link's id to the next link, which starts empty.
+        const next = p.links.create({ url: 'https://example.net' });
+        expect(next.id).toBe(gone.id);
+        expect(p.links.list().links.find(l => l.id === next.id)).toMatchObject({ clicks: 0 });
+        const orphans = p.db
+            .query<{ n: number }, []>(
+                'SELECT COUNT(*) AS n FROM clicks WHERE link_id NOT IN (SELECT id FROM links)'
+            )
+            .get();
+        expect(orphans?.n).toBe(0);
+        expect(p.events()).toHaveLength(1);
+    });
+
     test('one event per endpoint per click, bots dropped where skipped, tags filtered', () => {
         const p = pipeline();
         const tagged = p.links.create({ url: 'https://example.com', tags: ['dev'] });

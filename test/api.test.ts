@@ -29,6 +29,10 @@ const clickStatus = async (path: string) => {
     const res = await t.click(path);
     return res.status;
 };
+const createLink = async () => {
+    const res = await send('POST', '/api/links', { url: 'https://example.com/' });
+    return (await res.json()) as Link;
+};
 const SAFARI =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
@@ -192,6 +196,19 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(await t.status('/api/links')).toBe(401);
         expect(await t.status('/api/health')).toBe(200);
         t.auth.identity = { subject: 'me@example.com' };
+    });
+
+    test('clicks still buffered when a link is deleted go with it', async () => {
+        const gone = await createLink();
+        await t.click(`/${gone.slug}`, { 'user-agent': SAFARI });
+        expect(await t.status(`/api/links/${gone.id}`, { method: 'DELETE' })).toBe(204);
+
+        // The next link gets the same id, and must not start with that click.
+        const next = await createLink();
+        expect(next.id).toBe(gone.id);
+        t.app.clicks.flush();
+        const list = await t.get<LinkListResponse>('/api/links');
+        expect(list.links.find(l => l.id === next.id)).toMatchObject({ clicks: 0 });
     });
 });
 

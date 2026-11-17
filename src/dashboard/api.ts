@@ -287,6 +287,9 @@ export function apiRoutes(deps: ApiDeps) {
             }),
             DELETE: guard<'/api/links/:id'>(req => {
                 const id = parseId(req.params.id);
+                // Write its buffered clicks first so they go with it, rather than
+                // landing on the next link, which gets the same id.
+                deps.flushClicks();
                 return id !== null && links.delete(id)
                     ? new Response(null, { status: 204 })
                     : error('Link not found', 404);
