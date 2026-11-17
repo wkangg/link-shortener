@@ -182,6 +182,7 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(await t.status('/api/links?limit=1.5')).toBe(200);
         expect(await t.status(`/api/stats/top?dim=country&limit=2.5&${range()}`)).toBe(200);
         expect(await t.status(`/api/stats/clicks?limit=2.5&offset=0.5&${range()}`)).toBe(200);
+        expect(await t.status('/api/links?offset=1e20')).toBe(200);
     });
 
     test('bad stats queries are 400s', async () => {
@@ -202,7 +203,7 @@ describe('links API + redirects + analytics, end to end', () => {
 
         // Outside production, the dashboard opened by address may write to itself.
         const host = new URL(t.app.dash.url).host;
-        expect(isOwnAddress(`http://${host}`, host)).toBe(host.startsWith('localhost'));
+        expect(isOwnAddress(`http://${host}`, host)).toBe(true);
         expect(isOwnAddress('http://192.168.1.5:3001', '192.168.1.5:3001')).toBe(true);
         expect(isOwnAddress('http://[::1]:3001', '[::1]:3001')).toBe(true);
         expect(isOwnAddress('http://192.168.1.5:3001', '192.168.1.6:3001')).toBe(false);

@@ -534,7 +534,7 @@ export class Stats {
                         c.ad_blocker, c.latitude, c.longitude, c.memory, c.cpu_cores, c.platform,
                         c.touch_points
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
-                 WHERE ${where.sql} AND c.id <= ? AND (c.ts < ? OR (c.ts = ? AND c.id < ?))
+                 WHERE ${where.sql} AND c.id <= ? AND (c.ts < ? OR c.id < ?)
                  ORDER BY c.ts DESC, c.id DESC LIMIT ?`
         );
         // Clicks written while the export runs are left out, so the file is the
@@ -545,7 +545,10 @@ export class Stats {
         let ts = Infinity;
         let id = Infinity;
         for (;;) {
-            const rows = page.values(...where.params, newest, ts, ts, id, pageSize);
+            // The range ends at the last click sent, so each page starts reading there
+            // rather than from the top of the range again.
+            const { params } = this.#where(query, query.from, Math.min(query.to, ts + 1));
+            const rows = page.values(...params, newest, ts, id, pageSize);
             const last = rows.at(-1);
             if (!last) return;
             let text = '';

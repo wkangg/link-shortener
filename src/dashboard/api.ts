@@ -194,10 +194,10 @@ export function isOwnAddress(origin: string, host: string | null): boolean {
     return url.host === host && (name === 'localhost' || isIP(name) !== 0);
 }
 
-/** A whole-number query parameter; anything else (missing, text, 1.5 rounded down) is safe to bind. */
+/** A whole-number query parameter: 1.5 is rounded down; text and numbers too big to bind fall back. */
 function numberParam(params: URLSearchParams, name: string, fallback: number): number {
-    const value = Number(params.get(name) ?? fallback);
-    return Number.isFinite(value) ? Math.trunc(value) : fallback;
+    const value = Math.trunc(Number(params.get(name) ?? fallback));
+    return Number.isSafeInteger(value) ? value : fallback;
 }
 
 function parseListQuery(req: Request): ListOptions {
@@ -367,16 +367,23 @@ export function apiRoutes(deps: ApiDeps) {
 
         '/api/export.csv': {
             GET: guard(req => {
-                // Sent a page of clicks at a time, so other requests run in between.
                 const pages = stats.csvPages(statsQueryOf(req));
                 // The first piece is read here, so a bad filter is a 400 and not a broken download.
                 let next = pages.next();
                 const encoder = new TextEncoder();
                 const body = new ReadableStream<Uint8Array>({
-                    pull(controller) {
+                    async pull(controller) {
                         if (next.done) return controller.close();
                         controller.enqueue(encoder.encode(next.value));
+                        // A fast reader asks for the next page at once. Waiting a turn lets
+                        // redirects and other requests run between pages.
+                        await new Promise<void>(resolve => {
+                            setImmediate(resolve);
+                        });
                         next = pages.next();
+                    },
+                    cancel() {
+                        pages.return(undefined);
                     }
                 });
                 const date = new Date().toISOString().slice(0, 10);
