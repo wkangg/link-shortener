@@ -129,7 +129,8 @@ export function startApp(opts: AppOptions) {
         abuseMinScore: config.abuseMinScore,
         flushClicks: () => {
             clicks.flush();
-            return clicks.pending === 0;
+            // Hostnames a flush queues for the next one aren't unsaved clicks.
+            return clicks.unsaved === 0;
         }
     });
 

@@ -348,6 +348,37 @@ describe('abuse filter', () => {
     });
 });
 
+describe('hostnames', () => {
+    test('a hostname never lands on another click that took a deleted click’s id', async () => {
+        const t = setup({
+            reverseDns: ip => Promise.resolve(ip === HOSTING ? 'ec2-1.amazonaws.com' : null)
+        });
+        t.clicks.push(click(HOSTING));
+        t.clicks.flush();
+        await settle(); // the hostname for click 1 is now queued
+        // The click is deleted (its link was), and a home visitor's click takes its id.
+        t.db.run('DELETE FROM clicks');
+        t.clicks.push(click(HOME));
+        t.clicks.flush();
+        expect(
+            t.db.query('SELECT id, ip, hostname, is_datacenter AS dc FROM clicks').all()
+        ).toEqual([{ id: 1, ip: HOME, hostname: null, dc: 0 }]);
+    });
+
+    test('a hostname queued by a flush doesn’t count as an unsaved click', async () => {
+        const t = setup({ reverseDns: () => Promise.resolve('host.example.net') });
+        t.clicks.push(click(HOME));
+        t.clicks.flush();
+        await settle();
+        t.clicks.flush(); // writes the hostname, now cached for this IP
+        // A repeat visitor: the flush that saves the click queues its hostname at once.
+        t.clicks.push(click(HOME));
+        t.clicks.flush();
+        expect(t.clicks.pending).toBe(1);
+        expect(t.clicks.unsaved).toBe(0);
+    });
+});
+
 describe('backfillDatacenterHostnames', () => {
     test('flags old clicks whose hostname is a datacenter', () => {
         const db = openDatabase(':memory:');

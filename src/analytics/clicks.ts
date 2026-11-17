@@ -164,7 +164,7 @@ interface ClickBufferOptions extends EnrichOptions {
 export class ClickBuffer implements ClickSink {
     #pending: RawClick[] = [];
     #signals: PendingSignals[] = [];
-    #hostnames: { id: number; hostname: string; datacenter: 0 | 1 }[] = [];
+    #hostnames: { id: number; ip: string; hostname: string; datacenter: 0 | 1 }[] = [];
     readonly #hostnameCache = new Map<string, string | null>();
     #lookups = 0;
     #timer: ReturnType<typeof setInterval> | null = null;
@@ -225,7 +225,9 @@ export class ClickBuffer implements ClickSink {
         );
         this.#setHostname = db.query(
             // Only ever adds the flag: AbuseIPDB may have set it before reverse DNS answered.
-            'UPDATE clicks SET hostname = ?, is_datacenter = MAX(is_datacenter, ?) WHERE id = ?'
+            // The IP is checked too: if the click was deleted meanwhile, its id may by now
+            // belong to another visitor's click.
+            'UPDATE clicks SET hostname = ?, is_datacenter = MAX(is_datacenter, ?) WHERE id = ? AND ip = ?'
         );
         this.#expireTokens = db.query<{ id: number }, [number]>(
             'UPDATE clicks SET token = NULL WHERE token IS NOT NULL AND ts < ? RETURNING id'
@@ -251,6 +253,11 @@ export class ClickBuffer implements ClickSink {
     start(): void {
         if (this.#timer) return;
         this.#timer = setInterval(() => this.flush(), this.#opts.intervalMs);
+    }
+
+    /** Clicks not written yet. Zero after a flush that worked. */
+    get unsaved(): number {
+        return this.#pending.length;
     }
 
     /** Clicks, signals and hostnames waiting for the next flush. */
@@ -355,7 +362,7 @@ export class ClickBuffer implements ClickSink {
                     );
                 }
                 for (const h of hostnames) {
-                    this.#setHostname.run(h.hostname, h.datacenter, h.id);
+                    this.#setHostname.run(h.hostname, h.datacenter, h.id, h.ip);
                     touched.push(h.id);
                 }
                 if (signals.length > 0 || expire) {
@@ -386,7 +393,7 @@ export class ClickBuffer implements ClickSink {
         if (!reverseDns) return;
         const cached = this.#hostnameCache.get(ip);
         if (cached !== undefined) {
-            if (cached) this.#queueHostname(id, cached);
+            if (cached) this.#queueHostname(id, ip, cached);
             return;
         }
         if (this.#lookups >= MAX_LOOKUPS) return;
@@ -396,13 +403,18 @@ export class ClickBuffer implements ClickSink {
             .then(hostname => {
                 if (this.#hostnameCache.size >= MAX_HOSTNAMES) this.#hostnameCache.clear();
                 this.#hostnameCache.set(ip, hostname);
-                if (hostname) this.#queueHostname(id, hostname);
+                if (hostname) this.#queueHostname(id, ip, hostname);
             })
             .finally(() => this.#lookups--);
     }
 
-    #queueHostname(id: number, hostname: string): void {
-        this.#hostnames.push({ id, hostname, datacenter: isDatacenterHostname(hostname) ? 1 : 0 });
+    #queueHostname(id: number, ip: string, hostname: string): void {
+        this.#hostnames.push({
+            id,
+            ip,
+            hostname,
+            datacenter: isDatacenterHostname(hostname) ? 1 : 0
+        });
     }
 
     stop(): void {
