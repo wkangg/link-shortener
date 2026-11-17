@@ -224,6 +224,19 @@ describe('csv', () => {
         expect([...stats.csvPages(q(), 3)].join('')).toBe(whole);
     });
 
+    test('a click written during an export is left out of it', () => {
+        const whole = stats.csv(q());
+        const pages = stats.csvPages(q(), 1);
+        const parts = [pages.next().value, pages.next().value];
+        // Older than the page just read, so paging alone would pick it up.
+        const { lastInsertRowid } = db
+            .query("INSERT INTO clicks (link_id, ts, source) VALUES (1, ?, 'Direct')")
+            .run(T0 + 1);
+        parts.push(...pages);
+        db.query('DELETE FROM clicks WHERE id = ?').run(lastInsertRowid);
+        expect(parts.join('')).toBe(whole);
+    });
+
     test('text that a spreadsheet would run as a formula is escaped', () => {
         expect(csvCell('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
         expect(csvCell('@SUM(A1)')).toBe("'@SUM(A1)");
