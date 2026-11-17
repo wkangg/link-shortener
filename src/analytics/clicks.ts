@@ -143,7 +143,7 @@ interface PendingSignals {
     ts: number;
 }
 
-export interface ClickBufferOptions extends EnrichOptions {
+interface ClickBufferOptions extends EnrichOptions {
     intervalMs?: number;
     /** Clicks held in memory before new ones are dropped (if SQLite is stuck). */
     maxBuffered?: number;

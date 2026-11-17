@@ -31,9 +31,9 @@ export interface Condition {
 }
 
 /** Defaults a search can take over (see `whereClause`). */
-export type SearchOverride = 'bots' | 'dc' | 'abusive' | 'scrapers' | 'vpn';
+type SearchOverride = 'bots' | 'dc' | 'abusive' | 'scrapers' | 'vpn';
 
-export interface CompiledSearch {
+interface CompiledSearch {
     condition: Condition | null;
     overrides: Set<SearchOverride>;
 }
@@ -84,7 +84,7 @@ const NUMBER_FIELDS: Record<string, string> = {
 };
 
 /** Other names for click search fields and flags. */
-export const ALIASES: Record<string, string> = {
+const ALIASES: Record<string, string> = {
     hostname: 'host',
     ref: 'referrer',
     useragent: 'ua',
@@ -170,7 +170,7 @@ export function tokenize(q: string): Token[] {
     return tokens;
 }
 
-export type SearchNode =
+type SearchNode =
     | { kind: 'term'; term: Term }
     | { kind: 'and' | 'or'; nodes: SearchNode[] }
     | { kind: 'not'; node: SearchNode };

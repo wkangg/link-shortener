@@ -203,7 +203,7 @@ export function fetchText(timeoutMs = 60_000): FetchText {
     };
 }
 
-export interface VpnListsOptions {
+interface VpnListsOptions {
     /** Downloads a list; null never fetches (only stored lists are used). */
     fetchText?: FetchText | null;
     now?: () => number;

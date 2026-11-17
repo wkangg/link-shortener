@@ -21,7 +21,7 @@ import { EndpointRepo } from './webhooks/endpoints.ts';
 import { WebhookOutbox } from './webhooks/outbox.ts';
 import type { ResolveHost } from './webhooks/url.ts';
 
-export interface AppOptions {
+interface AppOptions {
     config: Config;
     db: Database;
     version: string;

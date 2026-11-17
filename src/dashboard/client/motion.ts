@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from 'react';
 
 /** How long numbers and the chart take to ease to new data. */
-export const DURATION_MS = 600;
+const DURATION_MS = 600;
 
-export const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 
 // Called lazily so importing this module without a DOM (tests) doesn't throw.
 const reducedMotionQuery = () => matchMedia('(prefers-reduced-motion: reduce)');

@@ -40,7 +40,7 @@ export interface ClickFacts {
     vpn?: string | null;
 }
 
-export interface Verdict {
+interface Verdict {
     /** The VPN or relay, e.g. "Tor" or "VPN host: M247". */
     vpn: string | null;
     /** Why the click looks automated. */
@@ -48,7 +48,7 @@ export interface Verdict {
 }
 
 /** Looks an IP up in the VPN / relay lists (see analytics/vpn.ts). */
-export type VpnLookup = (ip: string) => string | null;
+type VpnLookup = (ip: string) => string | null;
 
 // Hosting companies that mostly rent servers to VPN services. Matched against
 // the reverse-DNS hostname and the ISP name. Their IPs are still hosting IPs, so
@@ -128,7 +128,7 @@ const SELECT = `SELECT id, ts, ip, user_agent AS ua, is_bot, language, timezone,
                 FROM clicks`;
 const BATCH = 5000;
 
-export interface ClickClassifierOptions {
+interface ClickClassifierOptions {
     lookup?: VpnLookup;
     now?: () => number;
 }

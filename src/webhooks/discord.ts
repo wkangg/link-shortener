@@ -3,7 +3,7 @@
 import type { LinkClickedEvent } from './payload.ts';
 
 /** Embeds per message (Discord's maximum). */
-export const MAX_EMBEDS = 10;
+const MAX_EMBEDS = 10;
 /** Messages to one Discord endpoint are at least this far apart. */
 export const DISCORD_INTERVAL_MS = 2000;
 
@@ -19,7 +19,7 @@ const FOOTER_URL_MAX = 200;
 const COLOR = 5_793_266;
 const COLOR_FLAGGED = 15_774_258;
 
-export interface DiscordEmbed {
+interface DiscordEmbed {
     title?: string;
     url?: string;
     description?: string;

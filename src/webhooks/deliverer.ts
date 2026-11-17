@@ -25,7 +25,7 @@ export const AUTO_DISABLE_AFTER_MS = 3 * 86_400_000;
 /** Delivered, skipped and failed events are kept this long for the delivery log. */
 export const KEEP_FINISHED_MS = 7 * 86_400_000;
 /** Pending events beyond this are dropped, oldest first, so a dead endpoint can't fill the disk. */
-export const MAX_PENDING = 100_000;
+const MAX_PENDING = 100_000;
 
 const MAINTENANCE_INTERVAL_MS = 60_000;
 /** Events a standard endpoint's worker sends before giving its slot to the next endpoint. */
@@ -36,7 +36,7 @@ const MAX_ERROR = 300;
 
 export type WebhookFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-export interface DelivererOptions {
+interface DelivererOptions {
     shortOrigin: string;
     /** Discord embeds link to the link's dashboard page. */
     dashOrigin: string;

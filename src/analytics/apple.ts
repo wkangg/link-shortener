@@ -136,7 +136,7 @@ export function modelFromScreen(screen: string, kind: 'iPhone' | 'iPad'): string
     return name ? `Apple ${name}` : null;
 }
 
-export interface AppleRefinement {
+interface AppleRefinement {
     os: string;
     device: 'mobile' | 'tablet';
     osVersion: string | null;

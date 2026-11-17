@@ -43,7 +43,7 @@ const DATACENTER_USAGE = [
 ];
 const DATACENTER_SET = new Set(DATACENTER_USAGE);
 
-export function isDatacenterUsage(usageType: string | null): boolean {
+function isDatacenterUsage(usageType: string | null): boolean {
     return usageType !== null && DATACENTER_SET.has(usageType);
 }
 
@@ -102,7 +102,7 @@ export function parseCheck(data: Record<string, unknown>): Reputation {
     };
 }
 
-export interface IpReputationOptions {
+interface IpReputationOptions {
     check: CheckIp;
     /** Lookups per UTC day. */
     dailyLimit?: number;

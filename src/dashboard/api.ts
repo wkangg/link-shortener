@@ -156,7 +156,7 @@ function parseId(raw: string): number | null {
     return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-export function parseStatsQuery(url: URL): StatsQuery {
+function parseStatsQuery(url: URL): StatsQuery {
     const parsed = statsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
     if (!parsed.success) throw new BadQueryError(z.prettifyError(parsed.error));
     const { from, to, tz, link, bots, dc, scrapers, vpn, abusive, q } = parsed.data;
@@ -200,7 +200,7 @@ function numberParam(params: URLSearchParams, name: string, fallback: number): n
     return Number.isFinite(value) ? Math.trunc(value) : fallback;
 }
 
-export function parseListQuery(req: Request): ListOptions {
+function parseListQuery(req: Request): ListOptions {
     const p = new URL(req.url).searchParams;
     return {
         q: p.get('q') ?? undefined,

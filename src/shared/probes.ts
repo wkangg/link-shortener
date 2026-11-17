@@ -72,7 +72,7 @@ export const FONTS: readonly string[] = [
 ];
 
 /** Browser settings, in the order the page reports them: label when on, and when off. */
-export const SETTINGS: readonly (readonly [on: string, off: string | null])[] = [
+const SETTINGS: readonly (readonly [on: string, off: string | null])[] = [
     ['cookies on', 'cookies off'],
     ['Do Not Track', null],
     ['Global Privacy Control', null],

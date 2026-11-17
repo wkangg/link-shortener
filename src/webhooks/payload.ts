@@ -134,7 +134,7 @@ export function lookupVerdictAt(
     return Math.min(now + LOOKUP_RECHECK_MS, deadline);
 }
 
-export interface WebhookLink {
+interface WebhookLink {
     id: number;
     slug: string;
     shortUrl: string;
@@ -143,7 +143,7 @@ export interface WebhookLink {
     tags: string[];
 }
 
-export interface WebhookClick {
+interface WebhookClick {
     id: number;
     /** ISO 8601. */
     ts: string;
@@ -190,7 +190,7 @@ export interface LinkClickedEvent {
     data: { link: WebhookLink; click: WebhookClick };
 }
 
-export interface TestEvent {
+interface TestEvent {
     type: 'webhook.test';
     timestamp: string;
     data: { message: string };
@@ -211,7 +211,7 @@ export function osVersionOf(
 }
 
 /** The short URL of a slug ('' is the root link). */
-export function shortUrlOf(shortOrigin: string, slug: string): string {
+function shortUrlOf(shortOrigin: string, slug: string): string {
     return `${shortOrigin}/${slug}`;
 }
 

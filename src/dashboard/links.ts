@@ -60,7 +60,7 @@ const DAY = 86_400_000;
 const SPARK_DAYS = 7;
 
 /** Anything holding cached slugs (the redirect cache). */
-export interface SlugInvalidator {
+interface SlugInvalidator {
     invalidate(slug: string): void;
 }
 
@@ -360,7 +360,7 @@ const LINK_COLUMNS: Record<string, string> = {
  * (`tag:a tag:b`) is either; a leading `-` negates one; "quoted phrases" stay
  * together; `||`, `&&` and brackets combine them as in the click search.
  */
-export function compileLinkSearch(q: string): { where: string[]; params: (string | number)[] } {
+function compileLinkSearch(q: string): { where: string[]; params: (string | number)[] } {
     const tree = parseSearch(q, LINK_SEARCH_DIALECT);
     if (!tree) return { where: [], params: [] };
     const { sql, params } = compileTree(tree, linkTermCondition);
