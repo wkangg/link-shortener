@@ -369,12 +369,14 @@ export function apiRoutes(deps: ApiDeps) {
             GET: guard(req => {
                 // Sent a page of clicks at a time, so other requests run in between.
                 const pages = stats.csvPages(statsQueryOf(req));
+                // The first piece is read here, so a bad filter is a 400 and not a broken download.
+                let next = pages.next();
                 const encoder = new TextEncoder();
                 const body = new ReadableStream<Uint8Array>({
                     pull(controller) {
-                        const next = pages.next();
-                        if (next.done) controller.close();
-                        else controller.enqueue(encoder.encode(next.value));
+                        if (next.done) return controller.close();
+                        controller.enqueue(encoder.encode(next.value));
+                        next = pages.next();
                     }
                 });
                 const date = new Date().toISOString().slice(0, 10);

@@ -188,6 +188,7 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(await t.status('/api/stats/summary?from=10&to=5')).toBe(400);
         expect(await t.status(`/api/stats/top?dim=nope&${range()}`)).toBe(400);
         expect(await t.status(`/api/stats/summary?${range()}&f=bogus:x`)).toBe(400);
+        expect(await t.status(`/api/export.csv?${range()}&f=bogus:x`)).toBe(400);
     });
 
     test('auth and origin checks', async () => {
