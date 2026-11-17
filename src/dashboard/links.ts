@@ -8,6 +8,7 @@ import {
     parseSearch,
     type Term
 } from '../analytics/search.ts';
+import { ABUSE_MIN_SCORE, hiddenByDefault } from '../analytics/stats.ts';
 import { LINK_SEARCH_DIALECT } from '../shared/search.ts';
 import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
 import type {
@@ -66,11 +67,23 @@ export class LinkRepo {
     readonly #db: Database;
     readonly #cache: SlugInvalidator;
     readonly #now: () => number;
+    /** Leaves out the clicks analytics hides by default, so the counts match. */
+    readonly #shown: Condition;
 
-    constructor(db: Database, cache: SlugInvalidator, now: () => number = Date.now) {
+    constructor(
+        db: Database,
+        cache: SlugInvalidator,
+        now: () => number = Date.now,
+        abuseMinScore = ABUSE_MIN_SCORE
+    ) {
         this.#db = db;
         this.#cache = cache;
         this.#now = now;
+        const hidden = Object.values(hiddenByDefault(abuseMinScore));
+        this.#shown = {
+            sql: hidden.map(h => h.sql).join(' AND '),
+            params: hidden.flatMap(h => h.params)
+        };
     }
 
     get(id: number): Link | null {
@@ -101,16 +114,18 @@ export class LinkRepo {
         const order = opts.sort === 'clicks' ? 'clicks DESC, l.id DESC' : 'l.id DESC';
         const limit = Math.min(Math.max(opts.limit ?? 50, 1), 500);
         const offset = Math.max(opts.offset ?? 0, 0);
+        const shown = this.#shown;
 
         const rows = this.#db
             .query<LinkRow & { clicks: number; visitors: number }, (string | number)[]>(
                 `SELECT l.*,
-                    (SELECT COUNT(*) FROM clicks c WHERE c.link_id = l.id AND c.is_bot = 0) AS clicks,
+                    (SELECT COUNT(*) FROM clicks c
+                     WHERE c.link_id = l.id AND ${shown.sql}) AS clicks,
                     (SELECT COUNT(DISTINCT c.visitor_hash) FROM clicks c
-                     WHERE c.link_id = l.id AND c.is_bot = 0) AS visitors
+                     WHERE c.link_id = l.id AND ${shown.sql}) AS visitors
                  FROM links l WHERE ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`
             )
-            .all(...params, limit, offset);
+            .all(...shown.params, ...shown.params, ...params, limit, offset);
         const total =
             this.#db
                 .query<{ n: number }, (string | number)[]>(
@@ -315,12 +330,12 @@ export class LinkRepo {
         const today = Math.floor((this.#now() + offset) / DAY);
         const firstDay = today - SPARK_DAYS + 1;
         const rows = this.#db
-            .query<{ link_id: number; d: number; n: number }, number[]>(
-                `SELECT link_id, (ts + ?) / ${DAY} AS d, COUNT(*) AS n FROM clicks
-                 WHERE link_id IN (${placeholders(ids)}) AND ts >= ? AND is_bot = 0
-                 GROUP BY link_id, d`
+            .query<{ link_id: number; d: number; n: number }, (string | number)[]>(
+                `SELECT c.link_id, (c.ts + ?) / ${DAY} AS d, COUNT(*) AS n FROM clicks c
+                 WHERE c.link_id IN (${placeholders(ids)}) AND c.ts >= ? AND ${this.#shown.sql}
+                 GROUP BY c.link_id, d`
             )
-            .all(offset, ...ids, firstDay * DAY - offset);
+            .all(offset, ...ids, firstDay * DAY - offset, ...this.#shown.params);
         for (const row of rows) {
             let spark = out.get(row.link_id);
             if (!spark) {

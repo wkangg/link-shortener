@@ -115,7 +115,7 @@ export function startApp(opts: AppOptions) {
         dev: !config.isProd,
         db,
         version: opts.version,
-        links: new LinkRepo(db, cache),
+        links: new LinkRepo(db, cache, Date.now, config.abuseMinScore),
         webhooks: new EndpointRepo(db, outbox, {
             allowPrivate: !config.isProd,
             resolve: opts.resolveHost

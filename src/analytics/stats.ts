@@ -101,7 +101,20 @@ export function filterCondition(filter: string): { group: string; condition: Con
 }
 
 /** Default for `abuseMinScore`: matches ABUSEIPDB_MIN_SCORE's default. */
-const ABUSE_MIN_SCORE = 25;
+export const ABUSE_MIN_SCORE = 25;
+
+/**
+ * The clicks hidden by default, as one condition per toggle that shows them
+ * (columns on `c`). Shared with the links page so its counts match analytics.
+ */
+export function hiddenByDefault(abuseMinScore = ABUSE_MIN_SCORE) {
+    return {
+        bots: { sql: 'c.is_bot = 0', params: [] },
+        scrapers: { sql: 'c.scraper IS NULL', params: [] },
+        dc: { sql: '(c.is_datacenter = 0 OR c.vpn IS NOT NULL)', params: [] },
+        abusive: { sql: '(c.abuse_score IS NULL OR c.abuse_score < ?)', params: [abuseMinScore] }
+    } satisfies Record<string, Condition>;
+}
 
 /**
  * WHERE clause for a query over [from, to). Filters on the same dimension are OR-ed.
@@ -123,16 +136,13 @@ export function whereClause(
         params.push(query.link);
     }
     const search = compileSearch(query.q ?? '', abuseMinScore);
-    if (!query.bots && !search.overrides.has('bots')) parts.push('c.is_bot = 0');
-    if (!query.scrapers && !search.overrides.has('scrapers')) parts.push('c.scraper IS NULL');
-    if (!query.dc && !search.overrides.has('dc')) {
-        parts.push('(c.is_datacenter = 0 OR c.vpn IS NOT NULL)');
+    const hidden = hiddenByDefault(abuseMinScore);
+    for (const key of ['bots', 'scrapers', 'dc', 'abusive'] as const) {
+        if (query[key] || search.overrides.has(key)) continue;
+        parts.push(hidden[key].sql);
+        params.push(...hidden[key].params);
     }
     if (query.vpn === false && !search.overrides.has('vpn')) parts.push('c.vpn IS NULL');
-    if (!query.abusive && !search.overrides.has('abusive')) {
-        parts.push('(c.abuse_score IS NULL OR c.abuse_score < ?)');
-        params.push(abuseMinScore);
-    }
 
     const groups = new Map<string, Condition[]>();
     for (const filter of query.filters) {
