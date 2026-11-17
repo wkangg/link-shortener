@@ -389,6 +389,28 @@ describe('outbox', () => {
         expect(p.events()).toEqual([]);
     });
 
+    test('a click still buffered when its link is deleted is dropped', () => {
+        const p = pipeline();
+        p.addEndpoint();
+        const kept = p.links.create({ url: 'https://example.org' });
+        const gone = p.links.create({ url: 'https://example.com' });
+        for (const c of [raw(gone.id), raw(kept.id)]) p.buffer.push(c);
+        p.links.delete(gone.id);
+
+        expect(p.buffer.flush()).toBe(1);
+        // SQLite hands the deleted link's id to the next link, which starts empty.
+        const next = p.links.create({ url: 'https://example.net' });
+        expect(next.id).toBe(gone.id);
+        expect(p.links.list().links.find(l => l.id === next.id)).toMatchObject({ clicks: 0 });
+        const orphans = p.db
+            .query<{ n: number }, []>(
+                'SELECT COUNT(*) AS n FROM clicks WHERE link_id NOT IN (SELECT id FROM links)'
+            )
+            .get();
+        expect(orphans?.n).toBe(0);
+        expect(p.events()).toHaveLength(1);
+    });
+
     test('one event per endpoint per click, bots dropped where skipped, tags filtered', () => {
         const p = pipeline();
         const tagged = p.links.create({ url: 'https://example.com', tags: ['dev'] });
@@ -953,6 +975,13 @@ function sampleEvent(overrides: Partial<LinkClickedEvent['data']['click']> = {})
     };
 }
 
+/** A click with a 2048-character destination, its IP and a long user agent. */
+function bigEvent(): LinkClickedEvent {
+    const e = sampleEvent({ ip: '203.0.113.5', userAgent: `Mozilla/5.0 ${'x'.repeat(500)}` });
+    e.data.link.url = `https://example.com/${'a'.repeat(2028)}`;
+    return e;
+}
+
 describe('discord formatting', () => {
     test('recognizes and masks Discord webhook URLs', () => {
         expect(isDiscordWebhookUrl(DISCORD_URL)).toBe(true);
@@ -1034,6 +1063,83 @@ describe('discord formatting', () => {
         expect(many.embeds.slice(1).map(e => e.title)).toEqual(
             Array.from({ length: 9 }, () => 'Click on s.example/gh')
         );
+    });
+
+    test('a batch stays inside the 6000 characters Discord allows per message', () => {
+        const message = clicksMessage(Array.from({ length: 10 }, bigEvent), DASH);
+        const text = message.embeds
+            .flatMap(e => [
+                e.title,
+                e.description,
+                e.footer?.text,
+                ...(e.fields ?? []).flatMap(f => [f.name, f.value])
+            ])
+            .join('');
+        expect(text.length).toBeLessThanOrEqual(6000);
+
+        // Every click is either shown or counted in the summary.
+        const [summary, ...clicks] = message.embeds;
+        const more = Number(/^\+(\d+) more/.exec(summary?.title ?? '')?.[1]);
+        expect(more).toBeGreaterThan(0);
+        expect(more + clicks.length).toBe(10);
+        expect(clicks.every(e => e.title === 'Click on s.example/gh')).toBe(true);
+    });
+
+    test('one click with every field full stays inside the limit', () => {
+        const long = 'x'.repeat(2000);
+        const e = sampleEvent({
+            city: long,
+            source: long,
+            browser: long,
+            qr: true,
+            utm: { source: long, medium: long, campaign: long, term: null, content: null },
+            flags: { bot: long, datacenter: true, vpn: 'Tor', scraper: long, abuseScore: 100 },
+            ip: '203.0.113.5',
+            userAgent: long
+        });
+        e.data.link.url = `https://example.com/${'a'.repeat(2028)}`;
+        e.data.link.shortUrl = `https://s.example/${'s'.repeat(300)}`;
+        e.data.link.title = long;
+        const message = clicksMessage([e], DASH);
+        const text = message.embeds
+            .flatMap(m => [
+                m.title,
+                m.description,
+                m.footer?.text,
+                ...(m.fields ?? []).flatMap(f => [f.name, f.value])
+            ])
+            .join('');
+        expect(text.length).toBeLessThanOrEqual(6000);
+    });
+
+    test('a long summary gives way when it and one click are over the limit', () => {
+        // 150 different links fill the summary; the newest clicks are as long as they get.
+        const events = Array.from({ length: 160 }, (_, i) => {
+            const e = bigEvent();
+            e.data.link.shortUrl = `${SHORT}/${String(i).padStart(3, '0')}${'s'.repeat(40)}`;
+            e.data.link.title = '*'.repeat(200);
+            e.data.click.utm = {
+                source: '_'.repeat(200),
+                medium: '_'.repeat(200),
+                campaign: '_'.repeat(200),
+                term: null,
+                content: null
+            };
+            e.data.click.userAgent = '_'.repeat(512);
+            return e;
+        });
+        const message = clicksMessage(events, DASH);
+        const text = message.embeds
+            .flatMap(e => [
+                e.title,
+                e.description,
+                e.footer?.text,
+                ...(e.fields ?? []).flatMap(f => [f.name, f.value])
+            ])
+            .join('');
+        expect(text.length).toBeLessThanOrEqual(6000);
+        expect(message.embeds).toHaveLength(2);
+        expect(message.embeds[0]?.title).toBe('+159 more clicks');
     });
 
     test('rate-limit waits come from the 429 body or the bucket headers', async () => {

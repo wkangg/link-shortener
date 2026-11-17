@@ -59,7 +59,7 @@ export class WebhookRequestError extends Error {
     }
 }
 
-export interface EndpointRepoOptions {
+interface EndpointRepoOptions {
     /** Allow URLs on private networks (development). */
     allowPrivate: boolean;
     resolve?: ResolveHost;

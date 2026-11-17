@@ -14,7 +14,7 @@ export const SLUG_RE = /^[\w-]{1,64}$/;
 export const ROOT_SLUG = '';
 export const ROOT_SLUG_INPUT = '/';
 
-export const RANDOM_SLUG_LENGTH = 6;
+const RANDOM_SLUG_LENGTH = 6;
 
 // Lowercase only: slugs match case-insensitively, so capitals would add no range.
 const ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';

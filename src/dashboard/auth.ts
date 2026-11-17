@@ -10,7 +10,7 @@ export interface Identity {
 /** `peerIp` is the address of the connection itself (not a forwarded header). */
 export type Authenticate = (req: Request, peerIp?: string) => Promise<Identity | null>;
 
-export interface AccessConfig {
+interface AccessConfig {
     teamDomain: string;
     aud: string;
 }

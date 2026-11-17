@@ -16,6 +16,18 @@ export const SIGNALS_DELAY_MS = 5000;
 
 const SETTLED_CATEGORIES = `'datacenter', 'scraper', 'abusive'`;
 
+/**
+ * SQL for "endpoint `e` gets the clicks of link `linkId`" (a SQL expression):
+ * it's for every link, the link was chosen for it, or the link has one of its tags.
+ */
+export function endpointGetsLink(linkId: string): string {
+    return `(e.all_links = 1
+        OR EXISTS (SELECT 1 FROM webhook_endpoint_links el
+                   WHERE el.endpoint_id = e.id AND el.link_id = ${linkId})
+        OR EXISTS (SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
+                   WHERE t.link_id = ${linkId}))`;
+}
+
 export class WebhookOutbox {
     readonly #db: Database;
     readonly #insert;
@@ -39,11 +51,7 @@ export class WebhookOutbox {
              FROM webhook_endpoints e
              WHERE e.enabled = 1
                AND NOT (?3 = 1 AND EXISTS (SELECT 1 FROM json_each(e.skip) WHERE value = 'bot'))
-               AND (e.all_links = 1
-                    OR EXISTS (SELECT 1 FROM webhook_endpoint_links el
-                               WHERE el.endpoint_id = e.id AND el.link_id = ?2)
-                    OR EXISTS (SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
-                               WHERE t.link_id = ?2))`
+               AND ${endpointGetsLink('?2')}`
         );
         this.refresh();
     }

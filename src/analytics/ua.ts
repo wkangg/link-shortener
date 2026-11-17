@@ -3,7 +3,7 @@ import { isbot, isbotMatch } from 'isbot';
 
 import { iosVersion, modelFromHardwareId } from './apple.ts';
 
-export interface UaInfo {
+interface UaInfo {
     browser: string | null;
     os: string | null;
     /** Only for iOS for now, e.g. "18.6" (see analytics/apple.ts). */

@@ -12,7 +12,7 @@ import { Dialog, DialogClose, type DialogHandle } from './Dialog.tsx';
 import { LinkPicker, type PickedLink } from './LinkPicker.tsx';
 import { useToast } from './Toast.tsx';
 
-export const SKIP_LABELS: Record<WebhookSkipCategory, string> = {
+const SKIP_LABELS: Record<WebhookSkipCategory, string> = {
     bot: 'Bots and crawlers',
     datacenter: 'Datacenter and hosting IPs',
     scraper: 'Scrapers',

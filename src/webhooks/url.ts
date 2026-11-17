@@ -21,7 +21,7 @@ export class WebhookUrlError extends Error {
 }
 
 /** Throws a WebhookUrlError unless `raw` is an http(s) URL without credentials. */
-export function parseWebhookUrl(raw: string): URL {
+function parseWebhookUrl(raw: string): URL {
     if (!URL.canParse(raw)) throw new WebhookUrlError('Enter a full http(s) URL');
     const url = new URL(raw);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
@@ -37,7 +37,7 @@ export function parseWebhookUrl(raw: string): URL {
  * Where to send a checked URL. A hostname is pinned to the address that was
  * checked, so a second DNS lookup can't point the request somewhere else.
  */
-export interface WebhookTarget {
+interface WebhookTarget {
     url: string;
     /** The Host header and TLS server name for a pinned hostname. */
     host?: string;

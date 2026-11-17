@@ -85,6 +85,29 @@ describe('LinkRepo', () => {
         expect(repo.allTags()).toEqual([{ tag: 'work', count: 1 }]);
         expect(a.tags).toEqual(['work']);
     });
+
+    test('list counts only the clicks analytics shows by default', () => {
+        const { db, repo } = setup();
+        const link = repo.create({ url: 'https://a.com' });
+        const insert = db.query(
+            `INSERT INTO clicks (link_id, ts, visitor_hash, is_bot, scraper, is_datacenter, vpn, abuse_score)
+             VALUES (?, 900, ?, ?, ?, ?, ?, ?)`
+        );
+        insert.run(link.id, 'person', 0, null, 0, null, null);
+        insert.run(link.id, 'bot', 1, null, 0, null, null);
+        insert.run(link.id, 'scraper', 0, 'No user agent', 0, null, null);
+        insert.run(link.id, 'datacenter', 0, null, 1, null, null);
+        insert.run(link.id, 'abusive', 0, null, 0, null, 80);
+
+        const only = () => repo.list().links[0];
+        expect(only()).toMatchObject({ clicks: 1, visitors: 1 });
+        expect(only()?.spark.reduce((a, b) => a + b)).toBe(1);
+
+        // A VPN on a hosting network is still a person.
+        insert.run(link.id, 'vpn', 0, null, 1, 'Tor', null);
+        expect(only()).toMatchObject({ clicks: 2, visitors: 2 });
+        expect(only()?.spark.reduce((a, b) => a + b)).toBe(2);
+    });
 });
 
 describe('link validation', () => {

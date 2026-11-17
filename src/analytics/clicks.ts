@@ -143,7 +143,7 @@ interface PendingSignals {
     ts: number;
 }
 
-export interface ClickBufferOptions extends EnrichOptions {
+interface ClickBufferOptions extends EnrichOptions {
     intervalMs?: number;
     /** Clicks held in memory before new ones are dropped (if SQLite is stuck). */
     maxBuffered?: number;
@@ -164,7 +164,7 @@ export interface ClickBufferOptions extends EnrichOptions {
 export class ClickBuffer implements ClickSink {
     #pending: RawClick[] = [];
     #signals: PendingSignals[] = [];
-    #hostnames: { id: number; hostname: string; datacenter: 0 | 1 }[] = [];
+    #hostnames: { id: number; ip: string; hostname: string; datacenter: 0 | 1 }[] = [];
     readonly #hostnameCache = new Map<string, string | null>();
     #lookups = 0;
     #timer: ReturnType<typeof setInterval> | null = null;
@@ -191,7 +191,10 @@ export class ClickBuffer implements ClickSink {
         };
         this.#classifier = opts.classifier ?? new ClickClassifier(db);
         this.#insert = db.query<{ id: number }, (string | number | null)[]>(
-            `INSERT INTO clicks (${COLUMNS.join(', ')}) VALUES (${COLUMNS.map(() => '?').join(', ')}) RETURNING id`
+            // Only while the link exists: it may be deleted while the click waits
+            // here, and its id is then free for the next link. (?1 is link_id.)
+            `INSERT INTO clicks (${COLUMNS.join(', ')}) SELECT ${COLUMNS.map(() => '?').join(', ')}
+             WHERE EXISTS (SELECT 1 FROM links WHERE id = ?1) RETURNING id`
         );
         // The user agent and headers of the click a token belongs to, so its
         // fingerprint can be recomputed with the browser signals folded in (and
@@ -222,7 +225,9 @@ export class ClickBuffer implements ClickSink {
         );
         this.#setHostname = db.query(
             // Only ever adds the flag: AbuseIPDB may have set it before reverse DNS answered.
-            'UPDATE clicks SET hostname = ?, is_datacenter = MAX(is_datacenter, ?) WHERE id = ?'
+            // The IP is checked too: if the click was deleted meanwhile, its id may by now
+            // belong to another visitor's click.
+            'UPDATE clicks SET hostname = ?, is_datacenter = MAX(is_datacenter, ?) WHERE id = ? AND ip = ?'
         );
         this.#expireTokens = db.query<{ id: number }, [number]>(
             'UPDATE clicks SET token = NULL WHERE token IS NOT NULL AND ts < ? RETURNING id'
@@ -248,6 +253,11 @@ export class ClickBuffer implements ClickSink {
     start(): void {
         if (this.#timer) return;
         this.#timer = setInterval(() => this.flush(), this.#opts.intervalMs);
+    }
+
+    /** Clicks not written yet. Zero after a flush that worked. */
+    get unsaved(): number {
+        return this.#pending.length;
     }
 
     /** Clicks, signals and hostnames waiting for the next flush. */
@@ -280,12 +290,14 @@ export class ClickBuffer implements ClickSink {
         const inserted: { id: number; ip: string }[] = [];
         // Clicks whose facts changed, to classify once everything is written.
         const touched: number[] = [];
+        let written = 0;
         try {
             this.#db.transaction(() => {
                 for (const click of batch) {
                     const row = enrichClick(click, this.#opts);
                     const id = this.#insert.get(...COLUMNS.map(column => row[column]))?.id;
                     if (id !== undefined) {
+                        written++;
                         touched.push(id);
                         this.#opts.webhooks?.enqueue(
                             id,
@@ -350,7 +362,7 @@ export class ClickBuffer implements ClickSink {
                     );
                 }
                 for (const h of hostnames) {
-                    this.#setHostname.run(h.hostname, h.datacenter, h.id);
+                    this.#setHostname.run(h.hostname, h.datacenter, h.id, h.ip);
                     touched.push(h.id);
                 }
                 if (signals.length > 0 || expire) {
@@ -363,7 +375,7 @@ export class ClickBuffer implements ClickSink {
                 this.#classifier.ids(touched);
             })();
             for (const row of inserted) this.#resolve(row.id, row.ip);
-            return batch.length;
+            return written;
         } catch (error) {
             console.error('[clicks] flush failed, will retry', error);
             const room = this.#opts.maxBuffered - this.#pending.length;
@@ -381,7 +393,7 @@ export class ClickBuffer implements ClickSink {
         if (!reverseDns) return;
         const cached = this.#hostnameCache.get(ip);
         if (cached !== undefined) {
-            if (cached) this.#queueHostname(id, cached);
+            if (cached) this.#queueHostname(id, ip, cached);
             return;
         }
         if (this.#lookups >= MAX_LOOKUPS) return;
@@ -391,13 +403,18 @@ export class ClickBuffer implements ClickSink {
             .then(hostname => {
                 if (this.#hostnameCache.size >= MAX_HOSTNAMES) this.#hostnameCache.clear();
                 this.#hostnameCache.set(ip, hostname);
-                if (hostname) this.#queueHostname(id, hostname);
+                if (hostname) this.#queueHostname(id, ip, hostname);
             })
             .finally(() => this.#lookups--);
     }
 
-    #queueHostname(id: number, hostname: string): void {
-        this.#hostnames.push({ id, hostname, datacenter: isDatacenterHostname(hostname) ? 1 : 0 });
+    #queueHostname(id: number, ip: string, hostname: string): void {
+        this.#hostnames.push({
+            id,
+            ip,
+            hostname,
+            datacenter: isDatacenterHostname(hostname) ? 1 : 0
+        });
     }
 
     stop(): void {

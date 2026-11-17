@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -32,6 +33,8 @@ export interface ApiDeps {
     authenticate: Authenticate;
     /** Browser requests that change data must come from this origin. */
     dashOrigin: string;
+    /** Not production: writes may also come from the address the dashboard was opened at. */
+    dev?: boolean;
     shortOrigin: string;
     /** AbuseIPDB lookups are on. */
     reputation: boolean;
@@ -153,7 +156,7 @@ function parseId(raw: string): number | null {
     return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-export function parseStatsQuery(url: URL): StatsQuery {
+function parseStatsQuery(url: URL): StatsQuery {
     const parsed = statsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
     if (!parsed.success) throw new BadQueryError(z.prettifyError(parsed.error));
     const { from, to, tz, link, bots, dc, scrapers, vpn, abusive, q } = parsed.data;
@@ -178,12 +181,26 @@ function statsQueryOf(req: Request): StatsQuery {
     return parseStatsQuery(new URL(req.url));
 }
 
-function numberParam(params: URLSearchParams, name: string, fallback: number): number {
-    const value = Number(params.get(name) ?? fallback);
-    return Number.isFinite(value) ? value : fallback;
+/**
+ * In development the dashboard is opened by address (http://192.168.1.5:3001), which
+ * isn't DASH_ORIGIN. Such a page may write when it was served by this same host. Only
+ * for IP addresses and localhost: a name could be an attacker's, re-pointed at this
+ * machine (DNS rebinding).
+ */
+export function isOwnAddress(origin: string, host: string | null): boolean {
+    if (!host || !URL.canParse(origin)) return false;
+    const url = new URL(origin);
+    const name = url.hostname.replace(/^\[(.*)\]$/, '$1');
+    return url.host === host && (name === 'localhost' || isIP(name) !== 0);
 }
 
-export function parseListQuery(req: Request): ListOptions {
+/** A whole-number query parameter: 1.5 is rounded down; text and numbers too big to bind fall back. */
+function numberParam(params: URLSearchParams, name: string, fallback: number): number {
+    const value = Math.trunc(Number(params.get(name) ?? fallback));
+    return Number.isSafeInteger(value) ? value : fallback;
+}
+
+function parseListQuery(req: Request): ListOptions {
     const p = new URL(req.url).searchParams;
     return {
         q: p.get('q') ?? undefined,
@@ -204,7 +221,11 @@ export function apiRoutes(deps: ApiDeps) {
         return async (req, server) => {
             if (req.method !== 'GET' && req.method !== 'HEAD') {
                 const origin = req.headers.get('origin');
-                if (origin && origin !== deps.dashOrigin) return error('Cross-origin request', 403);
+                const allowed =
+                    !origin ||
+                    origin === deps.dashOrigin ||
+                    (deps.dev === true && isOwnAddress(origin, req.headers.get('host')));
+                if (!allowed) return error('Cross-origin request', 403);
             }
             const identity = await deps.authenticate(req, server.requestIP(req)?.address ?? '');
             if (!identity) return error('Not signed in through Cloudflare Access', 401);
@@ -287,6 +308,11 @@ export function apiRoutes(deps: ApiDeps) {
             }),
             DELETE: guard<'/api/links/:id'>(req => {
                 const id = parseId(req.params.id);
+                // Write its buffered clicks first so they go with it, rather than
+                // landing on the next link, which gets the same id.
+                if (!deps.flushClicks()) {
+                    return error('Couldn’t save recent clicks before deleting; try again', 503);
+                }
                 return id !== null && links.delete(id)
                     ? new Response(null, { status: 204 })
                     : error('Link not found', 404);
@@ -309,7 +335,7 @@ export function apiRoutes(deps: ApiDeps) {
             GET: guard(req => {
                 const url = new URL(req.url);
                 const dim = url.searchParams.get('dim') ?? '';
-                const limit = Number(url.searchParams.get('limit') ?? 10) || 10;
+                const limit = numberParam(url.searchParams, 'limit', 10) || 10;
                 return json(stats.top(parseStatsQuery(url), dim, limit));
             })
         },
@@ -341,7 +367,25 @@ export function apiRoutes(deps: ApiDeps) {
 
         '/api/export.csv': {
             GET: guard(req => {
-                const body = stats.csv(statsQueryOf(req));
+                const pages = stats.csvPages(statsQueryOf(req));
+                // The first piece is read here, so a bad filter is a 400 and not a broken download.
+                let next = pages.next();
+                const encoder = new TextEncoder();
+                const body = new ReadableStream<Uint8Array>({
+                    async pull(controller) {
+                        if (next.done) return controller.close();
+                        controller.enqueue(encoder.encode(next.value));
+                        // A fast reader asks for the next page at once. Waiting a turn lets
+                        // redirects and other requests run between pages.
+                        await new Promise<void>(resolve => {
+                            setImmediate(resolve);
+                        });
+                        next = pages.next();
+                    },
+                    cancel() {
+                        pages.return(null);
+                    }
+                });
                 const date = new Date().toISOString().slice(0, 10);
                 return new Response(body, {
                     headers: {

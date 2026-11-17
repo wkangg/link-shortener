@@ -17,7 +17,7 @@ export interface RedirectHandlerOptions {
 }
 
 /** Bun.serve's `server` argument, narrowed to what we use. */
-export interface PeerInfo {
+interface PeerInfo {
     requestIP(req: Request): { address: string } | null;
 }
 

@@ -101,7 +101,20 @@ export function filterCondition(filter: string): { group: string; condition: Con
 }
 
 /** Default for `abuseMinScore`: matches ABUSEIPDB_MIN_SCORE's default. */
-const ABUSE_MIN_SCORE = 25;
+export const ABUSE_MIN_SCORE = 25;
+
+/**
+ * The clicks hidden by default, as one condition per toggle that shows them
+ * (columns on `c`). Shared with the links page so its counts match analytics.
+ */
+export function hiddenByDefault(abuseMinScore = ABUSE_MIN_SCORE) {
+    return {
+        bots: { sql: 'c.is_bot = 0', params: [] },
+        scrapers: { sql: 'c.scraper IS NULL', params: [] },
+        dc: { sql: '(c.is_datacenter = 0 OR c.vpn IS NOT NULL)', params: [] },
+        abusive: { sql: '(c.abuse_score IS NULL OR c.abuse_score < ?)', params: [abuseMinScore] }
+    } satisfies Record<string, Condition>;
+}
 
 /**
  * WHERE clause for a query over [from, to). Filters on the same dimension are OR-ed.
@@ -123,16 +136,13 @@ export function whereClause(
         params.push(query.link);
     }
     const search = compileSearch(query.q ?? '', abuseMinScore);
-    if (!query.bots && !search.overrides.has('bots')) parts.push('c.is_bot = 0');
-    if (!query.scrapers && !search.overrides.has('scrapers')) parts.push('c.scraper IS NULL');
-    if (!query.dc && !search.overrides.has('dc')) {
-        parts.push('(c.is_datacenter = 0 OR c.vpn IS NOT NULL)');
+    const hidden = hiddenByDefault(abuseMinScore);
+    for (const key of ['bots', 'scrapers', 'dc', 'abusive'] as const) {
+        if (query[key] || search.overrides.has(key)) continue;
+        parts.push(hidden[key].sql);
+        params.push(...hidden[key].params);
     }
     if (query.vpn === false && !search.overrides.has('vpn')) parts.push('c.vpn IS NULL');
-    if (!query.abusive && !search.overrides.has('abusive')) {
-        parts.push('(c.abuse_score IS NULL OR c.abuse_score < ?)');
-        params.push(abuseMinScore);
-    }
 
     const groups = new Map<string, Condition[]>();
     for (const filter of query.filters) {
@@ -453,9 +463,26 @@ export class Stats {
         };
     }
 
-    /** Raw clicks matching the query as CSV, newest first. */
-    csv(query: StatsQuery, maxRows = 100_000): string {
+    /** Raw clicks matching the query as CSV, newest first. For tests and small exports. */
+    csv(query: StatsQuery): string {
+        return [...this.csvPages(query)].join('');
+    }
+
+    /**
+     * The CSV in pieces: the header, then `pageSize` clicks at a time, each read with its
+     * own short query (keyset-paged on ts, id). An export of any size neither holds the
+     * whole file in memory nor keeps redirects waiting on one long query. A page is only
+     * short when the filters match plenty of clicks: a search matching few still reads
+     * far down the table to fill one.
+     */
+    *csvPages(query: StatsQuery, pageSize = 5000): Generator<string> {
         const where = this.#where(query);
+        // Clicks written while the export runs are left out, so the file is the
+        // clicks as they were when it started, not a mix of before and after.
+        // Read before the header goes out: the caller may wait before asking for rows.
+        const newest =
+            this.#db.query<{ id: number | null }, []>('SELECT MAX(id) AS id FROM clicks').get()
+                ?.id ?? 0;
         const header = [
             'time',
             'slug',
@@ -504,9 +531,10 @@ export class Stats {
             'platform',
             'touch_points'
         ];
-        const rows = this.#db
-            .query<Record<string, string | number | null>, Param[]>(
-                `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
+        yield `${header.join(',')}
+`;
+        const page = this.#db.query<Record<string, string | number | null>, Param[]>(
+            `SELECT c.id, c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
                         c.device, c.browser, c.os, c.os_version, c.is_bot, c.is_datacenter, c.vpn, c.scraper, c.fingerprint, c.abuse_score, c.isp, c.utm_source, c.utm_medium,
                         c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
                         c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
@@ -514,17 +542,28 @@ export class Stats {
                         c.ad_blocker, c.latitude, c.longitude, c.memory, c.cpu_cores, c.platform,
                         c.touch_points
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
-                 WHERE ${where.sql} ORDER BY c.ts DESC LIMIT ?`
-            )
-            .values(...where.params, maxRows);
-        const lines = [header.join(',')];
-        for (const row of rows) {
-            const [ts, ...rest] = row;
-            lines.push(
-                [new Date(Number(ts)).toISOString(), ...rest].map(cell => csvCell(cell)).join(',')
-            );
+                 WHERE ${where.sql} AND c.id <= ? AND (c.ts < ? OR c.id < ?)
+                 ORDER BY c.ts DESC, c.id DESC LIMIT ?`
+        );
+        let ts = Infinity;
+        let id = Infinity;
+        for (;;) {
+            // The range ends at the last click sent, so each page starts reading there
+            // rather than from the top of the range again.
+            const { params } = this.#where(query, query.from, Math.min(query.to, ts + 1));
+            const rows = page.values(...params, newest, ts, id, pageSize);
+            const last = rows.at(-1);
+            if (!last) return;
+            let text = '';
+            for (const [, time, ...rest] of rows) {
+                text += `${[new Date(Number(time)).toISOString(), ...rest].map(cell => csvCell(cell)).join(',')}
+`;
+            }
+            yield text;
+            if (rows.length < pageSize) return;
+            id = Number(last[0]);
+            ts = Number(last[1]);
         }
-        return `${lines.join('\n')}\n`;
     }
 
     #totals(query: StatsQuery, from: number, to: number) {

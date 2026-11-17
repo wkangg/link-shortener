@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
 import net from 'node:net';
 
+import { isOwnAddress } from '../src/dashboard/api.ts';
 import { inconsistencies } from '../src/dashboard/client/components/ClickDetails.tsx';
 import type {
     AboutResponse,
@@ -28,6 +29,10 @@ const location = async (path: string) => {
 const clickStatus = async (path: string) => {
     const res = await t.click(path);
     return res.status;
+};
+const createLink = async () => {
+    const res = await send('POST', '/api/links', { url: 'https://example.com/' });
+    return (await res.json()) as Link;
 };
 const SAFARI =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
@@ -173,10 +178,18 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(notJson.status).toBe(400);
     });
 
+    test('a fractional limit is rounded down, not a server error', async () => {
+        expect(await t.status('/api/links?limit=1.5')).toBe(200);
+        expect(await t.status(`/api/stats/top?dim=country&limit=2.5&${range()}`)).toBe(200);
+        expect(await t.status(`/api/stats/clicks?limit=2.5&offset=0.5&${range()}`)).toBe(200);
+        expect(await t.status('/api/links?offset=1e20')).toBe(200);
+    });
+
     test('bad stats queries are 400s', async () => {
         expect(await t.status('/api/stats/summary?from=10&to=5')).toBe(400);
         expect(await t.status(`/api/stats/top?dim=nope&${range()}`)).toBe(400);
         expect(await t.status(`/api/stats/summary?${range()}&f=bogus:x`)).toBe(400);
+        expect(await t.status(`/api/export.csv?${range()}&f=bogus:x`)).toBe(400);
     });
 
     test('auth and origin checks', async () => {
@@ -188,10 +201,38 @@ describe('links API + redirects + analytics, end to end', () => {
         });
         expect(cross.status).toBe(403);
 
+        // Outside production, the dashboard opened by address may write to itself.
+        const host = new URL(t.app.dash.url).host;
+        expect(isOwnAddress(`http://${host}`, host)).toBe(true);
+        expect(isOwnAddress('http://192.168.1.5:3001', '192.168.1.5:3001')).toBe(true);
+        expect(isOwnAddress('http://[::1]:3001', '[::1]:3001')).toBe(true);
+        expect(isOwnAddress('http://192.168.1.5:3001', '192.168.1.6:3001')).toBe(false);
+        // A name could be re-pointed at this machine by someone else.
+        expect(isOwnAddress('http://evil.example:3001', 'evil.example:3001')).toBe(false);
+        const own = await t.api('/api/links', {
+            method: 'POST',
+            body: JSON.stringify({ url: 'https://x.com/own' }),
+            headers: { Origin: 'http://127.0.0.1:3001', Host: '127.0.0.1:3001' }
+        });
+        expect(own.status).toBe(201);
+
         t.auth.identity = null;
         expect(await t.status('/api/links')).toBe(401);
         expect(await t.status('/api/health')).toBe(200);
         t.auth.identity = { subject: 'me@example.com' };
+    });
+
+    test('clicks still buffered when a link is deleted go with it', async () => {
+        const gone = await createLink();
+        await t.click(`/${gone.slug}`, { 'user-agent': SAFARI });
+        expect(await t.status(`/api/links/${gone.id}`, { method: 'DELETE' })).toBe(204);
+
+        // The next link gets the same id, and must not start with that click.
+        const next = await createLink();
+        expect(next.id).toBe(gone.id);
+        t.app.clicks.flush();
+        const list = await t.get<LinkListResponse>('/api/links');
+        expect(list.links.find(l => l.id === next.id)).toMatchObject({ clicks: 0 });
     });
 });
 
@@ -403,6 +444,33 @@ describe('export', () => {
             const copy = Database.deserialize(new Uint8Array(await res.arrayBuffer()));
             expect(copy.query('SELECT COUNT(*) AS n FROM clicks').get()).toEqual({ n: 1 });
             copy.close();
+        } finally {
+            await r.close();
+        }
+    });
+});
+
+describe('deleting a link', () => {
+    test('is refused while its buffered clicks can’t be saved', async () => {
+        const r = testApp();
+        try {
+            const created = await r.api('/api/links', {
+                method: 'POST',
+                body: JSON.stringify({ url: 'https://example.com/', slug: 'stuck' })
+            });
+            const { id } = (await created.json()) as { id: number };
+            await r.click('/stuck');
+            r.db.run(
+                "CREATE TRIGGER fail_clicks BEFORE INSERT ON clicks BEGIN SELECT RAISE(ABORT, 'disk full'); END"
+            );
+            // Deleting now would leave the click to land on the next link with this id.
+            expect(await r.status(`/api/links/${id}`, { method: 'DELETE' })).toBe(503);
+            expect(await r.status(`/api/links/${id}`)).toBe(200);
+            expect(r.app.clicks.pending).toBe(1);
+
+            r.db.run('DROP TRIGGER fail_clicks');
+            expect(await r.status(`/api/links/${id}`, { method: 'DELETE' })).toBe(204);
+            expect(r.db.query('SELECT COUNT(*) AS n FROM clicks').get()).toEqual({ n: 0 });
         } finally {
             await r.close();
         }

@@ -15,6 +15,8 @@
 // a fact arrives late (hostname, ISP, browser signals) or a list changes.
 import type { Database } from 'bun:sqlite';
 
+import { LIST_LABELS } from './vpn.ts';
+
 /** Signals must arrive within this long of the click; unused tokens are cleared after it. */
 export const SIGNALS_WINDOW_MS = 10 * 60_000;
 
@@ -34,9 +36,11 @@ export interface ClickFacts {
     hostname: string | null;
     isp: string | null;
     is_datacenter: number;
+    /** The label stored on the click, if any. */
+    vpn?: string | null;
 }
 
-export interface Verdict {
+interface Verdict {
     /** The VPN or relay, e.g. "Tor" or "VPN host: M247". */
     vpn: string | null;
     /** Why the click looks automated. */
@@ -44,7 +48,7 @@ export interface Verdict {
 }
 
 /** Looks an IP up in the VPN / relay lists (see analytics/vpn.ts). */
-export type VpnLookup = (ip: string) => string | null;
+type VpnLookup = (ip: string) => string | null;
 
 // Hosting companies that mostly rent servers to VPN services. Matched against
 // the reverse-DNS hostname and the ISP name. Their IPs are still hosting IPs, so
@@ -87,7 +91,10 @@ function vpnHost(facts: ClickFacts): string | null {
 }
 
 export function classify(facts: ClickFacts, lookup: VpnLookup, now: number): Verdict {
-    const listed = facts.ip ? lookup(facts.ip) : null;
+    // IPs leave the lists (Tor exits come and go), but the click still came
+    // through one, so a list label once given is kept.
+    const stored = facts.vpn && LIST_LABELS.has(facts.vpn) ? facts.vpn : null;
+    const listed = (facts.ip ? lookup(facts.ip) : null) ?? stored;
     // Declared bots are their own category.
     if (facts.is_bot === 1) return { vpn: listed, scraper: null };
 
@@ -121,7 +128,7 @@ const SELECT = `SELECT id, ts, ip, user_agent AS ua, is_bot, language, timezone,
                 FROM clicks`;
 const BATCH = 5000;
 
-export interface ClickClassifierOptions {
+interface ClickClassifierOptions {
     lookup?: VpnLookup;
     now?: () => number;
 }

@@ -175,7 +175,7 @@ Cloudflare knows each visitor's network (AS number and organization, e.g. `AS812
     bun run deploy
     ```
 
-It runs on the Workers free plan (100,000 requests a day) and redirects pass through unchanged. Without it, the network fields stay empty. If you only need the AS number, a Transform Rule under _Rules → Transform Rules → Modify Request Header_ that sets `x-asn` to `ip.src.asnum` works too, but the name needs the Worker.
+It runs on the Workers free plan (100,000 requests a day) and redirects pass through unchanged. Without it, the app still reads `x-asn` and `x-as-org` from the request, so a visitor can send their own (`curl -H "x-as-org: Comcast" ...`) and it's stored and shown. If you don't deploy the Worker, add a Transform Rule under _Rules → Transform Rules → Modify Request Header_ on the short domain that removes `x-asn` and `x-as-org`. If you only need the AS number, a Transform Rule that sets `x-asn` to `to_string(ip.src.asnum)` (and removes `x-as-org`) works too, but the name needs the Worker.
 
 ### Creating links from elsewhere
 

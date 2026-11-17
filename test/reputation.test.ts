@@ -263,6 +263,34 @@ describe('IpReputation', () => {
         expect(t.reputation.backfill()).toBe(0);
     });
 
+    test('backfill forgets results older than 90 days, after copying them onto clicks', () => {
+        const t = setup();
+        const DAY = 24 * HOUR;
+        const store = t.db.query(
+            "INSERT INTO ip_reputation (ip, abuse_score, reports, isp, checked_at) VALUES (?, 40, 1, 'Old ISP', ?)"
+        );
+        store.run(ABUSER, T0 - 91 * DAY);
+        store.run(HOME, T0 - 89 * DAY);
+        t.db
+            .query("INSERT INTO clicks (link_id, ts, source, ip) VALUES (1, ?, 'Direct', ?)")
+            .run(T0 - 91 * DAY, ABUSER);
+        // A fresh instance, as after a restart: it loads both stored results.
+        const reputation = new IpReputation(t.db, {
+            check: () => new Promise(() => {}),
+            now: () => T0
+        });
+        expect(reputation.stats.known).toBe(2);
+
+        reputation.backfill();
+        expect(reputation.stats.known).toBe(1);
+        expect(t.db.query<{ ip: string }, []>('SELECT ip FROM ip_reputation').all()).toEqual([
+            { ip: HOME }
+        ]);
+        // The old click kept what was known about its IP.
+        expect(t.rows()).toEqual([{ ip: ABUSER, abuse_score: 40, isp: 'Old ISP', dc: 0 }]);
+        reputation.stop();
+    });
+
     test('a later reverse-DNS answer keeps the datacenter flag from the lookup', async () => {
         // A scanner with its own rDNS name, not on the hostname list.
         const t = setup({ reverseDns: () => Promise.resolve('joy.probe.scanner.example') });
@@ -317,6 +345,37 @@ describe('abuse filter', () => {
             -1, 0, 24, 25, 100
         ]);
         expect(rows[0]).toHaveProperty('isp', null);
+    });
+});
+
+describe('hostnames', () => {
+    test('a hostname never lands on another click that took a deleted click’s id', async () => {
+        const t = setup({
+            reverseDns: ip => Promise.resolve(ip === HOSTING ? 'ec2-1.amazonaws.com' : null)
+        });
+        t.clicks.push(click(HOSTING));
+        t.clicks.flush();
+        await settle(); // the hostname for click 1 is now queued
+        // The click is deleted (its link was), and a home visitor's click takes its id.
+        t.db.run('DELETE FROM clicks');
+        t.clicks.push(click(HOME));
+        t.clicks.flush();
+        expect(
+            t.db.query('SELECT id, ip, hostname, is_datacenter AS dc FROM clicks').all()
+        ).toEqual([{ id: 1, ip: HOME, hostname: null, dc: 0 }]);
+    });
+
+    test('a hostname queued by a flush doesn’t count as an unsaved click', async () => {
+        const t = setup({ reverseDns: () => Promise.resolve('host.example.net') });
+        t.clicks.push(click(HOME));
+        t.clicks.flush();
+        await settle();
+        t.clicks.flush(); // writes the hostname, now cached for this IP
+        // A repeat visitor: the flush that saves the click queues its hostname at once.
+        t.clicks.push(click(HOME));
+        t.clicks.flush();
+        expect(t.clicks.pending).toBe(1);
+        expect(t.clicks.unsaved).toBe(0);
     });
 });
 

@@ -2,7 +2,7 @@ import { pingDatabase } from '../db/client.ts';
 import { type ApiDeps, apiRoutes } from './api.ts';
 import app from './client/index.html';
 
-export interface DashboardServerOptions extends ApiDeps {
+interface DashboardServerOptions extends ApiDeps {
     port: number;
     dev: boolean;
 }

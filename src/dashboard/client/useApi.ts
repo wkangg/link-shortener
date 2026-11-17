@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export interface ApiState<T> {
+interface ApiState<T> {
     data: T | undefined;
     error: Error | undefined;
     loading: boolean;

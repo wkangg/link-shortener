@@ -7,7 +7,7 @@
 // a signal for grouping clicks, never a unique-person identifier.
 
 /** The traits a fingerprint is built from. All optional; missing ones are skipped. */
-export interface FingerprintParts {
+interface FingerprintParts {
     /** User-Agent header. */
     ua?: string | null;
     /** First Accept-Language tag, or navigator.language when reported. */

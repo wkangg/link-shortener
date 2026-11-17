@@ -227,6 +227,36 @@ describe('ClickClassifier', () => {
         expect(ips({ q: 'vpn:tor' })).toEqual(['5.5.5.5']);
         expect(ips({ vpn: false, q: 'is:vpn' })).toEqual(['3.3.3.3', '5.5.5.5']);
     });
+
+    test('keeps a list label after the IP leaves the list, but redoes other labels', () => {
+        const db = openDatabase(':memory:');
+        db.run(
+            `INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://e.x', 0, 0)`
+        );
+        const insert = db.query(
+            `INSERT INTO clicks (link_id, ts, source, ip, user_agent, language, js, is_datacenter, vpn)
+             VALUES (1, ?, 'Direct', ?, ?, 'en', ?, 1, ?)`
+        );
+        insert.run(NOW, '5.5.5.5', CHROME, null, 'Tor'); // a Tor exit that has left the list
+        insert.run(NOW, '6.6.6.6', CHROME, null, 'Browser on a hosting IP'); // no signals now
+
+        new ClickClassifier(db, { lookup: noLists, now: () => NOW }).all();
+        const vpn = (ip: string) =>
+            db
+                .query<{ vpn: string | null }, [string]>('SELECT vpn FROM clicks WHERE ip = ?')
+                .get(ip)?.vpn;
+        expect(vpn('5.5.5.5')).toBe('Tor');
+        expect(vpn('6.6.6.6')).toBeNull();
+
+        const where = whereClause({ from: 0, to: NOW + 1, tz: 0, filters: [] });
+        const shown = db
+            .query<{ ip: string }, (string | number)[]>(
+                `SELECT ip FROM clicks c WHERE ${where.sql}`
+            )
+            .all(...where.params)
+            .map(r => r.ip);
+        expect(shown).toEqual(['5.5.5.5']);
+    });
 });
 
 const tokenClick = (token: string, ts: number): RawClick => ({

@@ -14,7 +14,7 @@ interface QrDialogProps {
 }
 
 /** The QR encodes `?qr` so scans show up as their own source in analytics. */
-export const qrTarget = (shortUrl: string) => `${shortUrl}?qr`;
+const qrTarget = (shortUrl: string) => `${shortUrl}?qr`;
 
 function svgFor(text: string, opts: { ecc: Ecc; fg: string; bg: string; margin: number }): string {
     return renderSVG(text, {

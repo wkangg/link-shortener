@@ -49,9 +49,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     return data as T;
 }
 
-export const getJson = <T>(path: string) => request<T>('GET', path);
+const getJson = <T>(path: string) => request<T>('GET', path);
 
-export interface LinkInput {
+interface LinkInput {
     url: string;
     slug?: string;
     title?: string | null;
@@ -62,7 +62,7 @@ export interface LinkInput {
     trackDevice?: boolean;
 }
 
-export interface WebhookInput {
+interface WebhookInput {
     url: string;
     kind?: WebhookKind;
     description?: string | null;

@@ -1,7 +1,7 @@
 import { createRedirectHandler, type RedirectHandlerOptions } from './handler.ts';
 import { MAX_SIGNALS_BODY } from './interstitial.ts';
 
-export interface RedirectServerOptions extends RedirectHandlerOptions {
+interface RedirectServerOptions extends RedirectHandlerOptions {
     port: number;
 }
 

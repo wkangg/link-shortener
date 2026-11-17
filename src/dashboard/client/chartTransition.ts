@@ -40,7 +40,7 @@ function valueAt(xs: number[], ys: number[], x: number): number | null {
 }
 
 /** The span `data` covers, from its first bucket to its last. */
-export function fullSpan(data: TimeseriesResponse): Span {
+function fullSpan(data: TimeseriesResponse): Span {
     return [(data.points[0]?.t ?? 0) / 1000, (data.points.at(-1)?.t ?? 0) / 1000];
 }
 

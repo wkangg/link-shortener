@@ -21,7 +21,7 @@ import { EndpointRepo } from './webhooks/endpoints.ts';
 import { WebhookOutbox } from './webhooks/outbox.ts';
 import type { ResolveHost } from './webhooks/url.ts';
 
-export interface AppOptions {
+interface AppOptions {
     config: Config;
     db: Database;
     version: string;
@@ -115,7 +115,7 @@ export function startApp(opts: AppOptions) {
         dev: !config.isProd,
         db,
         version: opts.version,
-        links: new LinkRepo(db, cache),
+        links: new LinkRepo(db, cache, Date.now, config.abuseMinScore),
         webhooks: new EndpointRepo(db, outbox, {
             allowPrivate: !config.isProd,
             resolve: opts.resolveHost
@@ -129,7 +129,8 @@ export function startApp(opts: AppOptions) {
         abuseMinScore: config.abuseMinScore,
         flushClicks: () => {
             clicks.flush();
-            return clicks.pending === 0;
+            // Hostnames a flush queues for the next one aren't unsaved clicks.
+            return clicks.unsaved === 0;
         }
     });
 

@@ -43,11 +43,13 @@ const DATACENTER_USAGE = [
 ];
 const DATACENTER_SET = new Set(DATACENTER_USAGE);
 
-export function isDatacenterUsage(usageType: string | null): boolean {
+function isDatacenterUsage(usageType: string | null): boolean {
     return usageType !== null && DATACENTER_SET.has(usageType);
 }
 
 const DAY = 86_400_000;
+/** Results this old are forgotten; their clicks already carry the score and ISP. */
+const KEEP_MS = 90 * DAY;
 const MAX_TEXT = 200;
 const MAX_QUEUE = 5000;
 const ERROR_LOG_INTERVAL_MS = 60_000;
@@ -100,7 +102,7 @@ export function parseCheck(data: Record<string, unknown>): Reputation {
     };
 }
 
-export interface IpReputationOptions {
+interface IpReputationOptions {
     check: CheckIp;
     /** Lookups per UTC day. */
     dailyLimit?: number;
@@ -203,7 +205,8 @@ export class IpReputation implements ClickAnnotator {
     /**
      * Catches up on clicks recorded before reputation was on (or while the quota
      * ran out): copies cached results onto clicks that lack them, then queues the
-     * busiest unchecked IPs from the last `days` days. Returns the number queued.
+     * busiest unchecked IPs from the last `days` days. Results too old to be useful are
+     * dropped on the way. Returns the number queued.
      */
     backfill(days = 30): number {
         const now = this.#now();
@@ -225,6 +228,7 @@ export class IpReputation implements ClickAnnotator {
                     (SELECT ip FROM ip_reputation WHERE usage_type IN (${marks}))`
             )
             .run(...DATACENTER_USAGE);
+        this.#prune(now - KEEP_MS);
         const rows = this.#db
             .query<{ ip: string }, [number, number, number]>(
                 `SELECT c.ip FROM clicks c LEFT JOIN ip_reputation r ON r.ip = c.ip
@@ -236,6 +240,14 @@ export class IpReputation implements ClickAnnotator {
         let queued = 0;
         for (const row of rows) if (this.request(row.ip)) queued++;
         return queued;
+    }
+
+    /** Forgets results checked before `before`, so the table and the cache don't grow forever. */
+    #prune(before: number): void {
+        this.#db.query('DELETE FROM ip_reputation WHERE checked_at < ?').run(before);
+        for (const [ip, known] of this.#known) {
+            if (known.checkedAt < before) this.#known.delete(ip);
+        }
     }
 
     /** Whether a lookup for the IP is waiting or running. */

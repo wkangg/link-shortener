@@ -187,6 +187,12 @@ const WARP = {
     ranges: RangeSet.fromCidrs(['104.28.0.0/14', '2a09:bac0::/29'])
 };
 
+/** Every label `lookup` can return. */
+export const LIST_LABELS: ReadonlySet<string> = new Set([
+    ...SOURCES.map(source => source.label),
+    WARP.label
+]);
+
 export type FetchText = (url: string) => Promise<string>;
 
 export function fetchText(timeoutMs = 60_000): FetchText {
@@ -197,7 +203,7 @@ export function fetchText(timeoutMs = 60_000): FetchText {
     };
 }
 
-export interface VpnListsOptions {
+interface VpnListsOptions {
     /** Downloads a list; null never fetches (only stored lists are used). */
     fetchText?: FetchText | null;
     now?: () => number;
