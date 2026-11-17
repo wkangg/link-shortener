@@ -47,11 +47,11 @@ export function formatRelative(ms: number, now = Date.now()): string {
     return 'just now';
 }
 
-/** "s.example" from "https://s.example". */
 /** Whether a link with this expiry has stopped redirecting by `now` (as the redirect decides). */
 export const isExpired = (expiresAt: number | null, now: number) =>
     expiresAt !== null && expiresAt <= now;
 
+/** "s.example" from "https://s.example". */
 export const hostOf = (origin: string) => origin.replace(/^https?:\/\//, '');
 
 /** A tab title that says which page it is, not just the short domain: "Links · s.example". */
