@@ -178,6 +178,12 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(notJson.status).toBe(400);
     });
 
+    test('a fractional limit is rounded down, not a server error', async () => {
+        expect(await t.status('/api/links?limit=1.5')).toBe(200);
+        expect(await t.status(`/api/stats/top?dim=country&limit=2.5&${range()}`)).toBe(200);
+        expect(await t.status(`/api/stats/clicks?limit=2.5&offset=0.5&${range()}`)).toBe(200);
+    });
+
     test('bad stats queries are 400s', async () => {
         expect(await t.status('/api/stats/summary?from=10&to=5')).toBe(400);
         expect(await t.status(`/api/stats/top?dim=nope&${range()}`)).toBe(400);

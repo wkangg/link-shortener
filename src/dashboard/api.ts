@@ -194,9 +194,10 @@ export function isOwnAddress(origin: string, host: string | null): boolean {
     return url.host === host && (name === 'localhost' || isIP(name) !== 0);
 }
 
+/** A whole-number query parameter; anything else (missing, text, 1.5 rounded down) is safe to bind. */
 function numberParam(params: URLSearchParams, name: string, fallback: number): number {
     const value = Number(params.get(name) ?? fallback);
-    return Number.isFinite(value) ? value : fallback;
+    return Number.isFinite(value) ? Math.trunc(value) : fallback;
 }
 
 export function parseListQuery(req: Request): ListOptions {
@@ -332,7 +333,7 @@ export function apiRoutes(deps: ApiDeps) {
             GET: guard(req => {
                 const url = new URL(req.url);
                 const dim = url.searchParams.get('dim') ?? '';
-                const limit = Number(url.searchParams.get('limit') ?? 10) || 10;
+                const limit = numberParam(url.searchParams, 'limit', 10) || 10;
                 return json(stats.top(parseStatsQuery(url), dim, limit));
             })
         },
