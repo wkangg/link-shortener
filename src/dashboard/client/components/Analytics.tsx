@@ -15,6 +15,8 @@ import { type Tab, TopList } from './TopList.tsx';
 const DAY = 86_400_000;
 /** The search applies this long after typing stops. */
 const SEARCH_DELAY_MS = 300;
+/** Open dashboards reload their numbers this often. */
+const REFRESH_MS = 30_000;
 
 const PRESETS = [
     { id: '24h', label: 'Last 24 hours', ms: DAY },
@@ -138,11 +140,26 @@ export function Analytics({ linkId }: AnalyticsProps) {
     const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
-        const timer = setInterval(() => {
+        // A tab nobody is looking at doesn't query the server; it catches up when shown.
+        let missed = false;
+        const refresh = () => {
+            if (document.hidden) {
+                missed = true;
+                return;
+            }
+            missed = false;
             setNow(Date.now());
             setTick(t => t + 1);
-        }, 30_000);
-        return () => clearInterval(timer);
+        };
+        const shown = () => {
+            if (missed) refresh();
+        };
+        const timer = setInterval(refresh, REFRESH_MS);
+        document.addEventListener('visibilitychange', shown);
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener('visibilitychange', shown);
+        };
     }, []);
 
     const params = statsParams({
