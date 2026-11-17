@@ -10,7 +10,10 @@ export const DISCORD_INTERVAL_MS = 2000;
 // Discord's field limits.
 const TITLE_MAX = 256;
 const FIELD_MAX = 1024;
-const FOOTER_MAX = 2048;
+/** Discord rejects a message whose embeds hold more text than this in all. */
+const MESSAGE_MAX = 6000;
+/** Destination URLs can be 2048 long; clipped so a batch of clicks fits in MESSAGE_MAX. */
+const FOOTER_URL_MAX = 200;
 
 // Discord blurple (#5865F2) and amber (#F0B232) for flagged clicks.
 const COLOR = 5_793_266;
@@ -98,23 +101,22 @@ export function clickEmbed(event: LinkClickedEvent, dashOrigin: string): Discord
         color: flags ? COLOR_FLAGGED : COLOR,
         timestamp: click.ts,
         fields,
-        footer: { text: clip(`→ ${link.url}`, FOOTER_MAX) }
+        footer: { text: `→ ${clip(link.url, FOOTER_URL_MAX)}` }
     };
 }
 
-/**
- * One message for a batch of clicks, oldest first. Past 10 clicks, the newest 9
- * get embeds and the rest are counted in a summary embed.
- */
-export function clicksMessage(events: LinkClickedEvent[], dashOrigin: string): DiscordMessage {
-    if (events.length <= MAX_EMBEDS) {
-        return {
-            embeds: events.map(e => clickEmbed(e, dashOrigin)),
-            allowed_mentions: { parse: [] }
-        };
+/** The embed text Discord counts toward MESSAGE_MAX. */
+function textLength(embeds: DiscordEmbed[]): number {
+    let n = 0;
+    for (const e of embeds) {
+        n += (e.title?.length ?? 0) + (e.description?.length ?? 0) + (e.footer?.text.length ?? 0);
+        for (const f of e.fields ?? []) n += f.name.length + f.value.length;
     }
-    const shown = events.slice(-(MAX_EMBEDS - 1));
-    const rest = events.slice(0, events.length - shown.length);
+    return n;
+}
+
+/** Counts clicks left out of a message, per short link. */
+function summaryEmbed(rest: LinkClickedEvent[]): DiscordEmbed {
     const counts = new Map<string, number>();
     for (const e of rest) {
         const short = e.data.link.shortUrl.replace(/^https?:\/\//, '');
@@ -123,16 +125,31 @@ export function clicksMessage(events: LinkClickedEvent[], dashOrigin: string): D
     const lines = [...counts]
         .toSorted((a, b) => b[1] - a[1])
         .map(([short, n]) => `${plain(short)}: ${n}`);
-    const summary: DiscordEmbed = {
+    return {
         title: `+${rest.length} more ${rest.length === 1 ? 'click' : 'clicks'}`,
         description: clip(lines.join('\n'), FIELD_MAX * 4),
         color: COLOR,
         timestamp: rest.at(-1)?.data.click.ts
     };
-    return {
-        embeds: [summary, ...shown.map(e => clickEmbed(e, dashOrigin))],
-        allowed_mentions: { parse: [] }
-    };
+}
+
+/**
+ * One message for a batch of clicks, oldest first. Past 10 clicks, the newest 9
+ * get embeds and the rest are counted in a summary embed. Fewer get embeds when
+ * that much text would go over Discord's limit for a message.
+ */
+export function clicksMessage(events: LinkClickedEvent[], dashOrigin: string): DiscordMessage {
+    const embeds = events.slice(-MAX_EMBEDS).map(e => clickEmbed(e, dashOrigin));
+    let shown = events.length <= MAX_EMBEDS ? events.length : MAX_EMBEDS - 1;
+    for (;;) {
+        const rest = events.slice(0, events.length - shown);
+        const message: DiscordMessage = {
+            embeds: [...(rest.length > 0 ? [summaryEmbed(rest)] : []), ...embeds.slice(-shown)],
+            allowed_mentions: { parse: [] }
+        };
+        if (shown <= 1 || textLength(message.embeds) <= MESSAGE_MAX) return message;
+        shown--;
+    }
 }
 
 export function testMessage(): DiscordMessage {

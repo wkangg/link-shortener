@@ -953,6 +953,13 @@ function sampleEvent(overrides: Partial<LinkClickedEvent['data']['click']> = {})
     };
 }
 
+/** A click with a 2048-character destination, its IP and a long user agent. */
+function bigEvent(): LinkClickedEvent {
+    const e = sampleEvent({ ip: '203.0.113.5', userAgent: `Mozilla/5.0 ${'x'.repeat(500)}` });
+    e.data.link.url = `https://example.com/${'a'.repeat(2028)}`;
+    return e;
+}
+
 describe('discord formatting', () => {
     test('recognizes and masks Discord webhook URLs', () => {
         expect(isDiscordWebhookUrl(DISCORD_URL)).toBe(true);
@@ -1034,6 +1041,26 @@ describe('discord formatting', () => {
         expect(many.embeds.slice(1).map(e => e.title)).toEqual(
             Array.from({ length: 9 }, () => 'Click on s.example/gh')
         );
+    });
+
+    test('a batch stays inside the 6000 characters Discord allows per message', () => {
+        const message = clicksMessage(Array.from({ length: 10 }, bigEvent), DASH);
+        const text = message.embeds
+            .flatMap(e => [
+                e.title,
+                e.description,
+                e.footer?.text,
+                ...(e.fields ?? []).flatMap(f => [f.name, f.value])
+            ])
+            .join('');
+        expect(text.length).toBeLessThanOrEqual(6000);
+
+        // Every click is either shown or counted in the summary.
+        const [summary, ...clicks] = message.embeds;
+        const more = Number(/^\+(\d+) more/.exec(summary?.title ?? '')?.[1]);
+        expect(more).toBeGreaterThan(0);
+        expect(more + clicks.length).toBe(10);
+        expect(clicks.every(e => e.title === 'Click on s.example/gh')).toBe(true);
     });
 
     test('rate-limit waits come from the 429 body or the bucket headers', async () => {
