@@ -463,8 +463,17 @@ export class Stats {
         };
     }
 
-    /** Raw clicks matching the query as CSV, newest first. */
-    csv(query: StatsQuery, maxRows = 100_000): string {
+    /** Raw clicks matching the query as CSV, newest first. For tests and small exports. */
+    csv(query: StatsQuery): string {
+        return [...this.csvPages(query)].join('');
+    }
+
+    /**
+     * The CSV in pieces: the header, then `pageSize` clicks at a time, each read with its
+     * own short query (keyset-paged on ts, id). An export of any size neither holds the
+     * whole file in memory nor keeps redirects waiting on one long query.
+     */
+    *csvPages(query: StatsQuery, pageSize = 5000): Generator<string> {
         const where = this.#where(query);
         const header = [
             'time',
@@ -514,9 +523,10 @@ export class Stats {
             'platform',
             'touch_points'
         ];
-        const rows = this.#db
-            .query<Record<string, string | number | null>, Param[]>(
-                `SELECT c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
+        yield `${header.join(',')}
+`;
+        const page = this.#db.query<Record<string, string | number | null>, Param[]>(
+            `SELECT c.id, c.ts, CASE l.slug WHEN '' THEN '/' ELSE l.slug END AS slug, c.country, c.region, c.city, c.referrer, c.source, c.via_qr,
                         c.device, c.browser, c.os, c.os_version, c.is_bot, c.is_datacenter, c.vpn, c.scraper, c.fingerprint, c.abuse_score, c.isp, c.utm_source, c.utm_medium,
                         c.utm_campaign, c.utm_term, c.utm_content, c.query, c.ip, c.user_agent,
                         c.hostname, c.language, c.timezone, c.bot_name, c.device_model, c.screen,
@@ -524,17 +534,25 @@ export class Stats {
                         c.ad_blocker, c.latitude, c.longitude, c.memory, c.cpu_cores, c.platform,
                         c.touch_points
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
-                 WHERE ${where.sql} ORDER BY c.ts DESC LIMIT ?`
-            )
-            .values(...where.params, maxRows);
-        const lines = [header.join(',')];
-        for (const row of rows) {
-            const [ts, ...rest] = row;
-            lines.push(
-                [new Date(Number(ts)).toISOString(), ...rest].map(cell => csvCell(cell)).join(',')
-            );
+                 WHERE ${where.sql} AND (c.ts < ? OR (c.ts = ? AND c.id < ?))
+                 ORDER BY c.ts DESC, c.id DESC LIMIT ?`
+        );
+        let ts = Infinity;
+        let id = Infinity;
+        for (;;) {
+            const rows = page.values(...where.params, ts, ts, id, pageSize);
+            const last = rows.at(-1);
+            if (!last) return;
+            let text = '';
+            for (const [, time, ...rest] of rows) {
+                text += `${[new Date(Number(time)).toISOString(), ...rest].map(cell => csvCell(cell)).join(',')}
+`;
+            }
+            yield text;
+            if (rows.length < pageSize) return;
+            id = Number(last[0]);
+            ts = Number(last[1]);
         }
-        return `${lines.join('\n')}\n`;
     }
 
     #totals(query: StatsQuery, from: number, to: number) {

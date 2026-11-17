@@ -218,6 +218,12 @@ describe('csv', () => {
         expect(lines.some(l => l.includes('"{""ref"":""ig""}"'))).toBe(true);
     });
 
+    test('paged exports hold every click once, in the same order', () => {
+        const whole = stats.csv(q());
+        expect([...stats.csvPages(q(), 1)].join('')).toBe(whole);
+        expect([...stats.csvPages(q(), 3)].join('')).toBe(whole);
+    });
+
     test('text that a spreadsheet would run as a formula is escaped', () => {
         expect(csvCell('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
         expect(csvCell('@SUM(A1)')).toBe("'@SUM(A1)");

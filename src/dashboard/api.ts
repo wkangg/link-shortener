@@ -364,7 +364,16 @@ export function apiRoutes(deps: ApiDeps) {
 
         '/api/export.csv': {
             GET: guard(req => {
-                const body = stats.csv(statsQueryOf(req));
+                // Sent a page of clicks at a time, so other requests run in between.
+                const pages = stats.csvPages(statsQueryOf(req));
+                const encoder = new TextEncoder();
+                const body = new ReadableStream<Uint8Array>({
+                    pull(controller) {
+                        const next = pages.next();
+                        if (next.done) controller.close();
+                        else controller.enqueue(encoder.encode(next.value));
+                    }
+                });
                 const date = new Date().toISOString().slice(0, 10);
                 return new Response(body, {
                     headers: {
