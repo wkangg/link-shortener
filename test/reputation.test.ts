@@ -263,6 +263,34 @@ describe('IpReputation', () => {
         expect(t.reputation.backfill()).toBe(0);
     });
 
+    test('backfill forgets results older than 90 days, after copying them onto clicks', () => {
+        const t = setup();
+        const DAY = 24 * HOUR;
+        const store = t.db.query(
+            "INSERT INTO ip_reputation (ip, abuse_score, reports, isp, checked_at) VALUES (?, 40, 1, 'Old ISP', ?)"
+        );
+        store.run(ABUSER, T0 - 91 * DAY);
+        store.run(HOME, T0 - 89 * DAY);
+        t.db
+            .query("INSERT INTO clicks (link_id, ts, source, ip) VALUES (1, ?, 'Direct', ?)")
+            .run(T0 - 91 * DAY, ABUSER);
+        // A fresh instance, as after a restart: it loads both stored results.
+        const reputation = new IpReputation(t.db, {
+            check: () => new Promise(() => {}),
+            now: () => T0
+        });
+        expect(reputation.stats.known).toBe(2);
+
+        reputation.backfill();
+        expect(reputation.stats.known).toBe(1);
+        expect(t.db.query<{ ip: string }, []>('SELECT ip FROM ip_reputation').all()).toEqual([
+            { ip: HOME }
+        ]);
+        // The old click kept what was known about its IP.
+        expect(t.rows()).toEqual([{ ip: ABUSER, abuse_score: 40, isp: 'Old ISP', dc: 0 }]);
+        reputation.stop();
+    });
+
     test('a later reverse-DNS answer keeps the datacenter flag from the lookup', async () => {
         // A scanner with its own rDNS name, not on the hostname list.
         const t = setup({ reverseDns: () => Promise.resolve('joy.probe.scanner.example') });
