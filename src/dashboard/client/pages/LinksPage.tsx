@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
     LINK_SEARCH_DIALECT,
@@ -13,7 +13,7 @@ import { SearchBox, type SearchSyntax } from '../components/SearchBox.tsx';
 import { Sparkline } from '../components/Sparkline.tsx';
 import { KIND_LABELS } from '../components/WebhookEditor.tsx';
 import { useConfig } from '../config.tsx';
-import { formatCount, formatDate, hostOf } from '../format.ts';
+import { formatCount, formatDate, hostOf, isExpired } from '../format.ts';
 import { linkClick, navigate, useLocation } from '../router.ts';
 import { useApi } from '../useApi.ts';
 
@@ -29,6 +29,12 @@ export function LinksPage() {
     const [limit, setLimit] = useState(PAGE);
     const [version, setVersion] = useState(0);
     const refresh = () => setVersion(v => v + 1);
+    // Re-render each minute so links that expire while the page is open get marked.
+    const [now, setNow] = useState(Date.now);
+    useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(id);
+    }, []);
 
     // The bookmarklet opens /links?new=<url>.
     const initialUrl = search.get('new') ?? '';
@@ -115,6 +121,7 @@ export function LinksPage() {
                         key={link.id}
                         link={link}
                         host={hostOf(shortOrigin)}
+                        now={now}
                         onTag={setTag}
                         onChanged={refresh}
                     />
@@ -220,17 +227,19 @@ function WebhookMarker({ webhooks }: { webhooks: LinkWithStats['webhooks'] }) {
 function LinkRow({
     link,
     host,
+    now,
     onTag,
     onChanged
 }: {
     link: LinkWithStats;
     host: string;
+    now: number;
     onTag: (tag: string) => void;
     onChanged: () => void;
 }) {
     const { shortOrigin } = useConfig();
     const copy = useCopy();
-    const expired = link.expiresAt !== null && link.expiresAt < link.updatedAt;
+    const expired = isExpired(link.expiresAt, now);
     return (
         <li className="link-row">
             {/* Covers the whole row; the buttons inside sit above it. */}
