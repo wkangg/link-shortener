@@ -1085,6 +1085,33 @@ describe('discord formatting', () => {
         expect(clicks.every(e => e.title === 'Click on s.example/gh')).toBe(true);
     });
 
+    test('one click with every field full stays inside the limit', () => {
+        const long = 'x'.repeat(2000);
+        const e = sampleEvent({
+            city: long,
+            source: long,
+            browser: long,
+            qr: true,
+            utm: { source: long, medium: long, campaign: long, term: null, content: null },
+            flags: { bot: long, datacenter: true, vpn: 'Tor', scraper: long, abuseScore: 100 },
+            ip: '203.0.113.5',
+            userAgent: long
+        });
+        e.data.link.url = `https://example.com/${'a'.repeat(2028)}`;
+        e.data.link.shortUrl = `https://s.example/${'s'.repeat(300)}`;
+        e.data.link.title = long;
+        const message = clicksMessage([e], DASH);
+        const text = message.embeds
+            .flatMap(m => [
+                m.title,
+                m.description,
+                m.footer?.text,
+                ...(m.fields ?? []).flatMap(f => [f.name, f.value])
+            ])
+            .join('');
+        expect(text.length).toBeLessThanOrEqual(6000);
+    });
+
     test('a long summary gives way when it and one click are over the limit', () => {
         // 150 different links fill the summary; the newest clicks are as long as they get.
         const events = Array.from({ length: 160 }, (_, i) => {

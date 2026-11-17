@@ -10,6 +10,8 @@ export const DISCORD_INTERVAL_MS = 2000;
 // Discord's field limits.
 const TITLE_MAX = 256;
 const FIELD_MAX = 1024;
+/** A click's fields are clipped shorter, so one click with every field full fits in MESSAGE_MAX. */
+const CLICK_FIELD_MAX = 512;
 /** Discord rejects a message whose embeds hold more text than this in all. */
 const MESSAGE_MAX = 6000;
 /** Destination URLs can be 2048 long; clipped so a batch of clicks fits in MESSAGE_MAX. */
@@ -63,7 +65,7 @@ export function clickEmbed(event: LinkClickedEvent, dashOrigin: string): Discord
     const { link, click } = event.data;
     const fields: NonNullable<DiscordEmbed['fields']> = [];
     const field = (name: string, value: string | null, inline = true) => {
-        if (value) fields.push({ name, value: clip(value, FIELD_MAX), inline });
+        if (value) fields.push({ name, value: clip(value, CLICK_FIELD_MAX), inline });
     };
 
     const place = joined([click.city, click.region, click.country], ', ');
