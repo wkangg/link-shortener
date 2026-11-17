@@ -15,6 +15,8 @@
 // a fact arrives late (hostname, ISP, browser signals) or a list changes.
 import type { Database } from 'bun:sqlite';
 
+import { LIST_LABELS } from './vpn.ts';
+
 /** Signals must arrive within this long of the click; unused tokens are cleared after it. */
 export const SIGNALS_WINDOW_MS = 10 * 60_000;
 
@@ -34,6 +36,8 @@ export interface ClickFacts {
     hostname: string | null;
     isp: string | null;
     is_datacenter: number;
+    /** The label stored on the click, if any. */
+    vpn?: string | null;
 }
 
 export interface Verdict {
@@ -87,7 +91,10 @@ function vpnHost(facts: ClickFacts): string | null {
 }
 
 export function classify(facts: ClickFacts, lookup: VpnLookup, now: number): Verdict {
-    const listed = facts.ip ? lookup(facts.ip) : null;
+    // IPs leave the lists (Tor exits come and go), but the click still came
+    // through one, so a list label once given is kept.
+    const stored = facts.vpn && LIST_LABELS.has(facts.vpn) ? facts.vpn : null;
+    const listed = (facts.ip ? lookup(facts.ip) : null) ?? stored;
     // Declared bots are their own category.
     if (facts.is_bot === 1) return { vpn: listed, scraper: null };
 
