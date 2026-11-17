@@ -10,21 +10,19 @@ import type { Database } from 'bun:sqlite';
 // Reverse DNS is best-effort (see analytics/hostname.ts), so an unresolved IP is
 // simply never flagged.
 
-// Matched against the end of the reverse-DNS hostname (case-insensitive). These
-// are the rDNS suffixes of the large cloud and hosting providers.
+// Matched against the end of the reverse-DNS hostname (case-insensitive), so a
+// suffix covers its subdomains too. These are the rDNS suffixes of the large cloud
+// and hosting providers.
 const DATACENTER_SUFFIXES = [
     'amazonaws.com', // AWS EC2
-    'compute.amazonaws.com',
     'googleusercontent.com', // Google Cloud
     '1e100.net', // Google
-    'bc.googleusercontent.com',
     'cloudapp.net', // Azure
     'cloudapp.azure.com',
     'azurewebsites.net',
     'digitalocean.com',
     'linodeusercontent.com', // Linode / Akamai
     'linode.com',
-    'members.linode.com',
     'vultr.com',
     'vultrusercontent.com',
     'choopa.net', // Vultr / Constant
@@ -35,7 +33,6 @@ const DATACENTER_SUFFIXES = [
     'ovhcloud.com',
     'hetzner.com', // Hetzner
     'your-server.de',
-    'clients.your-server.de',
     'scaleway.com', // Scaleway / Online
     'online.net',
     'contabo.net', // Contabo
