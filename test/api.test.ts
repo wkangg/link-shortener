@@ -448,6 +448,33 @@ describe('export', () => {
     });
 });
 
+describe('deleting a link', () => {
+    test('is refused while its buffered clicks can’t be saved', async () => {
+        const r = testApp();
+        try {
+            const created = await r.api('/api/links', {
+                method: 'POST',
+                body: JSON.stringify({ url: 'https://example.com/', slug: 'stuck' })
+            });
+            const { id } = (await created.json()) as { id: number };
+            await r.click('/stuck');
+            r.db.run(
+                "CREATE TRIGGER fail_clicks BEFORE INSERT ON clicks BEGIN SELECT RAISE(ABORT, 'disk full'); END"
+            );
+            // Deleting now would leave the click to land on the next link with this id.
+            expect(await r.status(`/api/links/${id}`, { method: 'DELETE' })).toBe(503);
+            expect(await r.status(`/api/links/${id}`)).toBe(200);
+            expect(r.app.clicks.pending).toBe(1);
+
+            r.db.run('DROP TRIGGER fail_clicks');
+            expect(await r.status(`/api/links/${id}`, { method: 'DELETE' })).toBe(204);
+            expect(r.db.query('SELECT COUNT(*) AS n FROM clicks').get()).toEqual({ n: 0 });
+        } finally {
+            await r.close();
+        }
+    });
+});
+
 describe('IP reputation', () => {
     test('config reports it off by default', async () => {
         expect(await t.get<ConfigResponse>('/api/config')).toMatchObject({

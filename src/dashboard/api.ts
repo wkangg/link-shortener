@@ -310,7 +310,9 @@ export function apiRoutes(deps: ApiDeps) {
                 const id = parseId(req.params.id);
                 // Write its buffered clicks first so they go with it, rather than
                 // landing on the next link, which gets the same id.
-                deps.flushClicks();
+                if (!deps.flushClicks()) {
+                    return error('Couldn’t save recent clicks before deleting; try again', 503);
+                }
                 return id !== null && links.delete(id)
                     ? new Response(null, { status: 204 })
                     : error('Link not found', 404);
