@@ -18,6 +18,7 @@ import type {
     LinkWithStats,
     RedirectType
 } from '../shared/types.ts';
+import { endpointGetsLink } from '../webhooks/outbox.ts';
 import type { CreateLinkInput, UpdateLinkInput } from './schemas.ts';
 
 interface LinkRow {
@@ -292,23 +293,12 @@ export class LinkRepo {
                 },
                 number[]
             >(
-                `SELECT DISTINCT m.link_id, e.id, e.kind, e.url, e.description, e.enabled, e.all_links
-                 FROM (
-                     SELECT l.id AS link_id, e.id AS endpoint_id FROM links l
-                     JOIN webhook_endpoints e ON e.all_links = 1
-                     WHERE l.id IN (${placeholders(ids)})
-                     UNION
-                     SELECT link_id, endpoint_id FROM webhook_endpoint_links
-                     WHERE link_id IN (${placeholders(ids)})
-                     UNION
-                     SELECT t.link_id, e.id FROM link_tags t
-                     JOIN webhook_endpoints e ON e.all_links = 0
-                     JOIN json_each(e.tags) j ON j.value = t.tag
-                     WHERE t.link_id IN (${placeholders(ids)})
-                 ) m JOIN webhook_endpoints e ON e.id = m.endpoint_id
-                 ORDER BY m.link_id, e.id`
+                `SELECT l.id AS link_id, e.id, e.kind, e.url, e.description, e.enabled, e.all_links
+                 FROM links l JOIN webhook_endpoints e ON ${endpointGetsLink('l.id')}
+                 WHERE l.id IN (${placeholders(ids)})
+                 ORDER BY l.id, e.id`
             )
-            .all(...ids, ...ids, ...ids);
+            .all(...ids);
         for (const row of rows) {
             const ref: LinkWebhookRef = {
                 id: row.id,
@@ -350,10 +340,7 @@ export class LinkRepo {
 }
 
 /** Webhooks that get link `l`'s clicks: for every link, chosen for it, or by tag. */
-const LINK_WEBHOOKS = `SELECT 1 FROM webhook_endpoints e WHERE (e.all_links = 1
-    OR EXISTS (SELECT 1 FROM webhook_endpoint_links el WHERE el.endpoint_id = e.id AND el.link_id = l.id)
-    OR EXISTS (SELECT 1 FROM link_tags t JOIN json_each(e.tags) j ON j.value = t.tag
-               WHERE t.link_id = l.id))`;
+const LINK_WEBHOOKS = `SELECT 1 FROM webhook_endpoints e WHERE ${endpointGetsLink('l.id')}`;
 
 const LIKE = String.raw`LIKE ? ESCAPE '\'`;
 
