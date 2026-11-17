@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
 import net from 'node:net';
 
+import { isOwnAddress } from '../src/dashboard/api.ts';
 import { inconsistencies } from '../src/dashboard/client/components/ClickDetails.tsx';
 import type {
     AboutResponse,
@@ -191,6 +192,21 @@ describe('links API + redirects + analytics, end to end', () => {
             headers: { Origin: 'https://evil.example' }
         });
         expect(cross.status).toBe(403);
+
+        // Outside production, the dashboard opened by address may write to itself.
+        const host = new URL(t.app.dash.url).host;
+        expect(isOwnAddress(`http://${host}`, host)).toBe(host.startsWith('localhost'));
+        expect(isOwnAddress('http://192.168.1.5:3001', '192.168.1.5:3001')).toBe(true);
+        expect(isOwnAddress('http://[::1]:3001', '[::1]:3001')).toBe(true);
+        expect(isOwnAddress('http://192.168.1.5:3001', '192.168.1.6:3001')).toBe(false);
+        // A name could be re-pointed at this machine by someone else.
+        expect(isOwnAddress('http://evil.example:3001', 'evil.example:3001')).toBe(false);
+        const own = await t.api('/api/links', {
+            method: 'POST',
+            body: JSON.stringify({ url: 'https://x.com/own' }),
+            headers: { Origin: 'http://127.0.0.1:3001', Host: '127.0.0.1:3001' }
+        });
+        expect(own.status).toBe(201);
 
         t.auth.identity = null;
         expect(await t.status('/api/links')).toBe(401);

@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -32,6 +33,8 @@ export interface ApiDeps {
     authenticate: Authenticate;
     /** Browser requests that change data must come from this origin. */
     dashOrigin: string;
+    /** Not production: writes may also come from the address the dashboard was opened at. */
+    dev?: boolean;
     shortOrigin: string;
     /** AbuseIPDB lookups are on. */
     reputation: boolean;
@@ -178,6 +181,19 @@ function statsQueryOf(req: Request): StatsQuery {
     return parseStatsQuery(new URL(req.url));
 }
 
+/**
+ * In development the dashboard is opened by address (http://192.168.1.5:3001), which
+ * isn't DASH_ORIGIN. Such a page may write when it was served by this same host. Only
+ * for IP addresses and localhost: a name could be an attacker's, re-pointed at this
+ * machine (DNS rebinding).
+ */
+export function isOwnAddress(origin: string, host: string | null): boolean {
+    if (!host || !URL.canParse(origin)) return false;
+    const url = new URL(origin);
+    const name = url.hostname.replace(/^\[(.*)\]$/, '$1');
+    return url.host === host && (name === 'localhost' || isIP(name) !== 0);
+}
+
 function numberParam(params: URLSearchParams, name: string, fallback: number): number {
     const value = Number(params.get(name) ?? fallback);
     return Number.isFinite(value) ? value : fallback;
@@ -204,7 +220,11 @@ export function apiRoutes(deps: ApiDeps) {
         return async (req, server) => {
             if (req.method !== 'GET' && req.method !== 'HEAD') {
                 const origin = req.headers.get('origin');
-                if (origin && origin !== deps.dashOrigin) return error('Cross-origin request', 403);
+                const allowed =
+                    !origin ||
+                    origin === deps.dashOrigin ||
+                    (deps.dev === true && isOwnAddress(origin, req.headers.get('host')));
+                if (!allowed) return error('Cross-origin request', 403);
             }
             const identity = await deps.authenticate(req, server.requestIP(req)?.address ?? '');
             if (!identity) return error('Not signed in through Cloudflare Access', 401);
