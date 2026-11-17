@@ -471,10 +471,18 @@ export class Stats {
     /**
      * The CSV in pieces: the header, then `pageSize` clicks at a time, each read with its
      * own short query (keyset-paged on ts, id). An export of any size neither holds the
-     * whole file in memory nor keeps redirects waiting on one long query.
+     * whole file in memory nor keeps redirects waiting on one long query. A page is only
+     * short when the filters match plenty of clicks: a search matching few still reads
+     * far down the table to fill one.
      */
     *csvPages(query: StatsQuery, pageSize = 5000): Generator<string> {
         const where = this.#where(query);
+        // Clicks written while the export runs are left out, so the file is the
+        // clicks as they were when it started, not a mix of before and after.
+        // Read before the header goes out: the caller may wait before asking for rows.
+        const newest =
+            this.#db.query<{ id: number | null }, []>('SELECT MAX(id) AS id FROM clicks').get()
+                ?.id ?? 0;
         const header = [
             'time',
             'slug',
@@ -537,11 +545,6 @@ export class Stats {
                  WHERE ${where.sql} AND c.id <= ? AND (c.ts < ? OR c.id < ?)
                  ORDER BY c.ts DESC, c.id DESC LIMIT ?`
         );
-        // Clicks written while the export runs are left out, so the file is the
-        // clicks as they were when it started, not a mix of before and after.
-        const newest =
-            this.#db.query<{ id: number | null }, []>('SELECT MAX(id) AS id FROM clicks').get()
-                ?.id ?? 0;
         let ts = Infinity;
         let id = Infinity;
         for (;;) {
