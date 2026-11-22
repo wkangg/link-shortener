@@ -361,7 +361,7 @@ function pageReport(c: ClickHistoryRow): string | null {
     if (c.js === null) return null;
     if (!c.js) return 'none';
     const sent = c.reportMs === null ? 'received' : `after ${duration(c.reportMs)}`;
-    // The visitor left before every probe finished; blank fields may just be unfinished.
+    // A probe hadn't finished (the visitor left, or the 0.5 s limit); blank fields may just be unfinished.
     return c.partial ? `${sent}, cut short` : sent;
 }
 

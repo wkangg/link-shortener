@@ -50,7 +50,10 @@ function runProbe(){
   probed=true;
   tryit(probe);
 }
-if(document.visibilityState==='visible'){
+// A prerendered page waits until it's shown: leaving now would cancel the prerender
+// before anything is reported.
+if(document.prerendering)document.addEventListener('prerenderingchange',go,{once:true});
+else if(document.visibilityState==='visible'){
   requestAnimationFrame(function(){setTimeout(go,0)});
   setTimeout(go,100);
 }else go();
@@ -63,21 +66,24 @@ bait.style.cssText='position:absolute;left:-999px;width:1px;height:1px';
 bait.innerHTML='&nbsp;';
 document.body.appendChild(bait);
 // Started before the synchronous probes so the browser works on them meanwhile.
+// Each start is wrapped: an API that throws (a stub from a privacy extension) loses only its field.
 var tasks=[
-  hints(),
+  tryit(hints),
   tryit(refreshRate),
-  window.PublicKeyCredential&&PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
-    ?PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(v){s.biometrics=v}):0,
-  n.bluetooth&&n.bluetooth.getAvailability?n.bluetooth.getAvailability().then(function(v){s.bluetooth=v}):0,
+  tryit(function(){
+    return window.PublicKeyCredential&&PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
+      ?PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(v){s.biometrics=v}):0;
+  }),
+  tryit(function(){return n.bluetooth&&n.bluetooth.getAvailability?n.bluetooth.getAvailability().then(function(v){s.bluetooth=v}):0}),
   tryit(keyboard),
   tryit(audio),
   tryit(voices),
   tryit(devices),
   tryit(permissions),
   tryit(webgpu),
-  n.getBattery?n.getBattery().then(function(b){s.battery=Math.round(b.level*100);s.charging=b.charging}):0,
-  incognito().then(function(v){if(v!==null)s.incognito=v}),
-  n.storage&&n.storage.estimate?n.storage.estimate().then(function(e){s.quota=e.quota}):0,
+  tryit(function(){return n.getBattery?n.getBattery().then(function(b){s.battery=Math.round(b.level*100);s.charging=b.charging}):0}),
+  tryit(function(){return incognito().then(function(v){if(v!==null)s.incognito=v})}),
+  tryit(function(){return n.storage&&n.storage.estimate?n.storage.estimate().then(function(e){s.quota=e.quota}):0}),
   new Promise(function(r){setTimeout(r,30)}).then(function(){
     var cs=getComputedStyle(bait);
     s.adBlocker=!bait.offsetHeight||cs.display==='none'||cs.visibility==='hidden';
@@ -407,7 +413,7 @@ function send(){
   // Headless Chrome denies notifications while the permission API still says "prompt".
   if(s.automation&&window.Notification&&Notification.permission==='denied'&&s.permissions&&s.permissions.notifications==='prompt')
     s.automation.push('notification permission mismatch');
-  // Some async probes still running: their fields are missing because the visitor left first.
+  // Some async probes hadn't finished (the visitor left, or the 0.5 s limit): their fields are missing.
   s.partial=pending>0;
   // Compared with the server's clock when the report arrives.
   s.clock=Date.now();
