@@ -465,6 +465,16 @@ export function ClickHistory({
                                             <div className="history-ago">
                                                 {formatRelative(c.ts, now)}
                                             </div>
+                                            {c.partial && (
+                                                <div className="history-tags">
+                                                    <span
+                                                        className="badge badge-warn"
+                                                        title="The device report was sent before every check finished, so some fields may be blank"
+                                                    >
+                                                        partial
+                                                    </span>
+                                                </div>
+                                            )}
                                         </td>
                                         {showLink && (
                                             <td className="mono">
@@ -568,19 +578,8 @@ export function ClickHistory({
                                                     Details
                                                 </button>
                                             )}
-                                            {(c.incognito ||
-                                                c.adBlocker ||
-                                                c.partial ||
-                                                c.fingerprint) && (
+                                            {(c.incognito || c.adBlocker || c.fingerprint) && (
                                                 <span className="history-tags">
-                                                    {c.partial && (
-                                                        <span
-                                                            className="badge"
-                                                            title="The device report was sent before every check finished, so some fields may be blank"
-                                                        >
-                                                            cut short
-                                                        </span>
-                                                    )}
                                                     {c.incognito && (
                                                         <span className="badge">private</span>
                                                     )}
