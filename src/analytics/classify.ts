@@ -69,6 +69,11 @@ const VPN_HOSTS: [RegExp, string][] = [
     [/tzulo/i, 'tzulo']
 ];
 
+// Hosting companies that rent servers to developers, not to VPN services. A
+// browser that runs JavaScript there is far more likely a scraper than a VPN
+// user, so it isn't labelled one and stays a datacenter click.
+const SERVER_HOSTS: RegExp[] = [/netcup/i];
+
 const UTC_ZONES = new Set([
     'utc',
     'etc/utc',
@@ -85,8 +90,12 @@ const UTC_ZONES = new Set([
 // What headless Chrome and browsers in GPU-less containers report as their renderer.
 const SOFTWARE_GPU_RE = /swiftshader|llvmpipe|softpipe/i;
 
+function hostText(facts: ClickFacts): string {
+    return `${facts.hostname ?? ''} ${facts.isp ?? ''}`;
+}
+
 function vpnHost(facts: ClickFacts): string | null {
-    const text = `${facts.hostname ?? ''} ${facts.isp ?? ''}`;
+    const text = hostText(facts);
     return VPN_HOSTS.find(([re]) => re.test(text))?.[1] ?? null;
 }
 
@@ -117,7 +126,8 @@ export function classify(facts: ClickFacts, lookup: VpnLookup, now: number): Ver
     if (scraper || !hosting) return { vpn: null, scraper };
     // A hosting IP that doesn't look automated.
     if (host) return { vpn: `VPN host: ${host}`, scraper: null };
-    if (jsRan) return { vpn: 'Browser on a hosting IP', scraper: null };
+    if (jsRan && !SERVER_HOSTS.some(re => re.test(hostText(facts))))
+        return { vpn: 'Browser on a hosting IP', scraper: null };
     return { vpn: null, scraper: null };
 }
 

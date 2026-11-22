@@ -175,6 +175,11 @@ describe('classify', () => {
         });
         // Plain redirect, no signals: undecided, stays a datacenter click.
         expect(verdict({})).toEqual({ vpn: null, scraper: null });
+        // Server-only hosts aren't VPNs, even when JavaScript ran.
+        expect(verdict({ js: 1, timezone: 'Europe/Berlin', isp: 'netcup GmbH' })).toEqual({
+            vpn: null,
+            scraper: null
+        });
     });
 
     test('networks VPN services rent count as VPNs unless the click looks automated', () => {
