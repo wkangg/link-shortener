@@ -293,6 +293,8 @@ export interface ClickHistoryRow {
     clockSkew: number | null;
     /** ms from the click to the page's report arriving. */
     reportMs: number | null;
+    /** The report went out with async probes still running, so some fields may be missing. */
+    partial: boolean | null;
     /** history.length: 1 is a fresh tab, usually opened from another app. */
     historyLength: number | null;
     /** visible | hidden (a background tab) | prerender. */

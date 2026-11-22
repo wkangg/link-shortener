@@ -30,7 +30,7 @@ const KEY_CODES = [
 // Every probe is optional: an API that's missing or throws just leaves its field out.
 const SCRIPT = String.raw`(function(){
 var CODECS=${JSON.stringify(CODECS.map(([mime]) => mime))},FONTS=${JSON.stringify(FONTS)},KEYS=${JSON.stringify(KEY_CODES)};
-var n=navigator,s={t:T},sent=false,left=false,probed=false;
+var n=navigator,s={t:T},sent=false,left=false,probed=false,pending=0;
 function tryit(f){try{return f()}catch(e){}}
 function hash(t){var h=0x811c9dc5;for(var i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16)}
 // Leave right after the first paint, then probe while the destination loads. This page
@@ -407,13 +407,15 @@ function send(){
   // Headless Chrome denies notifications while the permission API still says "prompt".
   if(s.automation&&window.Notification&&Notification.permission==='denied'&&s.permissions&&s.permissions.notifications==='prompt')
     s.automation.push('notification permission mismatch');
+  // Some async probes still running: their fields are missing because the visitor left first.
+  s.partial=pending>0;
   // Compared with the server's clock when the report arrives.
   s.clock=Date.now();
   var body=JSON.stringify(s);
   if(!(n.sendBeacon&&n.sendBeacon(P,body)))fetch(P,{method:'POST',body:body,keepalive:true}).catch(function(){});
 }
 Promise.race([
-  Promise.all(tasks.map(function(p){return Promise.resolve(p).catch(function(){})})),
+  Promise.all(tasks.map(function(p){pending++;return Promise.resolve(p).catch(function(){}).then(function(){pending--})})),
   new Promise(function(r){setTimeout(r,500)})
 ]).then(send);
 })();`;

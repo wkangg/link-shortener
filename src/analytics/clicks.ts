@@ -120,7 +120,8 @@ const SIGNAL_COLUMNS = [
     'font_size',
     'scrollbar',
     'outer_size',
-    'blocked_storage'
+    'blocked_storage',
+    'partial'
 ] as const satisfies readonly (keyof DeviceSignals)[];
 
 /** Unused tokens are cleared (and their clicks reclassified) at most this often. */

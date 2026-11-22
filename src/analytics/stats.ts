@@ -341,7 +341,8 @@ export class Stats {
             | 'saveData'
             | 'hasOpener'
             | 'biometrics'
-            | 'bluetooth';
+            | 'bluetooth'
+            | 'partial';
         type Probes = 'codecs' | 'fonts' | 'settings';
         type Json =
             | 'webgl'
@@ -393,7 +394,7 @@ export class Stats {
                         c.nav_vendor AS navVendor, c.oscpu, c.automation, c.timer_ms AS timerMs,
                         c.cpu_ms AS cpuMs, c.heap_limit AS heapLimit, c.refresh_hz AS refreshHz,
                         c.biometrics, c.bluetooth, c.font_size AS fontSize, c.scrollbar,
-                        c.outer_size AS outerSize, c.blocked_storage AS blockedStorage
+                        c.outer_size AS outerSize, c.blocked_storage AS blockedStorage, c.partial
                  FROM clicks c LEFT JOIN links l ON l.id = c.link_id
                  WHERE ${sql} ORDER BY c.ts DESC, c.id DESC LIMIT ? OFFSET ?`
             )
@@ -418,6 +419,7 @@ export class Stats {
                 hasOpener: flag(r.hasOpener),
                 biometrics: flag(r.biometrics),
                 bluetooth: flag(r.bluetooth),
+                partial: flag(r.partial),
                 automation: parseJson(r.automation),
                 blockedStorage: parseJson(r.blockedStorage),
                 utm: withoutNulls(parseJson(r.utm)),

@@ -313,6 +313,7 @@ describe('detailed device tracking', () => {
             automation: ['no window.chrome'],
             // Contradict the Mac Safari user agent.
             navPlatform: 'Win32',
+            partial: true,
             vendor: 'Google Inc.',
             // Five minutes fast.
             clock: Date.now() + 5 * 60_000
@@ -362,7 +363,8 @@ describe('detailed device tracking', () => {
             ipTimezone: 'America/Toronto',
             historyLength: 1,
             automation: ['no window.chrome'],
-            navPlatform: 'Win32'
+            navPlatform: 'Win32',
+            partial: true
         });
         const click = history.clicks[0];
         expect(click?.clockSkew).toBeGreaterThan(4 * 60_000);
@@ -385,7 +387,7 @@ describe('about', () => {
         expect(about.database).toMatchObject({
             path: '',
             walBytes: 0,
-            migration: '0001_init.sql',
+            migration: '0002_report_partial.sql',
             sqliteVersion: expect.stringMatching(/^3\./)
         });
         expect(about.database.sizeBytes).toBeGreaterThan(0);

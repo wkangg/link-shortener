@@ -187,6 +187,8 @@ export interface DeviceSignals {
     outer_size: string | null;
     /** JSON array of storage APIs that are blocked; [] when all work. */
     blocked_storage: string | null;
+    /** 1 when the report went out with async probes still running. */
+    partial: 0 | 1 | null;
 }
 
 type TraitKind = 'str' | 'int' | 'bool' | 'strs';
@@ -479,7 +481,8 @@ export function parseSignals(body: string): DeviceSignals | null {
         outer_size: match('outer', VIEWPORT_RE),
         blocked_storage: Array.isArray(s.blockedStorage)
             ? JSON.stringify(traitList(s.blockedStorage, 5)?.filter(k => STORAGE_APIS.has(k)))
-            : null
+            : null,
+        partial: flag('partial')
     };
 }
 

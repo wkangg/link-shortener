@@ -206,7 +206,8 @@ describe('extra click fields', () => {
             font_size: null,
             scrollbar: null,
             outer_size: null,
-            blocked_storage: null
+            blocked_storage: null,
+            partial: null
         });
         expect(
             parseSignals(
@@ -338,6 +339,10 @@ describe('extra click fields', () => {
             outer_size: '1440x900',
             blocked_storage: JSON.stringify(['localStorage'])
         });
+        // Whether the report was cut short; anything but a boolean is dropped.
+        expect(parseSignals(JSON.stringify({ partial: true }))).toMatchObject({ partial: 1 });
+        expect(parseSignals(JSON.stringify({ partial: false }))).toMatchObject({ partial: 0 });
+        expect(parseSignals(JSON.stringify({ partial: 'yes' }))).toMatchObject({ partial: null });
         // An empty list is a finding ("none"); a missing one is not.
         expect(parseSignals(JSON.stringify({ automation: [], blockedStorage: [] }))).toMatchObject({
             automation: '[]',

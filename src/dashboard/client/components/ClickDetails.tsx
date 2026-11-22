@@ -360,7 +360,9 @@ function clock(skew: number): string {
 function pageReport(c: ClickHistoryRow): string | null {
     if (c.js === null) return null;
     if (!c.js) return 'none';
-    return c.reportMs === null ? 'received' : `after ${duration(c.reportMs)}`;
+    const sent = c.reportMs === null ? 'received' : `after ${duration(c.reportMs)}`;
+    // The visitor left before every probe finished; blank fields may just be unfinished.
+    return c.partial ? `${sent}, cut short` : sent;
 }
 
 type Row = [label: string, value: ReactNode];
