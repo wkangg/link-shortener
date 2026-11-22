@@ -30,9 +30,32 @@ const KEY_CODES = [
 // Every probe is optional: an API that's missing or throws just leaves its field out.
 const SCRIPT = String.raw`(function(){
 var CODECS=${JSON.stringify(CODECS.map(([mime]) => mime))},FONTS=${JSON.stringify(FONTS)},KEYS=${JSON.stringify(KEY_CODES)};
-var n=navigator,s={t:T},sent=false,left=false;
+var n=navigator,s={t:T},sent=false,left=false,probed=false;
 function tryit(f){try{return f()}catch(e){}}
 function hash(t){var h=0x811c9dc5;for(var i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16)}
+// Leave right after the first paint, then probe while the destination loads. This page
+// stays up until the destination's response arrives (for good, if it's a download), and
+// pagehide sends whatever has been collected by then. Leaving before the first paint
+// would stop animation frames, which the refresh rate needs. The probes wait a task:
+// the browser only sends the destination request once this one yields. Scheduled
+// before anything that could throw, so the visitor is always sent on.
+function go(){
+  if(left)return;
+  left=true;
+  location.replace(D);
+  setTimeout(runProbe,0);
+}
+function runProbe(){
+  if(probed)return;
+  probed=true;
+  tryit(probe);
+}
+if(document.visibilityState==='visible'){
+  requestAnimationFrame(function(){setTimeout(go,0)});
+  setTimeout(go,100);
+}else go();
+addEventListener('pagehide',send);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')send()});
 var bait=document.createElement('div');
 // Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
 bait.className='ad_banner ad-slot ad-unit';
@@ -60,21 +83,6 @@ var tasks=[
     s.adBlocker=!bait.offsetHeight||cs.display==='none'||cs.visibility==='hidden';
   })
 ];
-// Leave right after the first paint, then probe while the destination loads. This page
-// stays up until the destination's response arrives (for good, if it's a download), and
-// pagehide sends whatever has been collected by then. Leaving before the first paint
-// would stop animation frames, which the refresh rate needs. The probes wait a task:
-// the browser only sends the destination request once this one yields.
-function go(){
-  if(left)return;
-  left=true;
-  location.replace(D);
-  setTimeout(function(){tryit(probe)},0);
-}
-if(document.visibilityState==='visible'){
-  requestAnimationFrame(function(){setTimeout(go,0)});
-  setTimeout(go,100);
-}else go();
 // The synchronous probes.
 function probe(){
 s.screen=screen.width+'x'+screen.height+'@'+(Math.round(devicePixelRatio*100)/100);
@@ -394,6 +402,8 @@ function webgpu(){
 function send(){
   if(sent)return;
   sent=true;
+  // A hidden page may run the probe timer only once a second; never report without them.
+  runProbe();
   // Headless Chrome denies notifications while the permission API still says "prompt".
   if(s.automation&&window.Notification&&Notification.permission==='denied'&&s.permissions&&s.permissions.notifications==='prompt')
     s.automation.push('notification permission mismatch');
@@ -402,8 +412,6 @@ function send(){
   var body=JSON.stringify(s);
   if(!(n.sendBeacon&&n.sendBeacon(P,body)))fetch(P,{method:'POST',body:body,keepalive:true}).catch(function(){});
 }
-addEventListener('pagehide',send);
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')send()});
 Promise.race([
   Promise.all(tasks.map(function(p){return Promise.resolve(p).catch(function(){})})),
   new Promise(function(r){setTimeout(r,500)})
