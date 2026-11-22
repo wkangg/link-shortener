@@ -568,8 +568,19 @@ export function ClickHistory({
                                                     Details
                                                 </button>
                                             )}
-                                            {(c.incognito || c.adBlocker || c.fingerprint) && (
+                                            {(c.incognito ||
+                                                c.adBlocker ||
+                                                c.partial ||
+                                                c.fingerprint) && (
                                                 <span className="history-tags">
+                                                    {c.partial && (
+                                                        <span
+                                                            className="badge"
+                                                            title="The device report was sent before every check finished, so some fields may be blank"
+                                                        >
+                                                            cut short
+                                                        </span>
+                                                    )}
                                                     {c.incognito && (
                                                         <span className="badge">private</span>
                                                     )}
