@@ -55,9 +55,12 @@ function runProbe(){
   tryit(probe);
   setTimeout(cap,500);
 }
-// A prerendered page waits until it's shown: leaving now would cancel the prerender
-// before anything is reported.
-if(document.prerendering)document.addEventListener('prerenderingchange',go,{once:true});
+// A prerendered page leaves only once it's shown (leaving now would cancel the prerender),
+// but probes and reports right away, so a prerender that's never shown is still reported.
+if(document.prerendering){
+  document.addEventListener('prerenderingchange',go,{once:true});
+  setTimeout(runProbe,0);
+}
 else if(document.visibilityState==='visible'){
   requestAnimationFrame(function(){setTimeout(go,0)});
   setTimeout(go,100);
