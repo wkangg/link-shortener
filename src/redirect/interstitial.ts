@@ -36,19 +36,24 @@ function hash(t){var h=0x811c9dc5;for(var i=0;i<t.length;i++){h^=t.charCodeAt(i)
 // Leave right after the first paint, then probe while the destination loads. This page
 // stays up until the destination's response arrives (for good, if it's a download), and
 // pagehide sends whatever has been collected by then. Leaving before the first paint
-// would stop animation frames, which the refresh rate needs. The probes wait a task:
-// the browser only sends the destination request once this one yields. Scheduled
-// before anything that could throw, so the visitor is always sent on.
+// would stop animation frames, which the refresh rate needs. Scheduled before anything
+// that could throw, so the visitor is always sent on.
 function go(){
   if(left)return;
   left=true;
   location.replace(D);
-  setTimeout(runProbe,0);
+  // The synchronous probes wait for the refresh rate's frames (they'd block them), at
+  // most 0.1 s; they always wait a task, since the browser only sends the destination
+  // request once this one yields.
+  setTimeout(runProbe,100);
 }
+// The async probes get 0.5 s after the synchronous ones, which hold up the main thread.
+var cap,capped=new Promise(function(r){cap=r});
 function runProbe(){
   if(probed)return;
   probed=true;
   tryit(probe);
+  setTimeout(cap,500);
 }
 // A prerendered page waits until it's shown: leaving now would cancel the prerender
 // before anything is reported.
@@ -404,7 +409,7 @@ function webgpu(){
   });
 }
 // Sent once (the server takes one report per token): when every probe is done or
-// 0.5 s have passed, or earlier if the page is going away.
+// 0.5 s after the synchronous ones, or earlier if the page is going away.
 function send(){
   if(sent)return;
   sent=true;
@@ -420,9 +425,11 @@ function send(){
   var body=JSON.stringify(s);
   if(!(n.sendBeacon&&n.sendBeacon(P,body)))fetch(P,{method:'POST',body:body,keepalive:true}).catch(function(){});
 }
+// Once the refresh rate has its frames (or isn't measured), the synchronous probes can run.
+Promise.resolve(tasks[1]).catch(function(){}).then(function(){if(left)setTimeout(runProbe,0)});
 Promise.race([
   Promise.all(tasks.map(function(p){pending++;return Promise.resolve(p).catch(function(){}).then(function(){pending--})})),
-  new Promise(function(r){setTimeout(r,500)})
+  capped
 ]).then(send);
 })();`;
 
