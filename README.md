@@ -65,7 +65,7 @@ Each category has its own toggle, and a search like `is:bot` overrides the defau
 When a link has tracking turned on, visitors see a short page instead of a bare redirect. The page reads what only the browser knows, and a `<meta refresh>` covers browsers with JavaScript off. Each link picks a tracking priority:
 
 - **Speed** (default): visitors are sent on right away and the page records while the destination loads, so tracking adds almost no delay. A fast destination can cut the slowest checks short; those clicks are marked `partial` (search `is:partial`).
-- **Complete data**: the page records everything first, then forwards, up to about 0.5 s slower.
+- **Complete data**: the page records everything first, then forwards, about 0.5–1 s slower. Clicks are rarely partial, only when a check never finishes.
 
 It records:
 

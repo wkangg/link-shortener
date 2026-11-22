@@ -49,31 +49,44 @@ function go(){
   setTimeout(runProbe,100);
 }
 // The async probes get 0.5 s after the synchronous ones, which hold up the main thread.
+// A prerender gets 3 s, since the browser holds some APIs until the page is shown.
 var cap,capped=new Promise(function(r){cap=r});
 function runProbe(){
   if(probed)return;
   probed=true;
   tryit(probe);
-  setTimeout(cap,500);
+  setTimeout(cap,document.prerendering?3000:500);
+}
+// Complete mode (C) probes and reports first, then leaves (send() calls go()); the
+// timer still sends the visitor on if something stalls, before the 3 s meta refresh.
+function leaveWhenReported(){
+  if(sent)go();
+  else setTimeout(go,1500);
 }
 // A prerendered page leaves only once it's shown (leaving now would cancel the prerender),
 // but probes and reports right away, so a prerender that's never shown is still reported.
+// Once shown, the probes the browser held get 0.5 s more.
 if(document.prerendering){
-  document.addEventListener('prerenderingchange',go,{once:true});
+  document.addEventListener('prerenderingchange',function(){
+    setTimeout(cap,500);
+    if(C)leaveWhenReported();else go();
+  },{once:true});
   setTimeout(runProbe,0);
 }
-// Complete mode (C): probe and report first, then leave (send() calls go()). The timer
-// still sends the visitor on if something stalls.
 else if(C){
-  setTimeout(runProbe,0);
-  setTimeout(go,2000);
+  // After the first paint, so the visitor sees the page rather than a blank one.
+  requestAnimationFrame(function(){setTimeout(runProbe,0)});
+  setTimeout(runProbe,100);
+  leaveWhenReported();
 }
 else if(document.visibilityState==='visible'){
   requestAnimationFrame(function(){setTimeout(go,0)});
   setTimeout(go,100);
 }else go();
 addEventListener('pagehide',send);
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')send()});
+// Speed mode may already be leaving, and a page handed off to an app may never get
+// pagehide. Complete mode hasn't left yet, so it keeps probing while hidden.
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&!C)send()});
 var bait=document.createElement('div');
 // Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
 bait.className='ad_banner ad-slot ad-unit';
@@ -430,6 +443,8 @@ function send(){
     s.automation.push('notification permission mismatch');
   // Some async probes hadn't finished (the visitor left, or the 0.5 s limit): their fields are missing.
   s.partial=pending>0;
+  // Probed during a prerender that has since been shown: record it as shown.
+  if(s.visibility==='prerender'&&!document.prerendering)s.visibility=document.visibilityState;
   // Compared with the server's clock when the report arrives.
   s.clock=Date.now();
   var body=JSON.stringify(s);

@@ -209,12 +209,12 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                                 Speed: forward at once, record while the destination loads
                             </option>
                             <option value="complete">
-                                Complete data: record everything first (up to 0.5 s slower)
+                                Complete data: record everything first (about 0.5–1 s slower)
                             </option>
                         </select>
                         <small className="muted">
                             With speed, a fast destination can cut the slowest checks short; those
-                            clicks are marked partial.
+                            clicks are marked partial. Complete data is rarely partial.
                         </small>
                     </label>
                 )}
