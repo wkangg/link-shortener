@@ -85,12 +85,13 @@ function technology(c: ClickHistoryRow): (string | null)[] {
     return [c.browser, os, c.deviceModel ?? c.device];
 }
 
-/** Memory, CPU cores and touch, as reported by the browser; the rest is under Details. */
+/** Memory, CPU cores, touch and refresh rate, as reported by the browser; the rest is under Details. */
 function specs(c: ClickHistoryRow): (string | null)[] {
     return [
         c.memory === null ? null : `${c.memory} GB RAM`,
         c.cpuCores === null ? null : `${c.cpuCores} ${c.cpuCores === 1 ? 'core' : 'cores'}`,
-        c.touchPoints === null ? null : c.touchPoints > 0 ? 'touch' : 'no touch'
+        c.touchPoints === null ? null : c.touchPoints > 0 ? 'touch' : 'no touch',
+        c.refreshHz === null ? null : `${c.refreshHz} Hz`
     ];
 }
 
