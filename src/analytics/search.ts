@@ -409,6 +409,8 @@ function flagCondition(
             return { sql: 'c.incognito = 1', params: [] };
         case 'adblock':
             return { sql: 'c.ad_blocker = 1', params: [] };
+        case 'partial':
+            return { sql: 'c.partial = 1', params: [] };
         case 'charging':
             return { sql: 'c.charging = 1', params: [] };
         case 'qr':

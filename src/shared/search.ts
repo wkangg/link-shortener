@@ -82,6 +82,7 @@ export const SEARCH_FLAGS: readonly SearchField[] = [
     { name: 'abusive', hint: 'IPs flagged as abusive on AbuseIPDB' },
     { name: 'private', hint: 'private / incognito window' },
     { name: 'adblock', hint: 'ad blocker detected' },
+    { name: 'partial', hint: 'device report cut short' },
     { name: 'charging', hint: 'battery charging' },
     { name: 'qr', hint: 'opened from a QR code' },
     { name: 'touch', hint: 'touch screen' },

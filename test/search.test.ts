@@ -106,6 +106,9 @@ describe('search', () => {
         expect(ips('ip:=2001:db8::1', { dc: true })).toEqual(['2001:db8::1']);
         expect(ips('is:private')).toEqual(['198.51.100.7']);
         expect(ips('is:mobile')).toEqual(['198.51.100.7']);
+        db.run("UPDATE clicks SET partial = 1 WHERE ip = '203.0.113.5'");
+        expect(ips('is:partial')).toEqual(['203.0.113.5']);
+        db.run('UPDATE clicks SET partial = NULL');
     });
 
     test('query.<key>: matches one query parameter, keeping the key’s case', () => {
