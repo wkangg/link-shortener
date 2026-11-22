@@ -49,13 +49,14 @@ function go(){
   setTimeout(runProbe,100);
 }
 // The async probes get 0.5 s after the synchronous ones, which hold up the main thread.
-// A prerender gets 3 s, since the browser holds some APIs until the page is shown.
-var cap,capped=new Promise(function(r){cap=r});
+// A prerender gets 2 s, since the browser holds some APIs until the page is shown (any
+// longer and it meets the 3 s meta refresh, which would cancel it before it reports).
+var cap,capTimer,capped=new Promise(function(r){cap=r});
 function runProbe(){
   if(probed)return;
   probed=true;
   tryit(probe);
-  setTimeout(cap,document.prerendering?3000:500);
+  capTimer=setTimeout(cap,document.prerendering?2000:500);
 }
 // Complete mode (C) probes and reports first, then leaves (send() calls go()); the
 // timer still sends the visitor on if something stalls, before the 3 s meta refresh.
@@ -65,10 +66,12 @@ function leaveWhenReported(){
 }
 // A prerendered page leaves only once it's shown (leaving now would cancel the prerender),
 // but probes and reports right away, so a prerender that's never shown is still reported.
-// Once shown, the probes the browser held get 0.5 s more.
+// Once shown, the probes the browser held get 0.5 s more, and it counts as shown.
 if(document.prerendering){
   document.addEventListener('prerenderingchange',function(){
+    clearTimeout(capTimer);
     setTimeout(cap,500);
+    if(s.visibility==='prerender')s.visibility=document.visibilityState;
     if(C)leaveWhenReported();else go();
   },{once:true});
   setTimeout(runProbe,0);
@@ -84,9 +87,14 @@ else if(document.visibilityState==='visible'){
   setTimeout(go,100);
 }else go();
 addEventListener('pagehide',send);
-// Speed mode may already be leaving, and a page handed off to an app may never get
-// pagehide. Complete mode hasn't left yet, so it keeps probing while hidden.
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&!C)send()});
+// Chromium fires freeze before it freezes or discards a background page.
+document.addEventListener('freeze',send);
+// A hidden page may be suspended or discarded without pagehide (an app hand-off, or a
+// phone switching apps), so report then. Complete mode on desktop keeps probing
+// through a tab switch instead: desktop browsers keep background tabs running.
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'&&(!C||tryit(function(){return matchMedia('(pointer: coarse)').matches})))send();
+});
 var bait=document.createElement('div');
 // Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
 bait.className='ad_banner ad-slot ad-unit';
@@ -443,8 +451,6 @@ function send(){
     s.automation.push('notification permission mismatch');
   // Some async probes hadn't finished (the visitor left, or the 0.5 s limit): their fields are missing.
   s.partial=pending>0;
-  // Probed during a prerender that has since been shown: record it as shown.
-  if(s.visibility==='prerender'&&!document.prerendering)s.visibility=document.visibilityState;
   // Compared with the server's clock when the report arrives.
   s.clock=Date.now();
   var body=JSON.stringify(s);
