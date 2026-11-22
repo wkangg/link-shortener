@@ -62,7 +62,12 @@ Each category has its own toggle, and a search like `is:bot` overrides the defau
 
 ### 📱 Detailed device tracking (opt-in, per link)
 
-When a link has tracking turned on, visitors see a short page instead of a bare redirect. The page reads what only the browser knows and then forwards them. It waits at most about 0.5 s, and a `<meta refresh>` covers browsers with JavaScript off. It records:
+When a link has tracking turned on, visitors see a short page instead of a bare redirect. The page reads what only the browser knows, and a `<meta refresh>` covers browsers with JavaScript off. Each link picks a tracking priority:
+
+- **Speed** (default): visitors are sent on right away and the page records while the destination loads, so tracking adds almost no delay. A fast destination can cut the slowest checks short; those clicks are marked `partial` (search `is:partial`).
+- **Complete data**: the page records everything first, then forwards, up to about 0.5 s slower.
+
+It records:
 
 - OS version, screen size, orientation, GPU, RAM, CPU cores, touch points, network type and battery
 - Private browsing and ad-blocker detection

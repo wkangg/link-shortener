@@ -479,6 +479,10 @@ input::placeholder {
     color: var(--muted);
 }
 
+.field.track-mode {
+    margin-top: 0.75rem;
+}
+
 .field {
     display: flex;
     flex-direction: column;

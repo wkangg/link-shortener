@@ -47,6 +47,13 @@ export interface AboutResponse {
 
 export type RedirectType = 301 | 302 | 307 | 308;
 
+/**
+ * How the device-signals page trades speed for data. `speed` sends the visitor on at once
+ * and probes while the destination loads (fast destinations can cut probes short);
+ * `complete` finishes probing first, up to ~0.5 s slower.
+ */
+export type TrackMode = 'speed' | 'complete';
+
 export interface Link {
     id: number;
     slug: string;
@@ -58,6 +65,8 @@ export interface Link {
     archived: boolean;
     /** Serve a JS page that reports browser-side signals before forwarding. */
     trackDevice: boolean;
+    /** Whether that page prefers speed or complete data. */
+    trackMode: TrackMode;
     tags: string[];
     createdAt: number;
     updatedAt: number;

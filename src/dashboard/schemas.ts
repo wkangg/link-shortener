@@ -28,6 +28,7 @@ export function linkSchemas(shortHost: string) {
         expiresAt: z.number().int().positive().nullable(),
         archived: z.boolean(),
         trackDevice: z.boolean(),
+        trackMode: z.enum(['speed', 'complete']),
         tags: z
             .array(tag)
             .max(20)
@@ -49,6 +50,7 @@ export function linkSchemas(shortHost: string) {
             redirectType: fields.redirectType.optional(),
             expiresAt: fields.expiresAt.optional(),
             trackDevice: fields.trackDevice.optional(),
+            trackMode: fields.trackMode.optional(),
             tags: fields.tags.optional()
         }),
         update: z.strictObject({
@@ -59,6 +61,7 @@ export function linkSchemas(shortHost: string) {
             expiresAt: fields.expiresAt.optional(),
             archived: fields.archived.optional(),
             trackDevice: fields.trackDevice.optional(),
+            trackMode: fields.trackMode.optional(),
             tags: fields.tags.optional()
         })
     };

@@ -15,7 +15,8 @@ const LINK: CachedLink = {
     url: 'https://example.com/page?a=1',
     status: 302,
     expiresAt: null,
-    track: false
+    track: false,
+    complete: false
 };
 
 function setup(links: Record<string, CachedLink>, now = 1_000_000) {
@@ -220,6 +221,12 @@ describe('device tracking', () => {
         expect(html).toContain(
             'content="3;url=https://example.com/a?x=&lt;/script&gt;&lt;b&gt;&quot;"'
         );
+    });
+
+    test("the page carries the link's tracking mode", async () => {
+        const { get } = setup({ s: TRACKED, c: { ...TRACKED, complete: true } });
+        expect(await get('/s').text()).toContain(',C=0;');
+        expect(await get('/c').text()).toContain(',C=1;');
     });
 
     test('bots and HEAD still get the plain redirect', () => {

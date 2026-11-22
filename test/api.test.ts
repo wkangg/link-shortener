@@ -268,6 +268,22 @@ describe('non-ASCII Cloudflare location headers', () => {
 });
 
 describe('detailed device tracking', () => {
+    test('the tracking mode defaults to speed, can be set to complete and is validated', async () => {
+        const created = await send('POST', '/api/links', {
+            url: 'https://example.com/mode',
+            slug: 'mode',
+            trackDevice: true
+        });
+        const link = (await created.json()) as Link;
+        expect(link.trackMode).toBe('speed');
+        const updated = await send('PATCH', `/api/links/${link.id}`, { trackMode: 'complete' });
+        expect(((await updated.json()) as Link).trackMode).toBe('complete');
+        const page = await t.click('/mode', { 'user-agent': SAFARI });
+        expect(await page.text()).toContain(',C=1;');
+        const bad = await send('PATCH', `/api/links/${link.id}`, { trackMode: 'fast' });
+        expect(bad.status).toBe(400);
+    });
+
     test('tracked link reports signals that land on the click', async () => {
         const created = await send('POST', '/api/links', {
             url: 'https://example.com/dev',
@@ -387,7 +403,7 @@ describe('about', () => {
         expect(about.database).toMatchObject({
             path: '',
             walBytes: 0,
-            migration: '0002_report_partial.sql',
+            migration: '0003_track_mode.sql',
             sqliteVersion: expect.stringMatching(/^3\./)
         });
         expect(about.database.sizeBytes).toBeGreaterThan(0);

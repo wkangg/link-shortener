@@ -1,8 +1,9 @@
 // The page served instead of a 30x on links with device tracking on. It reads
 // what only the browser knows and posts it to SIGNALS_PATH with the click's token.
-// It starts the navigation to the destination first and probes while that loads,
-// so tracking costs the visitor almost no time. A meta refresh forwards anyway if
-// the script fails or JS is off.
+// By default (track_mode 'speed') it starts the navigation to the destination first
+// and probes while that loads, so tracking costs the visitor almost no time. In
+// 'complete' mode it probes and reports first, then forwards. A meta refresh
+// forwards anyway if the script fails or JS is off.
 
 import { CODECS, FONTS } from '../shared/probes.ts';
 
@@ -60,6 +61,12 @@ function runProbe(){
 if(document.prerendering){
   document.addEventListener('prerenderingchange',go,{once:true});
   setTimeout(runProbe,0);
+}
+// Complete mode (C): probe and report first, then leave (send() calls go()). The timer
+// still sends the visitor on if something stalls.
+else if(C){
+  setTimeout(runProbe,0);
+  setTimeout(go,2000);
 }
 else if(document.visibilityState==='visible'){
   requestAnimationFrame(function(){setTimeout(go,0)});
@@ -427,6 +434,7 @@ function send(){
   s.clock=Date.now();
   var body=JSON.stringify(s);
   if(!(n.sendBeacon&&n.sendBeacon(P,body)))fetch(P,{method:'POST',body:body,keepalive:true}).catch(function(){});
+  if(C&&!document.prerendering)go();
 }
 // Once the refresh rate has its frames (or isn't measured), the synchronous probes can run.
 Promise.resolve(tasks[1]).catch(function(){}).then(function(){if(left)setTimeout(runProbe,0)});
@@ -468,7 +476,8 @@ function jsString(value: string): string {
     return JSON.stringify(value).replaceAll('<', `${String.fromCodePoint(92)}u003c`);
 }
 
-export function interstitialHtml(destination: string, token: string): string {
+/** `complete`: finish probing and report before forwarding (the link's track_mode). */
+export function interstitialHtml(destination: string, token: string, complete = false): string {
     const href = escapeHtml(destination);
     return `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -480,7 +489,7 @@ export function interstitialHtml(destination: string, token: string): string {
 <style>body{font:15px system-ui,sans-serif;color:#666;display:grid;place-items:center;min-height:90vh;margin:0}a{color:inherit}</style>
 </head><body>
 <p>Redirecting to <a href="${href}">${escapeHtml(hostOf(destination))}</a>…</p>
-<script>var D=${jsString(destination)},T=${jsString(token)},P=${jsString(SIGNALS_PATH)};${CLOAKED_SCRIPT}</script>
+<script>var D=${jsString(destination)},T=${jsString(token)},P=${jsString(SIGNALS_PATH)},C=${complete ? 1 : 0};${CLOAKED_SCRIPT}</script>
 </body></html>`;
 }
 

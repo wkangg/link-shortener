@@ -1,6 +1,6 @@
 import { type FormEvent, useRef, useState } from 'react';
 
-import type { Link, RedirectType } from '../../../shared/types.ts';
+import type { Link, RedirectType, TrackMode } from '../../../shared/types.ts';
 import { api, ApiRequestError } from '../api.ts';
 import { hostOf } from '../format.ts';
 import { Dialog, DialogClose, type DialogHandle } from './Dialog.tsx';
@@ -53,6 +53,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
     const [redirectType, setRedirectType] = useState<RedirectType>(link.redirectType);
     const [expires, setExpires] = useState(toLocalInput(link.expiresAt));
     const [trackDevice, setTrackDevice] = useState(link.trackDevice);
+    const [trackMode, setTrackMode] = useState<TrackMode>(link.trackMode);
     const [utm, setUtm] = useState(() => utmOf(link.url));
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
@@ -78,6 +79,7 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                     .filter(t => t !== ''),
                 redirectType,
                 trackDevice,
+                trackMode,
                 expiresAt: expires ? new Date(expires).getTime() : null
             });
             onSaved(saved);
@@ -196,6 +198,26 @@ export function LinkEditor({ link, shortOrigin, onClose, onSaved, onDeleted }: L
                         </small>
                     </span>
                 </label>
+                {trackDevice && (
+                    <label className="field track-mode">
+                        <span>Tracking priority</span>
+                        <select
+                            value={trackMode}
+                            onChange={e => setTrackMode(e.target.value as TrackMode)}
+                        >
+                            <option value="speed">
+                                Speed: forward at once, record while the destination loads
+                            </option>
+                            <option value="complete">
+                                Complete data: record everything first (up to 0.5 s slower)
+                            </option>
+                        </select>
+                        <small className="muted">
+                            With speed, a fast destination can cut the slowest checks short; those
+                            clicks are marked partial.
+                        </small>
+                    </label>
+                )}
                 {errors.form && <p className="error">{errors.form}</p>}
                 <div className="button-row spread">
                     {confirmDelete ? (

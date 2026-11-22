@@ -10,6 +10,7 @@ import type {
     SummaryResponse,
     TimeseriesResponse,
     TopResponse,
+    TrackMode,
     WebhookEndpoint,
     WebhookEndpointCreated,
     WebhookEventRow,
@@ -60,6 +61,7 @@ interface LinkInput {
     tags?: string[];
     archived?: boolean;
     trackDevice?: boolean;
+    trackMode?: TrackMode;
 }
 
 interface WebhookInput {

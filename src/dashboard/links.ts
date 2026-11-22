@@ -16,7 +16,8 @@ import type {
     LinkListResponse,
     LinkWebhookRef,
     LinkWithStats,
-    RedirectType
+    RedirectType,
+    TrackMode
 } from '../shared/types.ts';
 import { endpointGetsLink } from '../webhooks/outbox.ts';
 import type { CreateLinkInput, UpdateLinkInput } from './schemas.ts';
@@ -30,6 +31,7 @@ interface LinkRow {
     expires_at: number | null;
     archived: number;
     track_device: number;
+    track_mode: TrackMode;
     created_at: number;
     updated_at: number;
 }
@@ -159,8 +161,8 @@ export class LinkRepo {
     create(input: CreateLinkInput): Link {
         const now = this.#now();
         const insert = this.#db.query<{ id: number }, (string | number | null)[]>(
-            `INSERT INTO links (slug, url, title, redirect_type, expires_at, track_device, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
+            `INSERT INTO links (slug, url, title, redirect_type, expires_at, track_device, track_mode, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
         );
         const custom = input.slug ?? null;
 
@@ -175,6 +177,7 @@ export class LinkRepo {
                         input.redirectType ?? 302,
                         input.expiresAt ?? null,
                         input.trackDevice ? 1 : 0,
+                        input.trackMode ?? 'speed',
                         now,
                         now
                     );
@@ -211,6 +214,7 @@ export class LinkRepo {
         if (patch.expiresAt !== undefined) column('expires_at', patch.expiresAt);
         if (patch.archived !== undefined) column('archived', patch.archived ? 1 : 0);
         if (patch.trackDevice !== undefined) column('track_device', patch.trackDevice ? 1 : 0);
+        if (patch.trackMode !== undefined) column('track_mode', patch.trackMode);
         column('updated_at', this.#now());
 
         try {
@@ -435,6 +439,7 @@ function toLink(row: LinkRow, tags: string[]): Link {
         expiresAt: row.expires_at,
         archived: row.archived === 1,
         trackDevice: row.track_device === 1,
+        trackMode: row.track_mode,
         tags,
         createdAt: row.created_at,
         updatedAt: row.updated_at

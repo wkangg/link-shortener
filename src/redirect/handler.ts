@@ -128,7 +128,7 @@ export function createRedirectHandler(opts: RedirectHandlerOptions) {
                 longitude: h.get('cf-iplongitude') ?? '',
                 token
             });
-            if (token) return interstitial(destination, token);
+            if (token) return interstitial(destination, token, link.complete);
         }
 
         return redirect(destination, link.status);
@@ -144,8 +144,8 @@ async function receiveSignals(req: Request, clicks: ClickSink, ts: number): Prom
     return new Response(null, { status: 204, headers: { 'Cache-Control': NO_STORE } });
 }
 
-function interstitial(destination: string, token: string): Response {
-    return new Response(interstitialHtml(destination, token), {
+function interstitial(destination: string, token: string, complete: boolean): Response {
+    return new Response(interstitialHtml(destination, token, complete), {
         status: 200,
         headers: {
             'Content-Type': 'text/html; charset=utf-8',

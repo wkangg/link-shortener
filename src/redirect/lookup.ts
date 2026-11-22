@@ -9,13 +9,14 @@ interface Row {
     redirect_type: number;
     expires_at: number | null;
     track_device: number;
+    track_mode: string;
 }
 
 export type LinkLookup = (slug: string) => CachedLink | null;
 
 export function createLinkLookup(db: Database): LinkLookup {
     const stmt = db.query<Row, [string]>(
-        'SELECT id, url, redirect_type, expires_at, track_device FROM links WHERE slug = ? COLLATE NOCASE AND archived = 0'
+        'SELECT id, url, redirect_type, expires_at, track_device, track_mode FROM links WHERE slug = ? COLLATE NOCASE AND archived = 0'
     );
     return slug => {
         const row = stmt.get(slug);
@@ -25,7 +26,8 @@ export function createLinkLookup(db: Database): LinkLookup {
                   url: row.url,
                   status: row.redirect_type,
                   expiresAt: row.expires_at,
-                  track: row.track_device === 1
+                  track: row.track_device === 1,
+                  complete: row.track_mode === 'complete'
               }
             : null;
     };
