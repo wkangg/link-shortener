@@ -1,7 +1,8 @@
 // The page served instead of a 30x on links with device tracking on. It reads
-// what only the browser knows, posts it to SIGNALS_PATH with the click's token,
-// then replaces itself with the destination. Never waits more than ~0.5 s for
-// slow APIs, and a meta refresh forwards anyway if the script fails or JS is off.
+// what only the browser knows and posts it to SIGNALS_PATH with the click's token.
+// It starts the navigation to the destination first and probes while that loads,
+// so tracking costs the visitor almost no time. A meta refresh forwards anyway if
+// the script fails or JS is off.
 
 import { CODECS, FONTS } from '../shared/probes.ts';
 
@@ -29,11 +30,53 @@ const KEY_CODES = [
 // Every probe is optional: an API that's missing or throws just leaves its field out.
 const SCRIPT = String.raw`(function(){
 var CODECS=${JSON.stringify(CODECS.map(([mime]) => mime))},FONTS=${JSON.stringify(FONTS)},KEYS=${JSON.stringify(KEY_CODES)};
-var n=navigator,s={t:T},done=false;
-function go(){if(!done){done=true;location.replace(D)}}
+var n=navigator,s={t:T},sent=false,left=false;
 function tryit(f){try{return f()}catch(e){}}
 function hash(t){var h=0x811c9dc5;for(var i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0).toString(16)}
-setTimeout(go,1500);
+var bait=document.createElement('div');
+// Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
+bait.className='ad_banner ad-slot ad-unit';
+bait.style.cssText='position:absolute;left:-999px;width:1px;height:1px';
+bait.innerHTML='&nbsp;';
+document.body.appendChild(bait);
+// Started before the synchronous probes so the browser works on them meanwhile.
+var tasks=[
+  hints(),
+  tryit(refreshRate),
+  window.PublicKeyCredential&&PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
+    ?PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(v){s.biometrics=v}):0,
+  n.bluetooth&&n.bluetooth.getAvailability?n.bluetooth.getAvailability().then(function(v){s.bluetooth=v}):0,
+  tryit(keyboard),
+  tryit(audio),
+  tryit(voices),
+  tryit(devices),
+  tryit(permissions),
+  tryit(webgpu),
+  n.getBattery?n.getBattery().then(function(b){s.battery=Math.round(b.level*100);s.charging=b.charging}):0,
+  incognito().then(function(v){if(v!==null)s.incognito=v}),
+  n.storage&&n.storage.estimate?n.storage.estimate().then(function(e){s.quota=e.quota}):0,
+  new Promise(function(r){setTimeout(r,30)}).then(function(){
+    var cs=getComputedStyle(bait);
+    s.adBlocker=!bait.offsetHeight||cs.display==='none'||cs.visibility==='hidden';
+  })
+];
+// Leave right after the first paint, then probe while the destination loads. This page
+// stays up until the destination's response arrives (for good, if it's a download), and
+// pagehide sends whatever has been collected by then. Leaving before the first paint
+// would stop animation frames, which the refresh rate needs. The probes wait a task:
+// the browser only sends the destination request once this one yields.
+function go(){
+  if(left)return;
+  left=true;
+  location.replace(D);
+  setTimeout(function(){tryit(probe)},0);
+}
+if(document.visibilityState==='visible'){
+  requestAnimationFrame(function(){setTimeout(go,0)});
+  setTimeout(go,100);
+}else go();
+// The synchronous probes.
+function probe(){
 s.screen=screen.width+'x'+screen.height+'@'+(Math.round(devicePixelRatio*100)/100);
 s.display=screen.availWidth+'x'+screen.availHeight+'x'+screen.colorDepth;
 s.orientation=tryit(function(){return screen.orientation.type});
@@ -243,12 +286,7 @@ s.blockedStorage=tryit(function(){
   if(!window.indexedDB)b.push('indexedDB');
   return b;
 });
-var bait=document.createElement('div');
-// Each class needs a generic EasyList hiding rule (##.ad_banner etc.); filter lists drop old bait names.
-bait.className='ad_banner ad-slot ad-unit';
-bait.style.cssText='position:absolute;left:-999px;width:1px;height:1px';
-bait.innerHTML='&nbsp;';
-document.body.appendChild(bait);
+}
 function incognito(){
   var st=n.storage;
   if(!st)return Promise.resolve(null);
@@ -284,7 +322,7 @@ function refreshRate(){
     var times=[];
     function frame(t){
       times.push(t);
-      if(times.length<12)return requestAnimationFrame(frame);
+      if(times.length<7)return requestAnimationFrame(frame);
       var d=[];
       for(var i=2;i<times.length;i++)d.push(times[i]-times[i-1]);
       d.sort(function(a,b){return a-b});
@@ -351,30 +389,11 @@ function webgpu(){
     });
   });
 }
-var tasks=[
-  hints(),
-  tryit(refreshRate),
-  window.PublicKeyCredential&&PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
-    ?PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(v){s.biometrics=v}):0,
-  n.bluetooth&&n.bluetooth.getAvailability?n.bluetooth.getAvailability().then(function(v){s.bluetooth=v}):0,
-  tryit(keyboard),
-  tryit(audio),
-  tryit(voices),
-  tryit(devices),
-  tryit(permissions),
-  tryit(webgpu),
-  n.getBattery?n.getBattery().then(function(b){s.battery=Math.round(b.level*100);s.charging=b.charging}):0,
-  incognito().then(function(v){if(v!==null)s.incognito=v}),
-  n.storage&&n.storage.estimate?n.storage.estimate().then(function(e){s.quota=e.quota}):0,
-  new Promise(function(r){setTimeout(r,30)}).then(function(){
-    var cs=getComputedStyle(bait);
-    s.adBlocker=!bait.offsetHeight||cs.display==='none'||cs.visibility==='hidden';
-  })
-];
-Promise.race([
-  Promise.all(tasks.map(function(p){return Promise.resolve(p).catch(function(){})})),
-  new Promise(function(r){setTimeout(r,500)})
-]).then(function(){
+// Sent once (the server takes one report per token): when every probe is done or
+// 0.5 s have passed, or earlier if the page is going away.
+function send(){
+  if(sent)return;
+  sent=true;
   // Headless Chrome denies notifications while the permission API still says "prompt".
   if(s.automation&&window.Notification&&Notification.permission==='denied'&&s.permissions&&s.permissions.notifications==='prompt')
     s.automation.push('notification permission mismatch');
@@ -382,8 +401,13 @@ Promise.race([
   s.clock=Date.now();
   var body=JSON.stringify(s);
   if(!(n.sendBeacon&&n.sendBeacon(P,body)))fetch(P,{method:'POST',body:body,keepalive:true}).catch(function(){});
-  go();
-});
+}
+addEventListener('pagehide',send);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')send()});
+Promise.race([
+  Promise.all(tasks.map(function(p){return Promise.resolve(p).catch(function(){})})),
+  new Promise(function(r){setTimeout(r,500)})
+]).then(send);
 })();`;
 
 const XOR_KEY = 'k7Qd';
