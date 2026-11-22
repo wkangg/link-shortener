@@ -472,11 +472,6 @@ export function ClickHistory({
                                                         title="The device report was sent before every check finished, so some fields may be blank"
                                                     >
                                                         partial
-                                                        <span className="visually-hidden">
-                                                            : the device report was sent before
-                                                            every check finished, so some fields may
-                                                            be blank
-                                                        </span>
                                                     </span>
                                                 </div>
                                             )}
