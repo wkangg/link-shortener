@@ -281,13 +281,11 @@ export class VpnLists {
     }
 
     /** Refreshes now and then hourly (each list only when stale); `onChange` runs after a change. */
-    start(onChange: () => void): void {
+    start(onChange: () => unknown): void {
         if (this.#timer) return;
         const run = () => {
             this.refresh()
-                .then(changed => {
-                    if (changed) onChange();
-                })
+                .then(changed => (changed ? onChange() : undefined))
                 // Unhandled, a database error here would end the process.
                 .catch((error: unknown) => {
                     console.error('[vpn] list update failed:', error);

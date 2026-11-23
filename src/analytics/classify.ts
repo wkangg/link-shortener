@@ -179,11 +179,32 @@ export class ClickClassifier {
     /** Classifies every click, a batch per transaction. */
     all(): number {
         let changed = 0;
+        for (const batch of this.#batches()) changed += batch;
+        return changed;
+    }
+
+    /**
+     * Like `all`, but waits a turn between batches: SQLite blocks the thread, and
+     * reclassifying every click while the servers run would hold up redirects.
+     */
+    async allInTurns(): Promise<number> {
+        let changed = 0;
+        for (const batch of this.#batches()) {
+            changed += batch;
+            await new Promise<void>(resolve => {
+                setImmediate(resolve);
+            });
+        }
+        return changed;
+    }
+
+    /** Classifies the next batch on each step; yields how many changed. */
+    *#batches(): Generator<number> {
         let last = 0;
         for (;;) {
             const rows = this.#after.all(last, BATCH);
-            if (rows.length === 0) return changed;
-            changed += this.#db.transaction(() => this.#apply(rows))();
+            if (rows.length === 0) return;
+            yield this.#db.transaction(() => this.#apply(rows))();
             last = rows.at(-1)?.id ?? last;
         }
     }

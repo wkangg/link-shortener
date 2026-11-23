@@ -303,6 +303,7 @@ A `link.clicked` event looks like this:
 
 A few more behaviors worth knowing:
 
+- **Analytics queries don't slow redirects.** SQLite blocks the thread it runs on, so the dashboard's stats run in a Worker with its own read-only connection.
 - **Slugs are case-insensitive.** `/GitHub`, `/github` and `/GITHUB` are the same link, so two links can't differ only by case. A slug keeps the casing you gave it for display, and random slugs use lowercase letters and digits.
 - **Query parameters pass through.** `/abc?utm_source=newsletter` arrives at the destination with the tag, and the dashboard reports it.
 - **QR codes** encode `https://<short-domain>/<slug>?qr`. The `?qr` is removed before redirecting and recorded, so scans show up as their own source.

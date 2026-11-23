@@ -5,7 +5,7 @@ import { ClickBuffer, type ReverseDns } from './analytics/clicks.ts';
 import { backfillDatacenterHostnames } from './analytics/datacenter.ts';
 import { createReverseDns } from './analytics/hostname.ts';
 import { type CheckIp, createAbuseIpdb, IpReputation } from './analytics/reputation.ts';
-import { Stats } from './analytics/stats.ts';
+import { StatsReader } from './analytics/stats-reader.ts';
 import { parseUserAgent } from './analytics/ua.ts';
 import { type FetchText, VpnLists } from './analytics/vpn.ts';
 import type { Config } from './config.ts';
@@ -71,7 +71,8 @@ export function startApp(opts: AppOptions) {
     reputation?.backfill();
     // Catches up on clicks recorded before classification existed or changed.
     classifier.all();
-    vpnLists.start(() => classifier.all());
+    // The servers are up by then: reclassify a batch at a time, letting redirects in between.
+    vpnLists.start(() => classifier.allInTurns());
     const backfill = reputation
         ? setInterval(() => reputation.backfill(), BACKFILL_INTERVAL_MS)
         : null;
@@ -110,6 +111,7 @@ export function startApp(opts: AppOptions) {
         isBot: ua => parseUserAgent(ua).isBot
     });
 
+    const stats = new StatsReader(db, { abuseMinScore: config.abuseMinScore });
     const dash = startDashboardServer({
         port: config.dashPort,
         dev: !config.isProd,
@@ -120,7 +122,7 @@ export function startApp(opts: AppOptions) {
             allowPrivate: !config.isProd,
             resolve: opts.resolveHost
         }),
-        stats: new Stats(db, { abuseMinScore: config.abuseMinScore }),
+        stats,
         schemas: linkSchemas(shortHost),
         authenticate: opts.authenticate ?? createAuthenticator(config.cfAccess),
         dashOrigin: config.dashOrigin,
@@ -145,6 +147,7 @@ export function startApp(opts: AppOptions) {
         webhooks,
         async stop() {
             await Promise.all([short.stop(), dash.stop()]);
+            await stats.stop();
             if (backfill) clearInterval(backfill);
             reputation?.stop();
             vpnLists.stop();

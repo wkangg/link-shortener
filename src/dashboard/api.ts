@@ -7,7 +7,8 @@ import path from 'node:path';
 import type { BunRequest, Server } from 'bun';
 import { z } from 'zod/v4';
 
-import { BadQueryError, Stats } from '../analytics/stats.ts';
+import type { StatsReader } from '../analytics/stats-reader.ts';
+import { BadQueryError } from '../analytics/stats.ts';
 import { copyDatabase, databaseInfo, pingDatabase } from '../db/client.ts';
 import type {
     AboutResponse,
@@ -28,7 +29,7 @@ export interface ApiDeps {
     version: string;
     links: LinkRepo;
     webhooks: EndpointRepo;
-    stats: Stats;
+    stats: StatsReader;
     schemas: LinkSchemas;
     authenticate: Authenticate;
     /** Browser requests that change data must come from this origin. */
@@ -324,39 +325,43 @@ export function apiRoutes(deps: ApiDeps) {
         },
 
         '/api/stats/summary': {
-            GET: guard(req => json(stats.summary(statsQueryOf(req))))
+            GET: guard(async req => json(await stats.summary(statsQueryOf(req))))
         },
 
         '/api/stats/timeseries': {
-            GET: guard(req => json(stats.timeseries(statsQueryOf(req))))
+            GET: guard(async req => json(await stats.timeseries(statsQueryOf(req))))
         },
 
         '/api/stats/top': {
-            GET: guard(req => {
+            GET: guard(async req => {
                 const url = new URL(req.url);
                 const dim = url.searchParams.get('dim') ?? '';
                 const limit = numberParam(url.searchParams, 'limit', 10) || 10;
-                return json(stats.top(parseStatsQuery(url), dim, limit));
+                return json(await stats.top(parseStatsQuery(url), dim, limit));
             })
         },
 
         '/api/stats/suggest': {
-            GET: guard(req => {
+            GET: guard(async req => {
                 const url = new URL(req.url);
                 const p = url.searchParams;
                 return json(
-                    stats.suggest(parseStatsQuery(url), p.get('field') ?? '', p.get('text') ?? '')
+                    await stats.suggest(
+                        parseStatsQuery(url),
+                        p.get('field') ?? '',
+                        p.get('text') ?? ''
+                    )
                 );
             })
         },
 
         '/api/stats/clicks': {
-            GET: guard(req => {
+            GET: guard(async req => {
                 const url = new URL(req.url);
                 const p = url.searchParams;
                 const before = p.get('before') ?? undefined;
                 return json(
-                    stats.history(parseStatsQuery(url), {
+                    await stats.history(parseStatsQuery(url), {
                         limit: numberParam(p, 'limit', 50),
                         offset: numberParam(p, 'offset', 0),
                         ...(before !== undefined && { before })

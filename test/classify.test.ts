@@ -214,7 +214,7 @@ describe('classify', () => {
 });
 
 describe('ClickClassifier', () => {
-    test('stores verdicts, and the stats query hides and shows them per toggle', () => {
+    test('stores verdicts, and the stats query hides and shows them per toggle', async () => {
         const db = openDatabase(':memory:');
         db.run(
             `INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://e.x', 0, 0)`
@@ -233,7 +233,8 @@ describe('ClickClassifier', () => {
             lookup: ip => (ip === '5.5.5.5' ? 'Tor' : null),
             now: () => NOW
         });
-        expect(classifier.all()).toBe(3);
+        // The background form, taking turns with other work, does the same.
+        expect(await classifier.allInTurns()).toBe(3);
         expect(classifier.all()).toBe(0);
 
         const ips = (query: Record<string, unknown>) => {
