@@ -99,11 +99,11 @@ bun install
 bun run dev
 ```
 
-| URL                             | What                                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------------------ |
-| `http://localhost:3001`         | Dashboard. Without Cloudflare Access, only this machine and your local network can use it. |
-| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).                      |
-| `http://localhost:3001/healthz` | Health check                                                                               |
+| URL                             | What                                                                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `http://localhost:3001`         | Dashboard. Without Cloudflare Access, only this machine and your local network can use it, and not through a tunnel or proxy. |
+| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).                                                         |
+| `http://localhost:3001/healthz` | Health check                                                                                                                  |
 
 ---
 
