@@ -190,6 +190,9 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(await t.status(`/api/stats/top?dim=nope&${range()}`)).toBe(400);
         expect(await t.status(`/api/stats/summary?${range()}&f=bogus:x`)).toBe(400);
         expect(await t.status(`/api/export.csv?${range()}&f=bogus:x`)).toBe(400);
+        expect(await t.status(`/api/stats/timeseries?${range()}&zone=America/Toronto`)).toBe(200);
+        expect(await t.status(`/api/stats/timeseries?${range()}&zone=Mars/Olympus`)).toBe(400);
+        expect(await t.status('/api/links?zone=Mars/Olympus')).toBe(400);
     });
 
     test('auth and origin checks', async () => {

@@ -61,6 +61,7 @@ const statsQuerySchema = z.object({
     from: z.coerce.number().int(),
     to: z.coerce.number().int(),
     tz: z.coerce.number().int().min(-840).max(840).default(0),
+    zone: z.string().min(1).max(64).optional(),
     link: z.coerce.number().int().positive().optional(),
     bots: flag,
     dc: flag,
@@ -160,7 +161,7 @@ function parseId(raw: string): number | null {
 function parseStatsQuery(url: URL): StatsQuery {
     const parsed = statsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
     if (!parsed.success) throw new BadQueryError(z.prettifyError(parsed.error));
-    const { from, to, tz, link, bots, dc, scrapers, vpn, abusive, q } = parsed.data;
+    const { from, to, tz, zone, link, bots, dc, scrapers, vpn, abusive, q } = parsed.data;
     if (to <= from) throw new BadQueryError('`to` must be after `from`');
     if (to - from > MAX_RANGE) throw new BadQueryError('Date range is too long (max 5 years)');
     return {
@@ -173,6 +174,7 @@ function parseStatsQuery(url: URL): StatsQuery {
         vpn,
         abusive,
         filters: url.searchParams.getAll('f'),
+        ...(zone !== undefined && { zone }),
         ...(link !== undefined && { link }),
         ...(q && { q })
     };
@@ -210,7 +212,8 @@ function parseListQuery(req: Request): ListOptions {
         archived: p.get('archived') === '1',
         limit: numberParam(p, 'limit', 50),
         offset: numberParam(p, 'offset', 0),
-        tz: numberParam(p, 'tz', 0)
+        tz: numberParam(p, 'tz', 0),
+        zone: p.get('zone') || undefined
     };
 }
 

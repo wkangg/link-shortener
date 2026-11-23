@@ -9,6 +9,7 @@ import {
     type Term
 } from '../analytics/search.ts';
 import { ABUSE_MIN_SCORE, hiddenByDefault } from '../analytics/stats.ts';
+import { LocalClock } from '../analytics/timezone.ts';
 import { LINK_SEARCH_DIALECT } from '../shared/search.ts';
 import { randomSlug, ROOT_SLUG } from '../shared/slug.ts';
 import type {
@@ -56,6 +57,8 @@ export interface ListOptions {
     offset?: number;
     /** Minutes to add to UTC for local days (sparklines). */
     tz?: number;
+    /** IANA time zone for local days; follows daylight saving, unlike `tz`. */
+    zone?: string;
 }
 
 const DAY = 86_400_000;
@@ -138,7 +141,7 @@ export class LinkRepo {
 
         const ids = rows.map(r => r.id);
         const tags = this.#tagsFor(ids);
-        const sparks = this.#sparklines(ids, opts.tz ?? 0);
+        const sparks = this.#sparklines(ids, opts);
         const webhooks = this.#webhooksFor(ids);
         const links: LinkWithStats[] = rows.map(row => ({
             ...toLink(row, tags.get(row.id) ?? []),
@@ -317,19 +320,21 @@ export class LinkRepo {
         return out;
     }
 
-    #sparklines(ids: number[], tz: number): Map<number, number[]> {
+    #sparklines(ids: number[], zone: { tz?: number; zone?: string }): Map<number, number[]> {
         const out = new Map<number, number[]>();
         if (ids.length === 0) return out;
-        const offset = tz * 60_000;
-        const today = Math.floor((this.#now() + offset) / DAY);
+        const now = this.#now();
+        const clock = new LocalClock(zone, now - (SPARK_DAYS + 1) * DAY, now + 1);
+        const today = Math.floor(clock.local(now) / DAY);
         const firstDay = today - SPARK_DAYS + 1;
+        const local = clock.sql('c.ts');
         const rows = this.#db
             .query<{ link_id: number; d: number; n: number }, (string | number)[]>(
-                `SELECT c.link_id, (c.ts + ?) / ${DAY} AS d, COUNT(*) AS n FROM clicks c
+                `SELECT c.link_id, ${local.sql} / ${DAY} AS d, COUNT(*) AS n FROM clicks c
                  WHERE c.link_id IN (${placeholders(ids)}) AND c.ts >= ? AND ${this.#shown.sql}
                  GROUP BY c.link_id, d`
             )
-            .all(offset, ...ids, firstDay * DAY - offset, ...this.#shown.params);
+            .all(...local.params, ...ids, clock.utc(firstDay * DAY), ...this.#shown.params);
         for (const row of rows) {
             let spark = out.get(row.link_id);
             if (!spark) {

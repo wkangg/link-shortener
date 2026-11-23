@@ -1,0 +1,127 @@
+// Local days for charts. A single UTC offset puts some clicks on the wrong day once
+// a range crosses a daylight saving change, so with a zone name each click is
+// shifted by the offset in force when it happened.
+import { BadQueryError } from './errors.ts';
+
+const MINUTE = 60_000;
+const DAY = 86_400_000;
+
+/** From `from` (ms, UTC) on, local time is UTC plus `offset` minutes. */
+interface OffsetPeriod {
+    from: number;
+    offset: number;
+}
+
+const formats = new Map<string, Intl.DateTimeFormat>();
+
+function format(zone: string): Intl.DateTimeFormat {
+    let f = formats.get(zone);
+    if (f) return f;
+    try {
+        f = new Intl.DateTimeFormat('en-US', {
+            timeZone: zone,
+            hourCycle: 'h23',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric'
+        });
+    } catch {
+        throw new BadQueryError(`Unknown time zone: ${zone}`);
+    }
+    // Only real zone names get here, so the cache stays small.
+    formats.set(zone, f);
+    return f;
+}
+
+/** Minutes to add to UTC for local time in `zone` at `t`. */
+export function zoneOffset(zone: string, t: number): number {
+    const parts = format(zone).formatToParts(t);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+        Number(parts.find(p => p.type === type)?.value);
+    const local = Date.UTC(
+        part('year'),
+        part('month') - 1,
+        part('day'),
+        part('hour'),
+        part('minute')
+    );
+    return Math.round((local - Math.floor(t / MINUTE) * MINUTE) / MINUTE);
+}
+
+/**
+ * The offsets `zone` uses during [from, to), each from the minute it starts. Zones
+ * change offset a few times a year at most, never twice in a day: each day is
+ * checked, and a change is narrowed down to its minute.
+ */
+function offsetPeriods(zone: string, from: number, to: number): OffsetPeriod[] {
+    const periods: OffsetPeriod[] = [{ from, offset: zoneOffset(zone, from) }];
+    let start = from;
+    let offset = periods[0]?.offset ?? 0;
+    while (start < to - 1) {
+        const end = Math.min(start + DAY, to - 1);
+        const next = zoneOffset(zone, end);
+        if (next !== offset) {
+            // `lo` has the old offset and `hi` the new one; close in until they're a
+            // minute apart. Offsets change on a whole minute, so it's the one after `lo`.
+            let lo = start;
+            let hi = end;
+            while (hi - lo > MINUTE) {
+                const mid = lo + Math.floor((hi - lo) / 2);
+                if (zoneOffset(zone, mid) === offset) lo = mid;
+                else hi = mid;
+            }
+            periods.push({ from: Math.floor(lo / MINUTE) * MINUTE + MINUTE, offset: next });
+            offset = next;
+        }
+        start = end;
+    }
+    return periods;
+}
+
+/** Converts between UTC and local time over one query's range. */
+export class LocalClock {
+    readonly #periods: OffsetPeriod[];
+
+    /**
+     * Local time in `zone` (an IANA name such as America/Toronto) over [from, to),
+     * or UTC plus `tz` minutes throughout when no zone is given.
+     */
+    constructor(opts: { zone?: string; tz?: number }, from: number, to: number) {
+        this.#periods = opts.zone
+            ? offsetPeriods(opts.zone, from, to)
+            : [{ from, offset: opts.tz ?? 0 }];
+    }
+
+    /** Minutes to add to UTC at `t`. */
+    offsetAt(t: number): number {
+        let offset = this.#periods[0]?.offset ?? 0;
+        for (const p of this.#periods) if (p.from <= t) offset = p.offset;
+        return offset;
+    }
+
+    /** `t` as local time (ms since 1970 on the local calendar). */
+    local(t: number): number {
+        return t + this.offsetAt(t) * MINUTE;
+    }
+
+    /** The UTC time of a local time. */
+    utc(local: number): number {
+        const guess = local - this.offsetAt(local) * MINUTE;
+        return local - this.offsetAt(guess) * MINUTE;
+    }
+
+    /** SQL for `column` (UTC ms) as local time, with the offset in force at each row. */
+    sql(column: string): { sql: string; params: number[] } {
+        const [first, ...later] = this.#periods;
+        const base = (first?.offset ?? 0) * MINUTE;
+        if (later.length === 0) return { sql: `(${column} + ?)`, params: [base] };
+        // Latest first, so each WHEN only needs the start of its period.
+        const newest = later.toReversed();
+        return {
+            sql: `(${column} + CASE ${newest.map(() => `WHEN ${column} >= ? THEN ?`).join(' ')} ELSE ? END)`,
+            params: [...newest.flatMap(p => [p.from, p.offset * MINUTE]), base]
+        };
+    }
+}

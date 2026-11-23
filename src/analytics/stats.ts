@@ -14,6 +14,7 @@ import type {
 } from '../shared/types.ts';
 import { BadQueryError } from './errors.ts';
 import { compileSearch, likePattern, suggestColumn } from './search.ts';
+import { LocalClock } from './timezone.ts';
 
 export { BadQueryError } from './errors.ts';
 
@@ -204,24 +205,31 @@ export class Stats {
     timeseries(query: StatsQuery): TimeseriesResponse {
         const interval = query.to - query.from <= 3 * DAY ? 'hour' : 'day';
         const bucket = interval === 'hour' ? HOUR : DAY;
-        const offset = query.tz * 60_000;
+        // Days follow the zone's offset as it changes. An hour is the same span whatever
+        // the offset, so hours use one (it only matters for zones a half hour off UTC).
+        const days = new LocalClock(query, query.from, query.to);
+        const clock =
+            interval === 'day'
+                ? days
+                : new LocalClock({ tz: days.offsetAt(query.to - 1) }, query.from, query.to);
+        const local = clock.sql('c.ts');
         const where = this.#where(query);
         const rows = this.#db
             .query<{ b: number; clicks: number; visitors: number }, Param[]>(
-                `SELECT (c.ts + ?) / ${bucket} AS b, COUNT(*) AS clicks,
+                `SELECT ${local.sql} / ${bucket} AS b, COUNT(*) AS clicks,
                         COUNT(DISTINCT c.visitor_hash) AS visitors
                  FROM clicks c WHERE ${where.sql} GROUP BY b`
             )
-            .all(offset, ...where.params);
+            .all(...local.params, ...where.params);
         const byBucket = new Map(rows.map(r => [r.b, r]));
 
-        const first = Math.floor((query.from + offset) / bucket);
-        const last = Math.floor((query.to - 1 + offset) / bucket);
+        const first = Math.floor(clock.local(query.from) / bucket);
+        const last = Math.floor(clock.local(query.to - 1) / bucket);
         const points: TimeseriesResponse['points'] = [];
         for (let b = first; b <= last; b++) {
             const row = byBucket.get(b);
             points.push({
-                t: b * bucket - offset,
+                t: clock.utc(b * bucket),
                 clicks: row?.clicks ?? 0,
                 visitors: row?.visitors ?? 0
             });

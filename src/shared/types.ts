@@ -136,6 +136,11 @@ export interface StatsQuery {
     to: number;
     /** Minutes to add to UTC to get local time (e.g. -240 for Toronto in summer). */
     tz: number;
+    /**
+     * The viewer's IANA time zone (e.g. America/Toronto). When given, days follow its
+     * offset as it changes over the range (daylight saving) instead of `tz`.
+     */
+    zone?: string;
     link?: number;
     bots?: boolean;
     /** Include clicks from datacenter/hosting IPs (hidden by default, like bots). */
