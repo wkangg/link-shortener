@@ -125,11 +125,19 @@ export class WebhookDeliverer {
         await Promise.all([...this.#inFlight.values(), ...this.#discordBusy.values()]);
     }
 
-    /** Starts every due event there is room for and waits for those to finish. */
+    /**
+     * Starts every due event there is room for and waits for those to finish. Never
+     * rejects: it runs from a timer, and an unhandled rejection would end the process
+     * (and the redirects with it) over a database error such as a full disk.
+     */
     async tick(): Promise<void> {
-        const now = this.#opts.now();
-        if (now - this.#lastMaintenance >= MAINTENANCE_INTERVAL_MS) this.maintain(now);
-        await Promise.all([...this.#startStandard(now), ...this.#startDiscord(now)]);
+        try {
+            const now = this.#opts.now();
+            if (now - this.#lastMaintenance >= MAINTENANCE_INTERVAL_MS) this.maintain(now);
+            await Promise.all([...this.#startStandard(now), ...this.#startDiscord(now)]);
+        } catch (error) {
+            logError(error);
+        }
     }
 
     /**
@@ -143,7 +151,9 @@ export class WebhookDeliverer {
             .filter(id => !this.#inFlight.has(id))
             .slice(0, room);
         return endpoints.map(id => {
-            const run = this.#drainStandard(id).finally(() => this.#inFlight.delete(id));
+            const run = this.#drainStandard(id)
+                .catch(logError)
+                .finally(() => this.#inFlight.delete(id));
             this.#inFlight.set(id, run);
             return run;
         });
@@ -177,7 +187,9 @@ export class WebhookDeliverer {
             id => !this.#discordBusy.has(id) && (this.#discordNext.get(id) ?? 0) <= now
         );
         return endpoints.map(id => {
-            const run = this.#discordBatch(id, now).finally(() => this.#discordBusy.delete(id));
+            const run = this.#discordBatch(id, now)
+                .catch(logError)
+                .finally(() => this.#discordBusy.delete(id));
             this.#discordBusy.set(id, run);
             return run;
         });
@@ -434,6 +446,11 @@ export function skipPending(db: Database, endpointId: number, reason: string, no
         `UPDATE webhook_events SET status = 'skipped', last_error = ?, finished_at = ?
          WHERE endpoint_id = ? AND status = 'pending'`
     ).run(reason, now, endpointId);
+}
+
+/** A delivery round failed (e.g. the database can't be written); the next tick tries again. */
+function logError(error: unknown): void {
+    console.error('[webhooks] delivery failed, will retry', error);
 }
 
 function errorMessage(error: unknown): string {

@@ -284,9 +284,14 @@ export class VpnLists {
     start(onChange: () => void): void {
         if (this.#timer) return;
         const run = () => {
-            void this.refresh().then(changed => {
-                if (changed) onChange();
-            });
+            this.refresh()
+                .then(changed => {
+                    if (changed) onChange();
+                })
+                // Unhandled, a database error here would end the process.
+                .catch((error: unknown) => {
+                    console.error('[vpn] list update failed:', error);
+                });
         };
         run();
         this.#timer = setInterval(run, HOUR);

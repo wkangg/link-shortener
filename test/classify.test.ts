@@ -125,6 +125,27 @@ describe('VpnLists', () => {
         }
         expect(lists.lookup('171.25.193.25')).toBe('Tor');
     });
+
+    test('an error after an update is logged, not left to end the process', async () => {
+        const db = openDatabase(':memory:');
+        const lists = new VpnLists(db, {
+            fetchText: url => Promise.resolve(url.includes('torproject') ? TOR : RELAY),
+            now: () => NOW
+        });
+        const logged = Promise.withResolvers<unknown[]>();
+        const error = console.error;
+        console.error = (...args: unknown[]) => logged.resolve(args);
+        try {
+            lists.start(() => {
+                throw new Error('database or disk is full');
+            });
+            const [message] = await logged.promise;
+            expect(message).toBe('[vpn] list update failed:');
+        } finally {
+            console.error = error;
+            lists.stop();
+        }
+    });
 });
 
 describe('classify', () => {
