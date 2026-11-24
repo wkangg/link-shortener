@@ -152,6 +152,30 @@ describe('VpnLists', () => {
         }
     });
 
+    test('an update still reclassifying is not started again beside itself', async () => {
+        jest.useFakeTimers();
+        const db = openDatabase(':memory:');
+        const lists = new VpnLists(db, {
+            fetchText: url => Promise.resolve(url.includes('torproject') ? TOR : RELAY),
+            now: () => NOW
+        });
+        let calls = 0;
+        try {
+            // The first reclassify never finishes.
+            lists.start(() => {
+                calls++;
+                return new Promise(() => {});
+            });
+            await settle();
+            jest.advanceTimersByTime(3_600_000);
+            await settle();
+            expect(calls).toBe(1);
+        } finally {
+            lists.stop();
+            jest.useRealTimers();
+        }
+    });
+
     test('a failed reclassify is tried again next hour, though the lists are fresh by then', async () => {
         jest.useFakeTimers();
         const db = openDatabase(':memory:');
