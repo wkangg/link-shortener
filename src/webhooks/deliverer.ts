@@ -28,6 +28,9 @@ export const KEEP_FINISHED_MS = 7 * 86_400_000;
 const MAX_PENDING = 100_000;
 
 const MAINTENANCE_INTERVAL_MS = 60_000;
+// After a database error, delivery waits this long: an event that was sent but not
+// recorded would otherwise go out again on every tick.
+export const PAUSE_AFTER_ERROR_MS = 60_000;
 /** Events a standard endpoint's worker sends before giving its slot to the next endpoint. */
 export const STANDARD_BATCH = 20;
 /** Due events read per Discord message; past 10 they are summarized. */
@@ -96,6 +99,7 @@ export class WebhookDeliverer {
     #timer: ReturnType<typeof setInterval> | null = null;
     #stopping = false;
     #lastMaintenance = 0;
+    #pausedUntil = 0;
     #sent = 0;
 
     constructor(db: Database, opts: DelivererOptions) {
@@ -133,11 +137,17 @@ export class WebhookDeliverer {
     async tick(): Promise<void> {
         try {
             const now = this.#opts.now();
+            if (now < this.#pausedUntil) return;
             if (now - this.#lastMaintenance >= MAINTENANCE_INTERVAL_MS) this.maintain(now);
             await Promise.all([...this.#startStandard(now), ...this.#startDiscord(now)]);
         } catch (error) {
-            logError(error);
+            this.#failed(error);
         }
+    }
+
+    #failed(error: unknown): void {
+        this.#pausedUntil = this.#opts.now() + PAUSE_AFTER_ERROR_MS;
+        console.error('[webhooks] delivery failed, retrying in a minute', error);
     }
 
     /**
@@ -152,7 +162,7 @@ export class WebhookDeliverer {
             .slice(0, room);
         return endpoints.map(id => {
             const run = this.#drainStandard(id)
-                .catch(logError)
+                .catch(error => this.#failed(error))
                 .finally(() => this.#inFlight.delete(id));
             this.#inFlight.set(id, run);
             return run;
@@ -188,7 +198,7 @@ export class WebhookDeliverer {
         );
         return endpoints.map(id => {
             const run = this.#discordBatch(id, now)
-                .catch(logError)
+                .catch(error => this.#failed(error))
                 .finally(() => this.#discordBusy.delete(id));
             this.#discordBusy.set(id, run);
             return run;
@@ -449,10 +459,6 @@ export function skipPending(db: Database, endpointId: number, reason: string, no
 }
 
 /** A delivery round failed (e.g. the database can't be written); the next tick tries again. */
-function logError(error: unknown): void {
-    console.error('[webhooks] delivery failed, will retry', error);
-}
-
 function errorMessage(error: unknown): string {
     if (error instanceof Error) {
         return error.name === 'TimeoutError' ? 'Timed out' : error.message;

@@ -13,6 +13,7 @@ import {
 import {
     AUTO_DISABLE_AFTER_MS,
     KEEP_FINISHED_MS,
+    PAUSE_AFTER_ERROR_MS,
     RETRY_DELAYS_MS,
     STANDARD_BATCH,
     WebhookDeliverer,
@@ -529,9 +530,15 @@ describe('delivery', () => {
         }
         expect(logged).toHaveLength(1);
         expect(p.events()[0]).toMatchObject({ status: 'pending', attempts: 0 });
+        expect(p.requests).toHaveLength(1);
+
+        // It waits before trying again, rather than resending the event every tick.
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
 
         // Once writes work again, the event goes out.
         p.db.run('DROP TRIGGER full');
+        p.clock.now += PAUSE_AFTER_ERROR_MS;
         await p.deliverer.tick();
         expect(p.events()[0]).toMatchObject({ status: 'delivered' });
     });
