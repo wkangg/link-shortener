@@ -246,6 +246,10 @@ export function apiRoutes(deps: ApiDeps) {
             try {
                 return await handler(req, server);
             } catch (error_) {
+                // The client went away and its query was dropped; nobody reads this.
+                if (req.signal.aborted && error_ === req.signal.reason) {
+                    return new Response(null, { status: 499 });
+                }
                 if (error_ instanceof BadQueryError) return error(error_.message, 400);
                 if (error_ instanceof SlugTakenError) return error(error_.message, 409);
                 if (error_ instanceof WebhookUrlError) {
@@ -338,11 +342,11 @@ export function apiRoutes(deps: ApiDeps) {
         },
 
         '/api/stats/summary': {
-            GET: guard(async req => json(await stats.summary(statsQueryOf(req))))
+            GET: guard(async req => json(await stats.for(req.signal).summary(statsQueryOf(req))))
         },
 
         '/api/stats/timeseries': {
-            GET: guard(async req => json(await stats.timeseries(statsQueryOf(req))))
+            GET: guard(async req => json(await stats.for(req.signal).timeseries(statsQueryOf(req))))
         },
 
         '/api/stats/top': {
@@ -350,7 +354,7 @@ export function apiRoutes(deps: ApiDeps) {
                 const url = new URL(req.url);
                 const dim = url.searchParams.get('dim') ?? '';
                 const limit = numberParam(url.searchParams, 'limit', 10) || 10;
-                return json(await stats.top(parseStatsQuery(url), dim, limit));
+                return json(await stats.for(req.signal).top(parseStatsQuery(url), dim, limit));
             })
         },
 
@@ -359,11 +363,9 @@ export function apiRoutes(deps: ApiDeps) {
                 const url = new URL(req.url);
                 const p = url.searchParams;
                 return json(
-                    await stats.suggest(
-                        parseStatsQuery(url),
-                        p.get('field') ?? '',
-                        p.get('text') ?? ''
-                    )
+                    await stats
+                        .for(req.signal)
+                        .suggest(parseStatsQuery(url), p.get('field') ?? '', p.get('text') ?? '')
                 );
             })
         },
@@ -374,7 +376,7 @@ export function apiRoutes(deps: ApiDeps) {
                 const p = url.searchParams;
                 const before = p.get('before') ?? undefined;
                 return json(
-                    await stats.history(parseStatsQuery(url), {
+                    await stats.for(req.signal).history(parseStatsQuery(url), {
                         limit: numberParam(p, 'limit', 50),
                         offset: numberParam(p, 'offset', 0),
                         ...(before !== undefined && { before })

@@ -34,7 +34,11 @@ export function forgetKept() {
  * to is then whole as it animates in, instead of filling in while it moves. Filters reset
  * when a page mounts, so callers pass `keep` only while theirs are at their defaults.
  */
-export function useApi<T>(key: string | null, load: () => Promise<T>, keep?: string): ApiState<T> {
+export function useApi<T>(
+    key: string | null,
+    load: (signal: AbortSignal) => Promise<T>,
+    keep?: string
+): ApiState<T> {
     const [settled, setSettled] = useState<Settled<T> | null>(() =>
         keep !== undefined && kept.has(keep) ? { key: null, data: kept.get(keep) as T } : null
     );
@@ -42,8 +46,11 @@ export function useApi<T>(key: string | null, load: () => Promise<T>, keep?: str
     useEffect(() => {
         if (key === null) return;
         let cancelled = false;
+        // Aborted once nothing shows what it loads, so the server can drop it if it has
+        // yet to start (StatsReader).
+        const aborter = new AbortController();
         const sentIn = generation;
-        load().then(
+        load(aborter.signal).then(
             data => {
                 if (cancelled) return;
                 if (keep !== undefined && sentIn === generation) kept.set(keep, data);
@@ -60,6 +67,7 @@ export function useApi<T>(key: string | null, load: () => Promise<T>, keep?: str
         );
         return () => {
             cancelled = true;
+            aborter.abort();
         };
         // `load` is recreated every render; `key` captures everything it depends on.
         // eslint-disable-next-line react-hooks/exhaustive-deps -- see above

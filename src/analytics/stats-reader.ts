@@ -6,10 +6,12 @@ import type { StatsInit, StatsMethod, StatsReply, StatsRequest } from './stats-w
 import { BadQueryError, Stats } from './stats.ts';
 
 type Run<M extends StatsMethod> = (...args: Parameters<Stats[M]>) => Promise<ReturnType<Stats[M]>>;
+export type StatsQueries = { [M in StatsMethod]: Run<M> };
 
 interface Job {
     request: StatsRequest;
     reply: PromiseWithResolvers<unknown>;
+    signal: AbortSignal | undefined;
 }
 
 interface Slot {
@@ -94,9 +96,26 @@ export class StatsReader {
         await this.#drained?.promise;
     }
 
+    /**
+     * The same queries, for a request that may go away: once `signal` aborts, a query
+     * still waiting for a worker is dropped (rejected with the signal's reason) rather
+     * than run. One a worker has started runs to the end; SQLite can't be stopped from
+     * another thread.
+     */
+    for(signal: AbortSignal): StatsQueries {
+        return {
+            summary: (...args) => this.#run('summary', args, signal),
+            timeseries: (...args) => this.#run('timeseries', args, signal),
+            top: (...args) => this.#run('top', args, signal),
+            suggest: (...args) => this.#run('suggest', args, signal),
+            history: (...args) => this.#run('history', args, signal)
+        };
+    }
+
     #run<M extends StatsMethod>(
         method: M,
-        args: Parameters<Stats[M]>
+        args: Parameters<Stats[M]>,
+        signal?: AbortSignal
     ): Promise<ReturnType<Stats[M]>> {
         if (this.#closed) return Promise.reject(new Error('Stats are shut down'));
         if (!this.#init) {
@@ -109,7 +128,8 @@ export class StatsReader {
         }
         const job: Job = {
             request: { id: this.#next++, method, args },
-            reply: Promise.withResolvers<unknown>()
+            reply: Promise.withResolvers<unknown>(),
+            signal
         };
         this.#queue.push(job);
         this.#pump();
@@ -118,10 +138,16 @@ export class StatsReader {
 
     /** Hands waiting queries to idle workers, starting workers up to the pool's size. */
     #pump(): void {
-        while (this.#queue.length > 0) {
+        for (let job = this.#queue[0]; job; job = this.#queue[0]) {
+            // Nobody is waiting for it any more (the dashboard moved on, or the tab closed).
+            if (job.signal?.aborted) {
+                this.#queue.shift();
+                job.reply.reject(job.signal.reason);
+                continue;
+            }
             const slot = this.#idleSlot() ?? this.#spawn();
             if (!slot) break;
-            const job = this.#queue.shift() as Job;
+            this.#queue.shift();
             if (slot.idleTimer) clearTimeout(slot.idleTimer);
             slot.idleTimer = null;
             slot.job = job;

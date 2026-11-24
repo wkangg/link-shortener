@@ -138,6 +138,32 @@ describe('StatsReader pool', () => {
         }
     });
 
+    test('a waiting query whose request went away is dropped, not run', async () => {
+        const { db, click } = database('abort.db');
+        click.run(1000, 'CA', 'Firefox', 'v1');
+        const reader = new StatsReader(db, { abuseMinScore: 25, workers: 1, script });
+        try {
+            const started = performance.now();
+            const first = reader.summary(q({ q: 'slow!' }));
+            const gone = new AbortController();
+            const dropped = reader.for(gone.signal).summary(q({ q: 'slow!' }));
+            const next = reader.summary(q());
+            gone.abort();
+            await expect(dropped).rejects.toThrow(/abort/i);
+            await first;
+            expect(await next).toMatchObject({ clicks: 1 });
+            // The dropped query never held the worker.
+            expect(performance.now() - started).toBeLessThan(2 * SLOW_MS);
+
+            // A query whose request is still there runs as usual.
+            const kept = new AbortController();
+            expect(await reader.for(kept.signal).summary(q())).toMatchObject({ clicks: 1 });
+        } finally {
+            await reader.stop();
+            db.close();
+        }
+    });
+
     test('a worker with nothing to do stops, and a new one starts when asked', async () => {
         const { db, click } = database('idle.db');
         click.run(1000, 'CA', 'Firefox', 'v1');

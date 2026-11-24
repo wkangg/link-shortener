@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { TopRow } from '../../../shared/types.ts';
-import { api, localTime } from '../api.ts';
+import { api, localTime, statsLoading } from '../api.ts';
 import { useConfig } from '../config.tsx';
 import { formatCount, formatPercent, percentChange } from '../format.ts';
 import { useApi } from '../useApi.ts';
@@ -148,6 +148,9 @@ export function Analytics({ linkId }: AnalyticsProps) {
                 return;
             }
             missed = false;
+            // Over a large database a refresh can outlast the interval. Starting another
+            // would only queue more queries behind it, so this tick is skipped.
+            if (statsLoading()) return;
             setNow(Date.now());
             setTick(t => t + 1);
         };
@@ -177,8 +180,16 @@ export function Analytics({ linkId }: AnalyticsProps) {
     // Data is kept for next time only with the filters the page opens with (useApi).
     const atDefaults = preset === '30d' && !bots && !dc && !scrapers && vpn && !abusive && !search;
     const keep = atDefaults ? `stats|${linkId}` : undefined;
-    const summary = useApi(`summary|${key}`, () => api.summary(params), keep && `${keep}|summary`);
-    const series = useApi(`series|${key}`, () => api.timeseries(params), keep && `${keep}|series`);
+    const summary = useApi(
+        `summary|${key}`,
+        signal => api.summary(params, signal),
+        keep && `${keep}|summary`
+    );
+    const series = useApi(
+        `series|${key}`,
+        signal => api.timeseries(params, signal),
+        keep && `${keep}|series`
+    );
 
     const selectRow = (dim: string, row: TopRow) => {
         if (dim === 'link' && linkId !== undefined) return;

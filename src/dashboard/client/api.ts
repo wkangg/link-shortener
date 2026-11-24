@@ -32,7 +32,12 @@ export class ApiRequestError extends Error {
     }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal
+): Promise<T> {
     // A write may change data pages kept to show on return (useApi), even if it fails. Forget
     // it before (for loads already on their way) and after (for loads sent meanwhile).
     const write = method !== 'GET';
@@ -40,7 +45,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     const res = await fetch(path, {
         method,
         headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal
     }).finally(() => {
         if (write) forgetKept();
     });
@@ -50,7 +56,21 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     return data as T;
 }
 
-const getJson = <T>(path: string) => request<T>('GET', path);
+const getJson = <T>(path: string, signal?: AbortSignal) =>
+    request<T>('GET', path, undefined, signal);
+
+/** Requests for a refresh's panels still waiting for the server. */
+let statsPending = 0;
+
+/** Whether a stats request is still on its way, so Analytics doesn't pile a refresh on it. */
+export const statsLoading = () => statsPending > 0;
+
+function getStats<T>(path: string, signal?: AbortSignal): Promise<T> {
+    statsPending++;
+    return getJson<T>(path, signal).finally(() => {
+        statsPending--;
+    });
+}
 
 interface LinkInput {
     url: string;
@@ -87,13 +107,16 @@ export const api = {
     updateLink: (id: number, input: Partial<LinkInput>) =>
         request<Link>('PATCH', `/api/links/${id}`, input),
     deleteLink: (id: number) => request<undefined>('DELETE', `/api/links/${id}`),
-    summary: (params: URLSearchParams) => getJson<SummaryResponse>(`/api/stats/summary?${params}`),
-    timeseries: (params: URLSearchParams) =>
-        getJson<TimeseriesResponse>(`/api/stats/timeseries?${params}`),
-    top: (params: URLSearchParams) => getJson<TopResponse>(`/api/stats/top?${params}`),
-    suggest: (params: URLSearchParams) => getJson<SuggestResponse>(`/api/stats/suggest?${params}`),
-    clicks: (params: URLSearchParams) =>
-        getJson<ClickHistoryResponse>(`/api/stats/clicks?${params}`),
+    summary: (params: URLSearchParams, signal?: AbortSignal) =>
+        getStats<SummaryResponse>(`/api/stats/summary?${params}`, signal),
+    timeseries: (params: URLSearchParams, signal?: AbortSignal) =>
+        getStats<TimeseriesResponse>(`/api/stats/timeseries?${params}`, signal),
+    top: (params: URLSearchParams, signal?: AbortSignal) =>
+        getStats<TopResponse>(`/api/stats/top?${params}`, signal),
+    suggest: (params: URLSearchParams, signal?: AbortSignal) =>
+        getJson<SuggestResponse>(`/api/stats/suggest?${params}`, signal),
+    clicks: (params: URLSearchParams, signal?: AbortSignal) =>
+        getStats<ClickHistoryResponse>(`/api/stats/clicks?${params}`, signal),
     webhooks: () => getJson<WebhookEndpoint[]>('/api/webhooks'),
     createWebhook: (input: WebhookInput) =>
         request<WebhookEndpointCreated>('POST', '/api/webhooks', input),
