@@ -99,11 +99,11 @@ bun install
 bun run dev
 ```
 
-| URL                             | What                                                                                                                                                             |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `http://localhost:3001`         | Dashboard. Without Cloudflare Access, only this machine and your local network can use it, and requests forwarded by a tunnel or proxy that says so are refused. |
-| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).                                                                                            |
-| `http://localhost:3001/healthz` | Health check                                                                                                                                                     |
+| URL                             | What                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `http://localhost:3001`         | Dashboard. Without Cloudflare Access, only this machine and your local network can use it. Requests with a forwarding header (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `CF-Connecting-IP`) are refused, but a tunnel that adds none still looks local: set up Access before exposing it through any tunnel or proxy. |
+| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).                                                                                                                                                                                                                                                    |
+| `http://localhost:3001/healthz` | Health check                                                                                                                                                                                                                                                                                                             |
 
 ---
 

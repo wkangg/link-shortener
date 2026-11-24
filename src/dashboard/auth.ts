@@ -24,9 +24,10 @@ interface AccessConfig {
  *
  * With no Access config (local development) only loopback and private-network
  * peers are allowed, so a deploy that forgot to set up Access isn't open to the
- * internet. A request a proxy or tunnel passed on is refused too: cloudflared,
- * ngrok or a reverse proxy connect from this machine or the local network, but
- * the visitor behind them could be anyone.
+ * internet. Requests carrying one of FORWARDED_HEADERS are refused too, since
+ * cloudflared, ngrok or a reverse proxy connect from this machine or the local
+ * network while the visitor behind them could be anyone. A forwarder that adds no
+ * such header still looks local, so this mode must not be exposed through one.
  */
 export function createAuthenticator(
     config: AccessConfig | null,
