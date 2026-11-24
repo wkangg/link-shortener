@@ -90,7 +90,7 @@ Short links are served on one domain (e.g. `s.example`) and the dashboard on ano
 
 ## Quick start
 
-> **Requirements:** [Bun](https://bun.com) 1.4.4+ (canary for `bun lint`; see [Development](#development))
+> **Requirements:** [Bun](https://bun.com) 1.4.5+ (canary for `bun lint`; see [Development](#development))
 
 ```sh
 git clone https://github.com/wkangg/link-shortener.git
