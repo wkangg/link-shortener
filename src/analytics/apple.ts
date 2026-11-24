@@ -1,3 +1,5 @@
+import Bowser from 'bowser';
+
 /**
  * iPhone/iPad details the generic parser can't give: the real iOS version and,
  * where possible, the model.
@@ -94,27 +96,22 @@ const IPAD_SCREENS: Record<string, string> = {
     '1032x1376@2': 'iPad Pro 13″ (M4 or later)'
 };
 
-const OS_TOKEN_RE = /\bOS (\d+)_(\d+)(?:_(\d+))? like Mac OS X/;
 const SAFARI_VERSION_RE = /\bVersion\/(\d+(?:\.\d+)*)/;
 // Instagram: "(iPhone14,2; iOS 17_0; ...)". Facebook: "FBSV/17.0".
 const IN_APP_VERSION_RE = /\b(?:iOS (\d+(?:_\d+)*)|FBSV\/(\d+(?:\.\d+)*))/;
 const HARDWARE_ID_RE = /\b(iPhone\d+,\d+|iPad\d+,\d+)\b/;
 const SCREEN_RE = /^(\d+)x(\d+)(?:@([\d.]+))?$/;
 
-/** First version iOS reports only through Safari's `Version/` token. */
-const FROZEN_FROM = 26;
-
 /** The iOS/iPadOS version, e.g. "18.6" or "26.0", or null. */
 export function iosVersion(ua: string): string | null {
     const inApp = IN_APP_VERSION_RE.exec(ua);
     if (inApp) return normalize((inApp[1] ?? inApp[2] ?? '').replaceAll('_', '.'));
 
-    const token = OS_TOKEN_RE.exec(ua);
-    const safari = SAFARI_VERSION_RE.exec(ua)?.[1];
-    // iOS 26+ Safari sends "OS 18_6" with the real version in Version/.
-    if (safari && Number(safari.split('.')[0]) >= FROZEN_FROM) return normalize(safari);
-    if (!token) return null;
-    return normalize([token[1], token[2], token[3]].filter(Boolean).join('.'));
+    // Bowser throws on an empty user agent.
+    if (!ua) return null;
+    // Bowser reads the OS token, or Safari's Version/ once iOS 26 freezes the token at 18.x.
+    const version = Bowser.getParser(ua, true).getOS().version;
+    return version ? normalize(version) : null;
 }
 
 /** The model named by an in-app browser's hardware identifier, or null. */

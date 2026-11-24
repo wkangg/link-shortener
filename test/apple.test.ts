@@ -16,6 +16,11 @@ const SAFARI_17 =
 // iOS 26: the OS token is frozen at 18_6, Version/ has the real one.
 const SAFARI_26 =
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0.1 Mobile/15E148 Safari/604.1';
+const SAFARI_18 =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1';
+// iOS 26 Yandex: Version/ isn't Safari's own pattern, so Bowser keeps the frozen OS token.
+const YANDEX_IOS =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 YaBrowser/25.10.0.123 Mobile/15E148 Safari/605.1';
 const CHROME_IOS =
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0.6723.90 Mobile/15E148 Safari/604.1';
 const INSTAGRAM =
@@ -36,6 +41,15 @@ describe('iOS version', () => {
 
     test('iOS 26+ Safari: from Version/', () => {
         expect(iosVersion(SAFARI_26)).toBe('26.0.1');
+        expect(iosVersion(SAFARI_18)).toBe('18.6');
+    });
+
+    test("other browsers' Version/ doesn't override the OS token", () => {
+        expect(iosVersion(YANDEX_IOS)).toBe('18.7');
+    });
+
+    test('empty user agent', () => {
+        expect(iosVersion('')).toBeNull();
     });
 
     test('in-app browsers report the real version', () => {
