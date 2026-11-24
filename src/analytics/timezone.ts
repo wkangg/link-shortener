@@ -112,8 +112,16 @@ export class LocalClock {
         return t + this.offsetAt(t) * MINUTE;
     }
 
-    /** The UTC time of a local time. */
+    /** The UTC time of a local time: the earlier one when the clocks repeat it. */
     utc(local: number): number {
+        // Each offset in force gives a candidate, which counts if that offset is in force
+        // then. A local time the clocks went back over has two; one they skipped, none.
+        let earliest = Infinity;
+        for (const { offset } of this.#periods) {
+            const t = local - offset * MINUTE;
+            if (t < earliest && this.offsetAt(t) === offset) earliest = t;
+        }
+        if (earliest !== Infinity) return earliest;
         const guess = local - this.offsetAt(local) * MINUTE;
         const t = local - this.offsetAt(guess) * MINUTE;
         if (this.local(t) >= local) return t;

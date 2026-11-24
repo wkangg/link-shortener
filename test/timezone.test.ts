@@ -35,6 +35,18 @@ describe('LocalClock', () => {
         expect(new LocalClock({ zone: 'Etc/Unknown', tz: -300 }, 0, DAY).sql('c.ts')).toEqual(one);
     });
 
+    test('a local midnight the clocks repeat starts at the first one', () => {
+        // Amman went from 00:59 back to 00:00 on 29 October 2021 (22:00 UTC), so that
+        // midnight came twice: 21:00 and 22:00 UTC.
+        const clock = new LocalClock(
+            { zone: 'Asia/Amman' },
+            Date.UTC(2021, 9, 20),
+            Date.UTC(2021, 10, 5)
+        );
+        expect(clock.utc(Date.UTC(2021, 9, 29))).toBe(Date.UTC(2021, 9, 28, 21));
+        expect(clock.utc(Date.UTC(2021, 9, 30))).toBe(Date.UTC(2021, 9, 29, 22));
+    });
+
     test('a local midnight the clocks skip starts when they jump', () => {
         // Santiago goes from 23:59 on 5 September 2026 straight to 01:00 on the 6th.
         const jump = Date.UTC(2026, 8, 6, 4);
