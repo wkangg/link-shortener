@@ -36,9 +36,16 @@ self.addEventListener('message', (event: MessageEvent<StatsInit | StatsRequest |
     }
     let reply: StatsReply;
     try {
-        if (!stats) throw new Error('The stats worker has no database');
+        if (!db || !stats) throw new Error('The stats worker has no database');
         const method = stats[data.method] as (...args: unknown[]) => unknown;
-        reply = { id: data.id, ok: true, value: method.apply(stats, data.args) };
+        // One snapshot per query: the server writes clicks between statements, and the
+        // history's total and its page must agree.
+        const s = stats;
+        reply = {
+            id: data.id,
+            ok: true,
+            value: db.transaction(() => method.apply(s, data.args))()
+        };
     } catch (error) {
         reply = {
             id: data.id,
