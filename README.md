@@ -99,11 +99,11 @@ bun install
 bun run dev
 ```
 
-| URL                             | What                                                                                                                          |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `http://localhost:3001`         | Dashboard. Without Cloudflare Access, only this machine and your local network can use it, and not through a tunnel or proxy. |
-| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).                                                         |
-| `http://localhost:3001/healthz` | Health check                                                                                                                  |
+| URL                             | What                                                                                                                                                             |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http://localhost:3001`         | Dashboard. Without Cloudflare Access, only this machine and your local network can use it, and requests forwarded by a tunnel or proxy that says so are refused. |
+| `http://localhost:3000/<slug>`  | Short links. `/` returns 404 until you create a root link (slug `/`).                                                                                            |
+| `http://localhost:3001/healthz` | Health check                                                                                                                                                     |
 
 ---
 
@@ -303,7 +303,7 @@ A `link.clicked` event looks like this:
 
 A few more behaviors worth knowing:
 
-- **Analytics queries don't slow redirects.** SQLite blocks the thread it runs on, so the dashboard's stats run in a Worker with its own read-only connection.
+- **Charts and top lists don't slow redirects.** SQLite blocks the thread it runs on, so the dashboard's stats queries run in a Worker with their own read-only connection. The links list still counts on the main thread.
 - **Slugs are case-insensitive.** `/GitHub`, `/github` and `/GITHUB` are the same link, so two links can't differ only by case. A slug keeps the casing you gave it for display, and random slugs use lowercase letters and digits.
 - **Query parameters pass through.** `/abc?utm_source=newsletter` arrives at the destination with the tag, and the dashboard reports it.
 - **QR codes** encode `https://<short-domain>/<slug>?qr`. The `?qr` is removed before redirecting and recorded, so scans show up as their own source.
