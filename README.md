@@ -123,18 +123,18 @@ All settings are environment variables. Copy [`.env.example`](./.env.example) to
 
 ### Optional
 
-| Variable                | Default                     | Description                                                                               |
-| ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------- |
-| `NODE_ENV`              | `production`                | `development`, `production` or `test`. `bun run dev` sets `development`.                  |
-| `SHORT_PORT`            | `3000`                      | Port for short links                                                                      |
-| `DASH_PORT`             | `3001`                      | Port for the dashboard                                                                    |
-| `DB_PATH`               | `./data/links.db`           | SQLite file (`/data/links.db` in the Docker image)                                        |
-| `ABUSEIPDB_API_KEY`     | none                        | Turns on IP reputation lookups ([free key](https://www.abuseipdb.com/account/api))        |
-| `ABUSEIPDB_MIN_SCORE`   | `25`                        | Abuse confidence (1–100) at which a click is hidden                                       |
-| `ABUSEIPDB_DAILY_LIMIT` | `1000`                      | Maximum lookups per day (the free plan allows 1,000)                                      |
-| `STATS_WORKERS`         | one per spare core, up to 4 | Most dashboard stats queries to run at once. Set it to the CPUs a container is limited to |
-| `BACKUP_DIR`            | `/data/backups`             | Where `bun run backup` writes                                                             |
-| `BACKUP_KEEP`           | `14`                        | Number of backups to keep                                                                 |
+| Variable                | Default                     | Description                                                                                                                  |
+| ----------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`              | `production`                | `development`, `production` or `test`. `bun run dev` sets `development`.                                                     |
+| `SHORT_PORT`            | `3000`                      | Port for short links                                                                                                         |
+| `DASH_PORT`             | `3001`                      | Port for the dashboard                                                                                                       |
+| `DB_PATH`               | `./data/links.db`           | SQLite file (`/data/links.db` in the Docker image)                                                                           |
+| `ABUSEIPDB_API_KEY`     | none                        | Turns on IP reputation lookups ([free key](https://www.abuseipdb.com/account/api))                                           |
+| `ABUSEIPDB_MIN_SCORE`   | `25`                        | Abuse confidence (1–100) at which a click is hidden                                                                          |
+| `ABUSEIPDB_DAILY_LIMIT` | `1000`                      | Maximum lookups per day (the free plan allows 1,000)                                                                         |
+| `STATS_WORKERS`         | one per spare core, up to 4 | Most dashboard stats queries to run at once. In a container with a CPU limit, set it to one less than the limit (at least 1) |
+| `BACKUP_DIR`            | `/data/backups`             | Where `bun run backup` writes                                                                                                |
+| `BACKUP_KEEP`           | `14`                        | Number of backups to keep                                                                                                    |
 
 With AbuseIPDB on, each IP is checked at most once a week. Clicks from the last 30 days are checked at startup and every 6 hours, busiest IPs first.
 
@@ -304,7 +304,7 @@ A `link.clicked` event looks like this:
 
 A few more behaviors worth knowing:
 
-- **Charts and top lists don't slow redirects.** SQLite blocks the thread it runs on, so the dashboard's stats queries run in up to 4 Workers (one per spare core), each with its own read-only connection, and a refresh's panels load side by side. Workers start when the dashboard asks for stats and stop after a minute with nothing to do. The links list still counts on the main thread.
+- **Charts and top lists don't slow redirects.** SQLite blocks the thread it runs on, so the dashboard's stats queries run in up to 4 Workers (one per spare core, or `STATS_WORKERS`), each with its own read-only connection, and a refresh's panels load side by side. Workers start when the dashboard asks for stats and stop after a minute with nothing to do. The links list still counts on the main thread.
 - **Slugs are case-insensitive.** `/GitHub`, `/github` and `/GITHUB` are the same link, so two links can't differ only by case. A slug keeps the casing you gave it for display, and random slugs use lowercase letters and digits.
 - **Query parameters pass through.** `/abc?utm_source=newsletter` arrives at the destination with the tag, and the dashboard reports it.
 - **QR codes** encode `https://<short-domain>/<slug>?qr`. The `?qr` is removed before redirecting and recorded, so scans show up as their own source.
