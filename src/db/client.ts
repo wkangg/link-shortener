@@ -19,17 +19,22 @@ export function openDatabase(file: string, opts: { log?: boolean } = {}): Databa
 
     db.run('PRAGMA journal_mode = WAL'); // readers never block the writer
     db.run('PRAGMA synchronous = NORMAL'); // safe with WAL; far fewer fsyncs
-    db.run('PRAGMA busy_timeout = 5000');
     db.run('PRAGMA foreign_keys = ON');
-    db.run('PRAGMA temp_store = MEMORY');
-    db.run('PRAGMA cache_size = -32000'); // ~32 MB page cache
-    db.run('PRAGMA mmap_size = 268435456'); // 256 MB memory-mapped reads
+    tuneReads(db);
 
     const applied = migrate(db, MIGRATIONS_DIR);
     if (opts.log && applied.length > 0)
         console.log(`[db] applied migrations: ${applied.join(', ')}`);
 
     return db;
+}
+
+/** Per-connection settings for fast reads; the stats worker's connection uses them too. */
+export function tuneReads(db: Database): void {
+    db.run('PRAGMA busy_timeout = 5000');
+    db.run('PRAGMA temp_store = MEMORY');
+    db.run('PRAGMA cache_size = -32000'); // ~32 MB page cache
+    db.run('PRAGMA mmap_size = 268435456'); // 256 MB memory-mapped reads
 }
 
 /** Size, versions and row counts for the dashboard's About section. */

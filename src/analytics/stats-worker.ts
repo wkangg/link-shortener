@@ -3,6 +3,7 @@
 // serves redirects. With WAL the reads never block the click writer.
 import { Database } from 'bun:sqlite';
 
+import { tuneReads } from '../db/client.ts';
 import { BadQueryError, Stats } from './stats.ts';
 
 declare const self: Worker;
@@ -29,7 +30,7 @@ self.addEventListener('message', (event: MessageEvent<StatsInit | StatsRequest |
     }
     if (!('id' in data)) {
         db = new Database(data.file, { readonly: true, strict: true });
-        db.run('PRAGMA busy_timeout = 5000');
+        tuneReads(db);
         stats = new Stats(db, { abuseMinScore: data.abuseMinScore });
         return;
     }
