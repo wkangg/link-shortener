@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, jest, test } from 'bun:test';
 
 import {
     classify,
@@ -144,6 +144,41 @@ describe('VpnLists', () => {
         } finally {
             console.error = error;
             lists.stop();
+        }
+    });
+
+    test('a failed reclassify is tried again next hour, though the lists are fresh by then', async () => {
+        jest.useFakeTimers();
+        const db = openDatabase(':memory:');
+        const lists = new VpnLists(db, {
+            fetchText: url => Promise.resolve(url.includes('torproject') ? TOR : RELAY),
+            now: () => NOW
+        });
+        // Lets the update's promises run to the end.
+        const settle = async () => {
+            for (let i = 0; i < 20; i++) await Promise.resolve();
+        };
+        let calls = 0;
+        const error = console.error;
+        console.error = () => {};
+        try {
+            lists.start(() => {
+                calls++;
+                if (calls === 1) throw new Error('database or disk is full');
+            });
+            await settle();
+            expect(calls).toBe(1);
+            jest.advanceTimersByTime(3_600_000);
+            await settle();
+            expect(calls).toBe(2);
+            // It worked that time, so a fresh hour doesn't reclassify again.
+            jest.advanceTimersByTime(3_600_000);
+            await settle();
+            expect(calls).toBe(2);
+        } finally {
+            console.error = error;
+            lists.stop();
+            jest.useRealTimers();
         }
     });
 });

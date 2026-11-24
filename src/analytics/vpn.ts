@@ -286,6 +286,7 @@ export class VpnLists {
         // Set from a change until `onChange` succeeds, so a failed reclassify is retried
         // next hour even though the lists are fresh by then.
         let pending = false;
+        let running: Promise<void> | null = null;
         const run = async () => {
             try {
                 if (await this.refresh()) pending = true;
@@ -297,8 +298,12 @@ export class VpnLists {
                 console.error('[vpn] list update failed:', error);
             }
         };
-        void run();
-        this.#timer = setInterval(() => void run(), HOUR);
+        // An update still going (a long reclassify) isn't started again beside itself.
+        const tick = () => {
+            running ??= run().finally(() => (running = null));
+        };
+        tick();
+        this.#timer = setInterval(tick, HOUR);
         this.#timer.unref();
     }
 
