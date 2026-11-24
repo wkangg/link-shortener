@@ -28,8 +28,9 @@ function format(zone: string): Intl.DateTimeFormat | null {
     } catch {
         return null;
     }
-    // Only real zone names get here, so the cache stays small.
-    formats.set(zone, f);
+    // Only names as Intl spells them are kept (not every casing of one), so the cache
+    // stays small.
+    if (f.resolvedOptions().timeZone === zone) formats.set(zone, f);
     return f;
 }
 
