@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { BadQueryError, Stats } from '../src/analytics/stats.ts';
+import { Stats } from '../src/analytics/stats.ts';
 import { LocalClock, zoneOffset } from '../src/analytics/timezone.ts';
 import { LinkRepo } from '../src/dashboard/links.ts';
 import { openDatabase } from '../src/db/client.ts';
@@ -29,10 +29,10 @@ describe('LocalClock', () => {
         expect(clock.utc(Date.UTC(2026, 10, 10))).toBe(Date.UTC(2026, 10, 10, 5));
     });
 
-    test('without a zone, one offset throughout; an unknown zone is a bad query', () => {
-        const clock = new LocalClock({ tz: -300 }, 0, DAY);
-        expect(clock.sql('c.ts')).toEqual({ sql: '(c.ts + ?)', params: [-300 * 60_000] });
-        expect(() => new LocalClock({ zone: 'Mars/Olympus' }, 0, DAY)).toThrow(BadQueryError);
+    test('without a zone, or one this server does not know, one offset throughout', () => {
+        const one = { sql: '(c.ts + ?)', params: [-300 * 60_000] };
+        expect(new LocalClock({ tz: -300 }, 0, DAY).sql('c.ts')).toEqual(one);
+        expect(new LocalClock({ zone: 'Etc/Unknown', tz: -300 }, 0, DAY).sql('c.ts')).toEqual(one);
     });
 
     test('a local midnight the clocks skip starts when they jump', () => {

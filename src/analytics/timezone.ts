@@ -1,8 +1,6 @@
 // Local days for charts. A single UTC offset puts some clicks on the wrong day once
 // a range crosses a daylight saving change, so with a zone name each click is
 // shifted by the offset in force when it happened.
-import { BadQueryError } from './errors.ts';
-
 const MINUTE = 60_000;
 const DAY = 86_400_000;
 
@@ -14,7 +12,7 @@ interface OffsetPeriod {
 
 const formats = new Map<string, Intl.DateTimeFormat>();
 
-function format(zone: string): Intl.DateTimeFormat {
+function format(zone: string): Intl.DateTimeFormat | null {
     let f = formats.get(zone);
     if (f) return f;
     try {
@@ -28,7 +26,7 @@ function format(zone: string): Intl.DateTimeFormat {
             minute: 'numeric'
         });
     } catch {
-        throw new BadQueryError(`Unknown time zone: ${zone}`);
+        return null;
     }
     // Only real zone names get here, so the cache stays small.
     formats.set(zone, f);
@@ -37,7 +35,9 @@ function format(zone: string): Intl.DateTimeFormat {
 
 /** Minutes to add to UTC for local time in `zone` at `t`. */
 export function zoneOffset(zone: string, t: number): number {
-    const parts = format(zone).formatToParts(t);
+    const f = format(zone);
+    if (!f) throw new Error(`Unknown time zone: ${zone}`);
+    const parts = f.formatToParts(t);
     const part = (type: Intl.DateTimeFormatPartTypes) =>
         Number(parts.find(p => p.type === type)?.value);
     const local = Date.UTC(
@@ -86,12 +86,14 @@ export class LocalClock {
 
     /**
      * Local time in `zone` (an IANA name such as America/Toronto) over [from, to),
-     * or UTC plus `tz` minutes throughout when no zone is given.
+     * or UTC plus `tz` minutes throughout when no zone is given or this server doesn't
+     * know it (a browser can report one newer than its time zone data, or Etc/Unknown).
      */
     constructor(opts: { zone?: string; tz?: number }, from: number, to: number) {
-        this.#periods = opts.zone
-            ? offsetPeriods(opts.zone, from, to)
-            : [{ from, offset: opts.tz ?? 0 }];
+        this.#periods =
+            opts.zone && format(opts.zone)
+                ? offsetPeriods(opts.zone, from, to)
+                : [{ from, offset: opts.tz ?? 0 }];
     }
 
     /** Minutes to add to UTC at `t`. */

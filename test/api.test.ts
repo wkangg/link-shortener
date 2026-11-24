@@ -191,8 +191,9 @@ describe('links API + redirects + analytics, end to end', () => {
         expect(await t.status(`/api/stats/summary?${range()}&f=bogus:x`)).toBe(400);
         expect(await t.status(`/api/export.csv?${range()}&f=bogus:x`)).toBe(400);
         expect(await t.status(`/api/stats/timeseries?${range()}&zone=America/Toronto`)).toBe(200);
-        expect(await t.status(`/api/stats/timeseries?${range()}&zone=Mars/Olympus`)).toBe(400);
-        expect(await t.status('/api/links?zone=Mars/Olympus')).toBe(400);
+        // A zone this server doesn't know falls back to the offset rather than failing the page.
+        expect(await t.status(`/api/stats/timeseries?${range()}&zone=Etc/Unknown`)).toBe(200);
+        expect(await t.status('/api/links?zone=Etc/Unknown')).toBe(200);
     });
 
     test('auth and origin checks', async () => {
