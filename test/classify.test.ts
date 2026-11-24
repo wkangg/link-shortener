@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, jest, test } from 'bun:test';
 
 import {
     classify,
@@ -13,6 +13,11 @@ import { openDatabase } from '../src/db/client.ts';
 import type { RawClick } from '../src/shared/types.ts';
 
 const NOW = 1_700_000_000_000;
+
+/** Lets pending promises (an update running on fake timers) run to the end. */
+async function settle() {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+}
 const CHROME =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
@@ -125,6 +130,82 @@ describe('VpnLists', () => {
         }
         expect(lists.lookup('171.25.193.25')).toBe('Tor');
     });
+
+    test('an error after an update is logged, not left to end the process', async () => {
+        const db = openDatabase(':memory:');
+        const lists = new VpnLists(db, {
+            fetchText: url => Promise.resolve(url.includes('torproject') ? TOR : RELAY),
+            now: () => NOW
+        });
+        const logged = Promise.withResolvers<unknown[]>();
+        const error = console.error;
+        console.error = (...args: unknown[]) => logged.resolve(args);
+        try {
+            lists.start(() => {
+                throw new Error('database or disk is full');
+            });
+            const [message] = await logged.promise;
+            expect(message).toBe('[vpn] list update failed:');
+        } finally {
+            console.error = error;
+            lists.stop();
+        }
+    });
+
+    test('an update still reclassifying is not started again beside itself', async () => {
+        jest.useFakeTimers();
+        const db = openDatabase(':memory:');
+        const lists = new VpnLists(db, {
+            fetchText: url => Promise.resolve(url.includes('torproject') ? TOR : RELAY),
+            now: () => NOW
+        });
+        let calls = 0;
+        try {
+            // The first reclassify never finishes.
+            lists.start(() => {
+                calls++;
+                return new Promise(() => {});
+            });
+            await settle();
+            jest.advanceTimersByTime(3_600_000);
+            await settle();
+            expect(calls).toBe(1);
+        } finally {
+            lists.stop();
+            jest.useRealTimers();
+        }
+    });
+
+    test('a failed reclassify is tried again next hour, though the lists are fresh by then', async () => {
+        jest.useFakeTimers();
+        const db = openDatabase(':memory:');
+        const lists = new VpnLists(db, {
+            fetchText: url => Promise.resolve(url.includes('torproject') ? TOR : RELAY),
+            now: () => NOW
+        });
+        let calls = 0;
+        const error = console.error;
+        console.error = () => {};
+        try {
+            lists.start(() => {
+                calls++;
+                if (calls === 1) throw new Error('database or disk is full');
+            });
+            await settle();
+            expect(calls).toBe(1);
+            jest.advanceTimersByTime(3_600_000);
+            await settle();
+            expect(calls).toBe(2);
+            // It worked that time, so a fresh hour doesn't reclassify again.
+            jest.advanceTimersByTime(3_600_000);
+            await settle();
+            expect(calls).toBe(2);
+        } finally {
+            console.error = error;
+            lists.stop();
+            jest.useRealTimers();
+        }
+    });
 });
 
 describe('classify', () => {
@@ -193,7 +274,7 @@ describe('classify', () => {
 });
 
 describe('ClickClassifier', () => {
-    test('stores verdicts, and the stats query hides and shows them per toggle', () => {
+    test('stores verdicts, and the stats query hides and shows them per toggle', async () => {
         const db = openDatabase(':memory:');
         db.run(
             `INSERT INTO links (id, slug, url, created_at, updated_at) VALUES (1, 'a', 'https://e.x', 0, 0)`
@@ -212,7 +293,8 @@ describe('ClickClassifier', () => {
             lookup: ip => (ip === '5.5.5.5' ? 'Tor' : null),
             now: () => NOW
         });
-        expect(classifier.all()).toBe(3);
+        // The background form, taking turns with other work, does the same.
+        expect(await classifier.allInTurns()).toBe(3);
         expect(classifier.all()).toBe(0);
 
         const ips = (query: Record<string, unknown>) => {

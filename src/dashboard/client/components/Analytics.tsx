@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { TopRow } from '../../../shared/types.ts';
-import { api, localTz } from '../api.ts';
+import { api, localTime } from '../api.ts';
 import { useConfig } from '../config.tsx';
 import { formatCount, formatPercent, percentChange } from '../format.ts';
 import { useApi } from '../useApi.ts';
@@ -98,7 +98,7 @@ function statsParams(opts: {
     const params = new URLSearchParams({
         from: String(to - ms),
         to: String(to),
-        tz: String(localTz())
+        ...localTime()
     });
     if (opts.linkId !== undefined) params.set('link', String(opts.linkId));
     if (opts.bots) params.set('bots', '1');

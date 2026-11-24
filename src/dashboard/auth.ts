@@ -10,6 +10,9 @@ export interface Identity {
 /** `peerIp` is the address of the connection itself (not a forwarded header). */
 export type Authenticate = (req: Request, peerIp?: string) => Promise<Identity | null>;
 
+/** Headers that proxies and tunnels add to a request they pass on. */
+const FORWARDED_HEADERS = ['forwarded', 'x-forwarded-for', 'x-real-ip', 'cf-connecting-ip'];
+
 interface AccessConfig {
     teamDomain: string;
     aud: string;
@@ -21,15 +24,22 @@ interface AccessConfig {
  *
  * With no Access config (local development) only loopback and private-network
  * peers are allowed, so a deploy that forgot to set up Access isn't open to the
- * internet.
+ * internet. Requests carrying one of FORWARDED_HEADERS are refused too, since
+ * cloudflared, ngrok or a reverse proxy connect from this machine or the local
+ * network while the visitor behind them could be anyone. A forwarder that adds no
+ * such header still looks local, so this mode must not be exposed through one.
  */
 export function createAuthenticator(
     config: AccessConfig | null,
     keys?: JWTVerifyGetKey
 ): Authenticate {
     if (!config) {
-        return (_, peerIp) =>
-            Promise.resolve(isPrivateIp(peerIp ?? '') ? { subject: 'local-dev' } : null);
+        return (req, peerIp) =>
+            Promise.resolve(
+                isPrivateIp(peerIp ?? '') && !FORWARDED_HEADERS.some(h => req.headers.has(h))
+                    ? { subject: 'local-dev' }
+                    : null
+            );
     }
 
     const issuer = `https://${config.teamDomain}`;

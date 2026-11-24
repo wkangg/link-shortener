@@ -76,4 +76,16 @@ describe('Cloudflare Access authentication', () => {
         for (const ip of ['203.0.113.9', '2001:db8::1', ''])
             expect(await local(req({}), ip)).toBeNull();
     });
+
+    test('no config refuses what a tunnel or proxy passes on, though it connects locally', async () => {
+        const local = createAuthenticator(null);
+        for (const headers of [
+            { 'cf-connecting-ip': '203.0.113.9' } as Record<string, string>, // cloudflared
+            { 'x-forwarded-for': '203.0.113.9' }, // ngrok, nginx, Traefik
+            { 'x-real-ip': '203.0.113.9' },
+            { forwarded: 'for=203.0.113.9' }
+        ]) {
+            expect(await local(req(headers), '127.0.0.1')).toBeNull();
+        }
+    });
 });

@@ -7,7 +7,8 @@ import path from 'node:path';
 import type { BunRequest, Server } from 'bun';
 import { z } from 'zod/v4';
 
-import { BadQueryError, Stats } from '../analytics/stats.ts';
+import type { StatsReader } from '../analytics/stats-reader.ts';
+import { BadQueryError } from '../analytics/stats.ts';
 import { copyDatabase, databaseInfo, pingDatabase } from '../db/client.ts';
 import type {
     AboutResponse,
@@ -28,7 +29,7 @@ export interface ApiDeps {
     version: string;
     links: LinkRepo;
     webhooks: EndpointRepo;
-    stats: Stats;
+    stats: StatsReader;
     schemas: LinkSchemas;
     authenticate: Authenticate;
     /** Browser requests that change data must come from this origin. */
@@ -56,10 +57,21 @@ const flag = z
     .optional()
     .transform(v => v === '1' || v === 'true');
 
+/**
+ * From 1970 to the start of 9999: time zone lookups go a day either side, and fail
+ * or go wrong near the ends of what JavaScript dates can hold.
+ */
+const time = z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(Date.UTC(9999, 0, 1));
+
 const statsQuerySchema = z.object({
-    from: z.coerce.number().int(),
-    to: z.coerce.number().int(),
+    from: time,
+    to: time,
     tz: z.coerce.number().int().min(-840).max(840).default(0),
+    zone: z.string().min(1).max(64).optional(),
     link: z.coerce.number().int().positive().optional(),
     bots: flag,
     dc: flag,
@@ -159,7 +171,7 @@ function parseId(raw: string): number | null {
 function parseStatsQuery(url: URL): StatsQuery {
     const parsed = statsQuerySchema.safeParse(Object.fromEntries(url.searchParams));
     if (!parsed.success) throw new BadQueryError(z.prettifyError(parsed.error));
-    const { from, to, tz, link, bots, dc, scrapers, vpn, abusive, q } = parsed.data;
+    const { from, to, tz, zone, link, bots, dc, scrapers, vpn, abusive, q } = parsed.data;
     if (to <= from) throw new BadQueryError('`to` must be after `from`');
     if (to - from > MAX_RANGE) throw new BadQueryError('Date range is too long (max 5 years)');
     return {
@@ -172,6 +184,7 @@ function parseStatsQuery(url: URL): StatsQuery {
         vpn,
         abusive,
         filters: url.searchParams.getAll('f'),
+        ...(zone !== undefined && { zone }),
         ...(link !== undefined && { link }),
         ...(q && { q })
     };
@@ -209,7 +222,8 @@ function parseListQuery(req: Request): ListOptions {
         archived: p.get('archived') === '1',
         limit: numberParam(p, 'limit', 50),
         offset: numberParam(p, 'offset', 0),
-        tz: numberParam(p, 'tz', 0)
+        tz: numberParam(p, 'tz', 0),
+        zone: p.get('zone') || undefined
     };
 }
 
@@ -324,39 +338,43 @@ export function apiRoutes(deps: ApiDeps) {
         },
 
         '/api/stats/summary': {
-            GET: guard(req => json(stats.summary(statsQueryOf(req))))
+            GET: guard(async req => json(await stats.summary(statsQueryOf(req))))
         },
 
         '/api/stats/timeseries': {
-            GET: guard(req => json(stats.timeseries(statsQueryOf(req))))
+            GET: guard(async req => json(await stats.timeseries(statsQueryOf(req))))
         },
 
         '/api/stats/top': {
-            GET: guard(req => {
+            GET: guard(async req => {
                 const url = new URL(req.url);
                 const dim = url.searchParams.get('dim') ?? '';
                 const limit = numberParam(url.searchParams, 'limit', 10) || 10;
-                return json(stats.top(parseStatsQuery(url), dim, limit));
+                return json(await stats.top(parseStatsQuery(url), dim, limit));
             })
         },
 
         '/api/stats/suggest': {
-            GET: guard(req => {
+            GET: guard(async req => {
                 const url = new URL(req.url);
                 const p = url.searchParams;
                 return json(
-                    stats.suggest(parseStatsQuery(url), p.get('field') ?? '', p.get('text') ?? '')
+                    await stats.suggest(
+                        parseStatsQuery(url),
+                        p.get('field') ?? '',
+                        p.get('text') ?? ''
+                    )
                 );
             })
         },
 
         '/api/stats/clicks': {
-            GET: guard(req => {
+            GET: guard(async req => {
                 const url = new URL(req.url);
                 const p = url.searchParams;
                 const before = p.get('before') ?? undefined;
                 return json(
-                    stats.history(parseStatsQuery(url), {
+                    await stats.history(parseStatsQuery(url), {
                         limit: numberParam(p, 'limit', 50),
                         offset: numberParam(p, 'offset', 0),
                         ...(before !== undefined && { before })

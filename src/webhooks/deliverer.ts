@@ -28,6 +28,9 @@ export const KEEP_FINISHED_MS = 7 * 86_400_000;
 const MAX_PENDING = 100_000;
 
 const MAINTENANCE_INTERVAL_MS = 60_000;
+// After a database error, delivery waits this long: an event that was sent but not
+// recorded would otherwise go out again on every tick.
+export const PAUSE_AFTER_ERROR_MS = 60_000;
 /** Events a standard endpoint's worker sends before giving its slot to the next endpoint. */
 export const STANDARD_BATCH = 20;
 /** Due events read per Discord message; past 10 they are summarized. */
@@ -96,6 +99,7 @@ export class WebhookDeliverer {
     #timer: ReturnType<typeof setInterval> | null = null;
     #stopping = false;
     #lastMaintenance = 0;
+    #pausedUntil = 0;
     #sent = 0;
 
     constructor(db: Database, opts: DelivererOptions) {
@@ -125,11 +129,29 @@ export class WebhookDeliverer {
         await Promise.all([...this.#inFlight.values(), ...this.#discordBusy.values()]);
     }
 
-    /** Starts every due event there is room for and waits for those to finish. */
+    /**
+     * Starts every due event there is room for and waits for those to finish. Never
+     * rejects: it runs from a timer, and an unhandled rejection would end the process
+     * (and the redirects with it) over a database error such as a full disk.
+     */
     async tick(): Promise<void> {
-        const now = this.#opts.now();
-        if (now - this.#lastMaintenance >= MAINTENANCE_INTERVAL_MS) this.maintain(now);
-        await Promise.all([...this.#startStandard(now), ...this.#startDiscord(now)]);
+        try {
+            const now = this.#opts.now();
+            if (now < this.#pausedUntil) return;
+            if (now - this.#lastMaintenance >= MAINTENANCE_INTERVAL_MS) this.maintain(now);
+            await Promise.all([...this.#startStandard(now), ...this.#startDiscord(now)]);
+        } catch (error) {
+            this.#failed(error);
+        }
+    }
+
+    /**
+     * A delivery round failed (e.g. the database can't be written); a tick a minute
+     * on tries again.
+     */
+    #failed(error: unknown): void {
+        this.#pausedUntil = this.#opts.now() + PAUSE_AFTER_ERROR_MS;
+        console.error('[webhooks] delivery failed, retrying in a minute', error);
     }
 
     /**
@@ -143,7 +165,9 @@ export class WebhookDeliverer {
             .filter(id => !this.#inFlight.has(id))
             .slice(0, room);
         return endpoints.map(id => {
-            const run = this.#drainStandard(id).finally(() => this.#inFlight.delete(id));
+            const run = this.#drainStandard(id)
+                .catch(error => this.#failed(error))
+                .finally(() => this.#inFlight.delete(id));
             this.#inFlight.set(id, run);
             return run;
         });
@@ -177,7 +201,9 @@ export class WebhookDeliverer {
             id => !this.#discordBusy.has(id) && (this.#discordNext.get(id) ?? 0) <= now
         );
         return endpoints.map(id => {
-            const run = this.#discordBatch(id, now).finally(() => this.#discordBusy.delete(id));
+            const run = this.#discordBatch(id, now)
+                .catch(error => this.#failed(error))
+                .finally(() => this.#discordBusy.delete(id));
             this.#discordBusy.set(id, run);
             return run;
         });

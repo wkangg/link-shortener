@@ -13,6 +13,7 @@ import {
 import {
     AUTO_DISABLE_AFTER_MS,
     KEEP_FINISHED_MS,
+    PAUSE_AFTER_ERROR_MS,
     RETRY_DELAYS_MS,
     STANDARD_BATCH,
     WebhookDeliverer,
@@ -505,6 +506,41 @@ describe('delivery', () => {
         expect(body.data.click).toMatchObject({ country: 'CA', browser: 'Safari', os: 'iOS' });
         expect(body.data.click).not.toHaveProperty('ip');
         expect(p.events()[0]).toMatchObject({ status: 'delivered', attempts: 1, last_status: 200 });
+    });
+
+    test('a database error is logged and retried, never thrown from the timer', async () => {
+        const p = pipeline();
+        const link = p.links.create({ url: 'https://example.com' });
+        p.addEndpoint({ skip: [] });
+        p.click(raw(link.id));
+        const [queued] = p.events();
+        if (!queued) throw new Error('nothing queued');
+        p.clock.now = queued.due_at;
+        // Every write to the outbox fails, as it would on a full disk.
+        p.db.run(
+            "CREATE TRIGGER full BEFORE UPDATE ON webhook_events BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END"
+        );
+        const logged: unknown[] = [];
+        const error = console.error;
+        console.error = (...args: unknown[]) => logged.push(args);
+        try {
+            expect(await p.deliverer.tick()).toBeUndefined();
+        } finally {
+            console.error = error;
+        }
+        expect(logged).toHaveLength(1);
+        expect(p.events()[0]).toMatchObject({ status: 'pending', attempts: 0 });
+        expect(p.requests).toHaveLength(1);
+
+        // It waits before trying again, rather than resending the event every tick.
+        await p.deliverer.tick();
+        expect(p.requests).toHaveLength(1);
+
+        // Once writes work again, the event goes out.
+        p.db.run('DROP TRIGGER full');
+        p.clock.now += PAUSE_AFTER_ERROR_MS;
+        await p.deliverer.tick();
+        expect(p.events()[0]).toMatchObject({ status: 'delivered' });
     });
 
     test('tracked clicks wait for the device page, so Windows 11 is reported', async () => {

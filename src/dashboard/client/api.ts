@@ -110,5 +110,11 @@ export const api = {
         request<WebhookEventRow>('POST', `/api/webhook-events/${id}/retry`)
 };
 
-/** Minutes to add to UTC to get local time. */
-export const localTz = () => -new Date().getTimezoneOffset();
+/**
+ * The browser's time zone for day boundaries: its name, so days follow daylight
+ * saving across a range, and today's offset for servers that don't know the name.
+ */
+export const localTime = () => ({
+    tz: String(-new Date().getTimezoneOffset()),
+    zone: Intl.DateTimeFormat().resolvedOptions().timeZone
+});

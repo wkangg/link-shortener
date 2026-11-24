@@ -124,7 +124,18 @@ const people = Array.from({ length: 400 }, (_, i) => ({
 const now = Date.now();
 const SPAN = 45 * 86_400_000;
 
+// The buffer holds 100k clicks at most and drops the rest, so write as it fills.
+const FLUSH_EVERY = 50_000;
+let written = 0;
+function flush() {
+    written += buffer.flush();
+    // A failed flush keeps its clicks, and the buffer would then drop the next ones.
+    if (buffer.unsaved > 0)
+        throw new Error(`Seed stopped: ${buffer.unsaved} clicks could not be written`);
+}
+
 for (let n = 0; n < total; n++) {
+    if (n > 0 && n % FLUSH_EVERY === 0) flush();
     let roll = Math.random() * weightSum;
     let link = links[0];
     for (const [i, w] of weights.entries()) {
@@ -170,7 +181,7 @@ for (let n = 0; n < total; n++) {
     buffer.push(click);
 }
 
-const written = buffer.flush();
+flush();
 
 // Mark a slice of visitors as datacenter traffic (with a plausible hosting
 // hostname) so the "Include datacenter IPs" toggle has something to hide.

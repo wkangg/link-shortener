@@ -6,7 +6,7 @@ import {
     LINK_SEARCH_HAS
 } from '../../../shared/search.ts';
 import type { LinkWithStats } from '../../../shared/types.ts';
-import { api, localTz } from '../api.ts';
+import { api, localTime } from '../api.ts';
 import { CreateBar } from '../components/CreateBar.tsx';
 import { LinkActions, useCopy } from '../components/LinkActions.tsx';
 import { SearchBox, type SearchSyntax } from '../components/SearchBox.tsx';
@@ -39,7 +39,7 @@ export function LinksPage() {
     // The bookmarklet opens /links?new=<url>.
     const initialUrl = search.get('new') ?? '';
 
-    const params = new URLSearchParams({ sort, limit: String(limit), tz: String(localTz()) });
+    const params = new URLSearchParams({ sort, limit: String(limit), ...localTime() });
     if (q.trim()) params.set('q', q.trim());
     if (tag) params.set('tag', tag);
     if (archived) params.set('archived', '1');
