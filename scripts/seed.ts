@@ -130,8 +130,8 @@ let written = 0;
 function flush() {
     written += buffer.flush();
     // A failed flush keeps its clicks, and the buffer would then drop the next ones.
-    if (buffer.pending > 0)
-        throw new Error(`Seed stopped: ${buffer.pending} clicks could not be written`);
+    if (buffer.unsaved > 0)
+        throw new Error(`Seed stopped: ${buffer.unsaved} clicks could not be written`);
 }
 
 for (let n = 0; n < total; n++) {
