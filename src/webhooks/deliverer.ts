@@ -145,6 +145,10 @@ export class WebhookDeliverer {
         }
     }
 
+    /**
+     * A delivery round failed (e.g. the database can't be written); a tick a minute
+     * on tries again.
+     */
     #failed(error: unknown): void {
         this.#pausedUntil = this.#opts.now() + PAUSE_AFTER_ERROR_MS;
         console.error('[webhooks] delivery failed, retrying in a minute', error);
@@ -458,7 +462,6 @@ export function skipPending(db: Database, endpointId: number, reason: string, no
     ).run(reason, now, endpointId);
 }
 
-/** A delivery round failed (e.g. the database can't be written); the next tick tries again. */
 function errorMessage(error: unknown): string {
     if (error instanceof Error) {
         return error.name === 'TimeoutError' ? 'Timed out' : error.message;
