@@ -283,16 +283,22 @@ export class VpnLists {
     /** Refreshes now and then hourly (each list only when stale); `onChange` runs after a change. */
     start(onChange: () => unknown): void {
         if (this.#timer) return;
-        const run = () => {
-            this.refresh()
-                .then(changed => (changed ? onChange() : undefined))
+        // Set from a change until `onChange` succeeds, so a failed reclassify is retried
+        // next hour even though the lists are fresh by then.
+        let pending = false;
+        const run = async () => {
+            try {
+                if (await this.refresh()) pending = true;
+                if (!pending) return;
+                await onChange();
+                pending = false;
+            } catch (error) {
                 // Unhandled, a database error here would end the process.
-                .catch((error: unknown) => {
-                    console.error('[vpn] list update failed:', error);
-                });
+                console.error('[vpn] list update failed:', error);
+            }
         };
-        run();
-        this.#timer = setInterval(run, HOUR);
+        void run();
+        this.#timer = setInterval(() => void run(), HOUR);
         this.#timer.unref();
     }
 
