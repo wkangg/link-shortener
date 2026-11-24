@@ -53,7 +53,7 @@ describe('StatsReader', () => {
         }
     });
 
-    test('a bad search is still a BadQueryError (a 400), and queries run in parallel', async () => {
+    test('a bad search is still a BadQueryError (a 400), and the queries beside it still answer', async () => {
         const { db, click } = database('errors.db');
         click.run(1000, 'CA', 'Firefox', 'v1');
         const reader = new StatsReader(db, { abuseMinScore: 25 });
@@ -77,6 +77,8 @@ describe('StatsReader', () => {
         const asked = reader.summary(q());
         await reader.stop();
         expect(await asked).toMatchObject({ clicks: 1 });
+        // A query after that is refused rather than starting a worker nothing would stop.
+        await expect(reader.summary(q())).rejects.toThrow('shut down');
         db.close();
         // Windows refuses to delete a file that's still open.
         rmSync(path.join(tmp, 'stop.db'));

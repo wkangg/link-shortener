@@ -19,6 +19,7 @@ export class StatsReader {
     /** Workers asked to stop, and what to call once they have. */
     readonly #stopped = new WeakMap<Worker, () => void>();
     #worker: Worker | null = null;
+    #closed = false;
     #next = 0;
 
     constructor(db: Database, opts: { abuseMinScore: number }) {
@@ -43,6 +44,7 @@ export class StatsReader {
      * database file isn't held open) and ends the worker.
      */
     async stop(): Promise<void> {
+        this.#closed = true;
         const worker = this.#worker;
         this.#worker = null;
         if (!worker) return;
@@ -66,6 +68,7 @@ export class StatsReader {
                 return Promise.reject(error);
             }
         }
+        if (this.#closed) return Promise.reject(new Error('Stats are shut down'));
         const id = this.#next++;
         const reply = Promise.withResolvers<unknown>();
         this.#pending.set(id, reply);
