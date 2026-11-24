@@ -83,6 +83,18 @@ describe('local days across a daylight saving change', () => {
         expect(days({ tz: -300 })[0]).toBe(Date.UTC(2026, 9, 20, 5));
     });
 
+    test('the first day starts at its own midnight when the range opens after a change', () => {
+        // Opens at 07:00 EST on 1 November, after the change; that day began at 00:00 EDT.
+        const { points } = new Stats(database()).timeseries({
+            from: Date.UTC(2026, 10, 1, 12),
+            to: Date.UTC(2026, 10, 6, 5),
+            filters: [],
+            tz: -300,
+            zone: TORONTO
+        });
+        expect(points[0]?.t).toBe(Date.UTC(2026, 10, 1, 4));
+    });
+
     test('sparklines too', () => {
         // 3 November, noon in Toronto: the last 7 days are 28 October to 3 November.
         const now = Date.UTC(2026, 10, 3, 17);

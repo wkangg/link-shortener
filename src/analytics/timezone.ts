@@ -93,7 +93,9 @@ export class LocalClock {
     constructor(opts: { zone?: string; tz?: number }, from: number, to: number) {
         this.#periods =
             opts.zone && format(opts.zone)
-                ? offsetPeriods(opts.zone, from, to)
+                ? // From a day early: the first local day can start before `from`, and on the
+                  // far side of a change.
+                  offsetPeriods(opts.zone, from - DAY, to)
                 : [{ from, offset: opts.tz ?? 0 }];
     }
 
