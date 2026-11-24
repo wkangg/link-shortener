@@ -109,7 +109,10 @@ export class LocalClock {
     /** The UTC time of a local time. */
     utc(local: number): number {
         const guess = local - this.offsetAt(local) * MINUTE;
-        return local - this.offsetAt(guess) * MINUTE;
+        const t = local - this.offsetAt(guess) * MINUTE;
+        if (this.local(t) >= local) return t;
+        // The clocks jumped past `local` (some zones skip midnight): it starts when they jump.
+        return this.#periods.find(p => p.from > t)?.from ?? t;
     }
 
     /** SQL for `column` (UTC ms) as local time, with the offset in force at each row. */

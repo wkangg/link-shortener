@@ -34,6 +34,19 @@ describe('LocalClock', () => {
         expect(clock.sql('c.ts')).toEqual({ sql: '(c.ts + ?)', params: [-300 * 60_000] });
         expect(() => new LocalClock({ zone: 'Mars/Olympus' }, 0, DAY)).toThrow(BadQueryError);
     });
+
+    test('a local midnight the clocks skip starts when they jump', () => {
+        // Santiago goes from 23:59 on 5 September 2026 straight to 01:00 on the 6th.
+        const jump = Date.UTC(2026, 8, 6, 4);
+        const clock = new LocalClock(
+            { zone: 'America/Santiago' },
+            Date.UTC(2026, 7, 1),
+            Date.UTC(2026, 9, 1)
+        );
+        expect(clock.utc(Date.UTC(2026, 8, 6))).toBe(jump);
+        expect(clock.local(jump)).toBe(Date.UTC(2026, 8, 6, 1));
+        expect(clock.utc(Date.UTC(2026, 8, 5))).toBe(Date.UTC(2026, 8, 5, 4));
+    });
 });
 
 describe('local days across a daylight saving change', () => {
