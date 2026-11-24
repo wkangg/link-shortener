@@ -58,7 +58,7 @@ export function TopList({
     query.set('limit', '10');
     const { data, error } = useApi(
         `${refreshKey}|${query}`,
-        () => api.top(query),
+        signal => api.top(query, signal),
         keep && `${keep}|${dim}`
     );
     const rows = data?.rows ?? [];

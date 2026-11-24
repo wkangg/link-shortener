@@ -339,7 +339,7 @@ export function ClickHistory({
     query.set('offset', String(requested * size));
     const { data, error, loading } = useApi(
         `clicks|${refreshKey}|${query}`,
-        () => api.clicks(query),
+        signal => api.clicks(query, signal),
         // The page opens on page 1, so only page 1 is kept.
         keep && requested === 0 ? `${keep}|${size}` : undefined
     );

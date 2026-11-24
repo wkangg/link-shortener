@@ -16,7 +16,8 @@ const schema = z.object({
     VISITOR_SALT: z.string().min(16).optional(),
     ABUSEIPDB_API_KEY: z.string().min(1).optional(),
     ABUSEIPDB_MIN_SCORE: z.coerce.number().int().min(1).max(100).default(25),
-    ABUSEIPDB_DAILY_LIMIT: z.coerce.number().int().min(1).default(1000)
+    ABUSEIPDB_DAILY_LIMIT: z.coerce.number().int().min(1).default(1000),
+    STATS_WORKERS: z.coerce.number().int().min(1).max(64).optional()
 });
 
 export interface Config {
@@ -36,6 +37,8 @@ export interface Config {
     abuseIpdb: { apiKey: string; dailyLimit: number } | null;
     /** Clicks from IPs with an abuse confidence score at or above this are hidden by default. */
     abuseMinScore: number;
+    /** Most stats workers to run at once; null picks one per spare core, up to 4. */
+    statsWorkers: number | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -87,6 +90,7 @@ export function loadConfig(env: Env = process.env): Config {
         abuseIpdb: e.ABUSEIPDB_API_KEY
             ? { apiKey: e.ABUSEIPDB_API_KEY, dailyLimit: e.ABUSEIPDB_DAILY_LIMIT }
             : null,
-        abuseMinScore: e.ABUSEIPDB_MIN_SCORE
+        abuseMinScore: e.ABUSEIPDB_MIN_SCORE,
+        statsWorkers: e.STATS_WORKERS ?? null
     };
 }
