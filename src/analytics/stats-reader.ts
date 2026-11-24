@@ -60,6 +60,7 @@ export class StatsReader {
         method: M,
         args: Parameters<Stats[M]>
     ): Promise<ReturnType<Stats[M]>> {
+        if (this.#closed) return Promise.reject(new Error('Stats are shut down'));
         if (!this.#init) {
             try {
                 const run = this.#stats[method] as (...a: unknown[]) => ReturnType<Stats[M]>;
@@ -68,7 +69,6 @@ export class StatsReader {
                 return Promise.reject(error);
             }
         }
-        if (this.#closed) return Promise.reject(new Error('Stats are shut down'));
         const id = this.#next++;
         const reply = Promise.withResolvers<unknown>();
         this.#pending.set(id, reply);

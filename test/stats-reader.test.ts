@@ -90,5 +90,6 @@ describe('StatsReader', () => {
         expect(await reader.summary(q())).toEqual({ clicks: 0, visitors: 0, previous: null });
         await expect(reader.summary(q({ q: 'is:nope' }))).rejects.toBeInstanceOf(BadQueryError);
         await reader.stop();
+        await expect(reader.summary(q())).rejects.toThrow('shut down');
     });
 });
