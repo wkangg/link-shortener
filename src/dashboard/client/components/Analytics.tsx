@@ -147,10 +147,10 @@ export function Analytics({ linkId }: AnalyticsProps) {
                 missed = true;
                 return;
             }
-            missed = false;
             // Over a large database a refresh can outlast the interval. Starting another
             // would only queue more queries behind it, so this tick is skipped.
             if (statsLoading()) return;
+            missed = false;
             setNow(Date.now());
             setTick(t => t + 1);
         };

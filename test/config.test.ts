@@ -20,6 +20,13 @@ describe('loadConfig', () => {
         expect(c.cfAccess).toBeNull();
         expect(c.abuseIpdb).toBeNull();
         expect(c.abuseMinScore).toBe(25);
+        expect(c.statsWorkers).toBeNull();
+    });
+
+    test('stats worker count', () => {
+        expect(dev({ STATS_WORKERS: '1' }).statsWorkers).toBe(1);
+        expect(() => dev({ STATS_WORKERS: '0' })).toThrow();
+        expect(() => dev({ STATS_WORKERS: 'two' })).toThrow();
     });
 
     test('AbuseIPDB settings', () => {

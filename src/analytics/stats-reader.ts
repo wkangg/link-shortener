@@ -168,6 +168,8 @@ export class StatsReader {
         const worker = new Worker(this.#script);
         const slot: Slot = { worker, job: null, retiring: false, idleTimer: null };
         worker.addEventListener('message', (event: MessageEvent<StatsReply>) => {
+            // Already removed (it died); a late reply has no one to go to.
+            if (!this.#slots.has(slot)) return;
             const reply = event.data;
             if (reply === 'stopped') {
                 this.#remove(slot);

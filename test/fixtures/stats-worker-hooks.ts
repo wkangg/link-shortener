@@ -4,7 +4,7 @@ import type { StatsRequest } from '../../src/analytics/stats-worker.ts';
 
 declare const self: Worker;
 
-const SLOW_MS = 300; // test/stats-reader.test.ts waits on this too
+const SLOW_MS = 500; // test/stats-reader.test.ts waits on this too
 
 self.addEventListener('message', (event: MessageEvent<unknown>) => {
     const data = event.data as Partial<StatsRequest> | null;

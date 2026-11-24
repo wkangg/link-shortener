@@ -111,7 +111,10 @@ export function startApp(opts: AppOptions) {
         isBot: ua => parseUserAgent(ua).isBot
     });
 
-    const stats = new StatsReader(db, { abuseMinScore: config.abuseMinScore });
+    const stats = new StatsReader(db, {
+        abuseMinScore: config.abuseMinScore,
+        workers: config.statsWorkers ?? undefined
+    });
     const dash = startDashboardServer({
         port: config.dashPort,
         dev: !config.isProd,

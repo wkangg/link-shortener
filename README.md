@@ -123,17 +123,18 @@ All settings are environment variables. Copy [`.env.example`](./.env.example) to
 
 ### Optional
 
-| Variable                | Default           | Description                                                                        |
-| ----------------------- | ----------------- | ---------------------------------------------------------------------------------- |
-| `NODE_ENV`              | `production`      | `development`, `production` or `test`. `bun run dev` sets `development`.           |
-| `SHORT_PORT`            | `3000`            | Port for short links                                                               |
-| `DASH_PORT`             | `3001`            | Port for the dashboard                                                             |
-| `DB_PATH`               | `./data/links.db` | SQLite file (`/data/links.db` in the Docker image)                                 |
-| `ABUSEIPDB_API_KEY`     | none              | Turns on IP reputation lookups ([free key](https://www.abuseipdb.com/account/api)) |
-| `ABUSEIPDB_MIN_SCORE`   | `25`              | Abuse confidence (1–100) at which a click is hidden                                |
-| `ABUSEIPDB_DAILY_LIMIT` | `1000`            | Maximum lookups per day (the free plan allows 1,000)                               |
-| `BACKUP_DIR`            | `/data/backups`   | Where `bun run backup` writes                                                      |
-| `BACKUP_KEEP`           | `14`              | Number of backups to keep                                                          |
+| Variable                | Default                     | Description                                                                               |
+| ----------------------- | --------------------------- | ----------------------------------------------------------------------------------------- |
+| `NODE_ENV`              | `production`                | `development`, `production` or `test`. `bun run dev` sets `development`.                  |
+| `SHORT_PORT`            | `3000`                      | Port for short links                                                                      |
+| `DASH_PORT`             | `3001`                      | Port for the dashboard                                                                    |
+| `DB_PATH`               | `./data/links.db`           | SQLite file (`/data/links.db` in the Docker image)                                        |
+| `ABUSEIPDB_API_KEY`     | none                        | Turns on IP reputation lookups ([free key](https://www.abuseipdb.com/account/api))        |
+| `ABUSEIPDB_MIN_SCORE`   | `25`                        | Abuse confidence (1–100) at which a click is hidden                                       |
+| `ABUSEIPDB_DAILY_LIMIT` | `1000`                      | Maximum lookups per day (the free plan allows 1,000)                                      |
+| `STATS_WORKERS`         | one per spare core, up to 4 | Most dashboard stats queries to run at once. Set it to the CPUs a container is limited to |
+| `BACKUP_DIR`            | `/data/backups`             | Where `bun run backup` writes                                                             |
+| `BACKUP_KEEP`           | `14`                        | Number of backups to keep                                                                 |
 
 With AbuseIPDB on, each IP is checked at most once a week. Clicks from the last 30 days are checked at startup and every 6 hours, busiest IPs first.
 

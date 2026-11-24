@@ -96,7 +96,7 @@ describe('StatsReader', () => {
 
 describe('StatsReader pool', () => {
     const script = new URL('fixtures/stats-worker.ts', import.meta.url);
-    const SLOW_MS = 300; // what the fixture holds a `slow!` query for
+    const SLOW_MS = 500; // what the fixture holds a `slow!` query for
 
     test('answers queries side by side, one worker each, up to its size', async () => {
         const { db, click } = database('pool.db');
@@ -111,7 +111,7 @@ describe('StatsReader pool', () => {
             const third = reader.top(q(), 'country', 10);
             expect(reader.workers).toBe(2);
             await Promise.all(slow);
-            // Two 300 ms queries, side by side.
+            // Two slow queries, side by side.
             expect(performance.now() - started).toBeLessThan(2 * SLOW_MS);
             const { rows } = await third;
             expect(rows).toHaveLength(1);
@@ -190,11 +190,17 @@ describe('StatsReader pool', () => {
             reader.summary(q())
         ];
         const stopped = reader.stop();
-        await expect(reader.summary(q())).rejects.toThrow('shut down');
-        await stopped;
-        expect(reader.workers).toBe(0);
-        for (const answer of await Promise.all(asked)) expect(answer).toMatchObject({ clicks: 1 });
-        db.close();
+        try {
+            await expect(reader.summary(q())).rejects.toThrow('shut down');
+            await stopped;
+            expect(reader.workers).toBe(0);
+            for (const answer of await Promise.all(asked)) {
+                expect(answer).toMatchObject({ clicks: 1 });
+            }
+        } finally {
+            await stopped;
+            db.close();
+        }
         // Windows refuses to delete a file that's still open.
         rmSync(path.join(tmp, 'stop-pool.db'));
     });
