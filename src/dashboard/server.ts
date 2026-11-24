@@ -12,6 +12,9 @@ export function startDashboardServer(opts: DashboardServerOptions) {
     return Bun.serve({
         port: opts.port,
         development: opts.dev ? { hmr: true, console: true } : false,
+        // Stats queries wait their turn in one worker, so over a large database a
+        // refresh's last panels can wait well past Bun's 10 s default with nothing sent.
+        idleTimeout: 120,
         routes: {
             // Container health check (Docker HEALTHCHECK, load balancers). Not behind auth.
             '/healthz': () =>
