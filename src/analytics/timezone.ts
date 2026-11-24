@@ -91,12 +91,13 @@ export class LocalClock {
      * know it (a browser can report one newer than its time zone data, or Etc/Unknown).
      */
     constructor(opts: { zone?: string; tz?: number }, from: number, to: number) {
-        this.#periods =
-            opts.zone && format(opts.zone)
-                ? // From a day early: the first local day can start before `from`, and on the
-                  // far side of a change.
-                  offsetPeriods(opts.zone, from - DAY, to)
-                : [{ from, offset: opts.tz ?? 0 }];
+        // As Intl spells it, so lookups hit the cache whatever casing was sent.
+        const zone = opts.zone && format(opts.zone)?.resolvedOptions().timeZone;
+        // From a day early: the first local day can start before `from`, and on the far
+        // side of a change.
+        this.#periods = zone
+            ? offsetPeriods(zone, from - DAY, to)
+            : [{ from, offset: opts.tz ?? 0 }];
     }
 
     /** Minutes to add to UTC at `t`. */
