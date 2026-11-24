@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite';
+import { availableParallelism } from 'node:os';
 
 import type { StatsQuery } from '../shared/types.ts';
 import type { StatsInit, StatsMethod, StatsReply, StatsRequest } from './stats-worker.ts';
@@ -6,27 +7,67 @@ import { BadQueryError, Stats } from './stats.ts';
 
 type Run<M extends StatsMethod> = (...args: Parameters<Stats[M]>) => Promise<ReturnType<Stats[M]>>;
 
+interface Job {
+    request: StatsRequest;
+    reply: PromiseWithResolvers<unknown>;
+}
+
+interface Slot {
+    worker: Worker;
+    /** The query it's answering; a worker takes one at a time. */
+    job: Job | null;
+    /** Asked to stop (idle too long, or shutting down); it takes no more queries. */
+    retiring: boolean;
+    idleTimer: ReturnType<typeof setTimeout> | null;
+}
+
+export interface StatsReaderOptions {
+    abuseMinScore: number;
+    /** At most this many workers. Defaults to one per spare core, up to 4. */
+    workers?: number;
+    /** A worker with nothing to do for this long is stopped, freeing its connection. */
+    idleMs?: number;
+    /** The worker script (tests). */
+    script?: URL;
+}
+
+/** One per core the server's own thread doesn't use, up to 4: each holds a connection. */
+const defaultWorkers = () => Math.max(1, Math.min(4, availableParallelism() - 1));
+
 /**
- * The dashboard's stats, queried in a Worker (see stats-worker.ts) so a slow query
- * over many clicks doesn't hold up redirects. An in-memory database (tests) can't be
- * opened from another thread, so it's queried here. The CSV export stays here too:
- * it reads a page at a time and lets redirects run between pages.
+ * The dashboard's stats, queried in a few Workers (see stats-worker.ts) so a slow query
+ * over many clicks doesn't hold up redirects, and a refresh's queries run side by side.
+ * Workers start as queries need them and stop after a while with none, since each
+ * holds a connection with its own cache. An in-memory database (tests) can't be opened
+ * from another thread, so it's queried here. The CSV export stays here too: it reads a
+ * page at a time and lets redirects run between pages.
  */
 export class StatsReader {
     readonly #stats: Stats;
     readonly #init: StatsInit | null;
-    readonly #pending = new Map<number, PromiseWithResolvers<unknown>>();
-    /** Workers asked to stop, and what to call once they have. */
-    readonly #stopped = new WeakMap<Worker, () => void>();
-    #worker: Worker | null = null;
+    readonly #size: number;
+    readonly #idleMs: number;
+    readonly #script: URL;
+    readonly #slots = new Set<Slot>();
+    /** Queries waiting for a free worker, oldest first. */
+    readonly #queue: Job[] = [];
     #closed = false;
+    #drained: PromiseWithResolvers<void> | null = null;
     #next = 0;
 
-    constructor(db: Database, opts: { abuseMinScore: number }) {
+    constructor(db: Database, opts: StatsReaderOptions) {
         this.#stats = new Stats(db, opts);
         const file = db.filename;
         this.#init =
             file === ':memory:' || file === '' ? null : { file, abuseMinScore: opts.abuseMinScore };
+        this.#size = Math.max(1, opts.workers ?? defaultWorkers());
+        this.#idleMs = opts.idleMs ?? 60_000;
+        this.#script = opts.script ?? new URL('stats-worker.ts', import.meta.url);
+    }
+
+    /** Workers running now (tests). */
+    get workers(): number {
+        return this.#slots.size;
     }
 
     summary: Run<'summary'> = (...args) => this.#run('summary', args);
@@ -40,20 +81,17 @@ export class StatsReader {
     }
 
     /**
-     * Answers the queries already asked, then closes the worker's connection (so the
-     * database file isn't held open) and ends the worker.
+     * Answers the queries already asked, then closes each worker's connection (so the
+     * database file isn't held open) and ends the workers. Queries after this are refused.
      */
     async stop(): Promise<void> {
-        this.#closed = true;
-        const worker = this.#worker;
-        this.#worker = null;
-        if (!worker) return;
-        const stopped = Promise.withResolvers<void>();
-        this.#stopped.set(worker, stopped.resolve);
-        worker.postMessage('stop');
-        await stopped.promise;
-        worker.terminate();
-        this.#fail(new Error('Stats are shut down'));
+        if (!this.#closed) {
+            this.#closed = true;
+            this.#drained = Promise.withResolvers();
+            for (const slot of this.#slots) if (!slot.job) this.#retire(slot);
+            this.#checkDrained();
+        }
+        await this.#drained?.promise;
     }
 
     #run<M extends StatsMethod>(
@@ -69,46 +107,104 @@ export class StatsReader {
                 return Promise.reject(error);
             }
         }
-        const id = this.#next++;
-        const reply = Promise.withResolvers<unknown>();
-        this.#pending.set(id, reply);
-        const request: StatsRequest = { id, method, args };
-        this.#spawn(this.#init).postMessage(request);
-        return reply.promise as Promise<ReturnType<Stats[M]>>;
+        const job: Job = {
+            request: { id: this.#next++, method, args },
+            reply: Promise.withResolvers<unknown>()
+        };
+        this.#queue.push(job);
+        this.#pump();
+        return job.reply.promise as Promise<ReturnType<Stats[M]>>;
     }
 
-    #spawn(init: StatsInit): Worker {
-        if (this.#worker) return this.#worker;
-        const worker = new Worker(new URL('stats-worker.ts', import.meta.url));
+    /** Hands waiting queries to idle workers, starting workers up to the pool's size. */
+    #pump(): void {
+        while (this.#queue.length > 0) {
+            const slot = this.#idleSlot() ?? this.#spawn();
+            if (!slot) break;
+            const job = this.#queue.shift() as Job;
+            if (slot.idleTimer) clearTimeout(slot.idleTimer);
+            slot.idleTimer = null;
+            slot.job = job;
+            slot.worker.postMessage(job.request);
+        }
+        this.#checkDrained();
+    }
+
+    #idleSlot(): Slot | null {
+        for (const slot of this.#slots) if (!slot.job && !slot.retiring) return slot;
+        return null;
+    }
+
+    #spawn(): Slot | null {
+        let working = 0;
+        for (const slot of this.#slots) if (!slot.retiring) working++;
+        if (!this.#init || working >= this.#size) return null;
+        const worker = new Worker(this.#script);
+        const slot: Slot = { worker, job: null, retiring: false, idleTimer: null };
         worker.addEventListener('message', (event: MessageEvent<StatsReply>) => {
             const reply = event.data;
             if (reply === 'stopped') {
-                this.#stopped.get(worker)?.();
+                this.#remove(slot);
                 return;
             }
-            const pending = this.#pending.get(reply.id);
-            this.#pending.delete(reply.id);
-            if (reply.ok) pending?.resolve(reply.value);
+            const job = slot.job;
+            slot.job = null;
+            if (job?.request.id === reply.id) {
+                if (reply.ok) job.reply.resolve(reply.value);
+                else {
+                    job.reply.reject(
+                        reply.badQuery ? new BadQueryError(reply.message) : new Error(reply.message)
+                    );
+                }
+            }
+            this.#pump();
+            if (slot.job || slot.retiring) return;
+            if (this.#closed) this.#retire(slot);
             else {
-                pending?.reject(
-                    reply.badQuery ? new BadQueryError(reply.message) : new Error(reply.message)
-                );
+                slot.idleTimer = setTimeout(() => this.#retire(slot), this.#idleMs);
+                slot.idleTimer.unref();
             }
         });
-        // The worker died: fail what it had, and start a fresh one on the next query.
         worker.addEventListener('error', event => {
-            if (this.#worker === worker) this.#worker = null;
-            this.#stopped.get(worker)?.();
-            worker.terminate();
-            this.#fail(new Error(`Stats worker failed: ${event.message}`));
+            this.#lost(slot, `Stats worker failed: ${event.message}`);
         });
-        worker.postMessage(init);
-        this.#worker = worker;
-        return worker;
+        // Ended without being asked to (an error ends it with `error` first).
+        worker.addEventListener('close', () => {
+            this.#lost(slot, 'Stats worker exited');
+        });
+        worker.postMessage(this.#init);
+        this.#slots.add(slot);
+        return slot;
     }
 
-    #fail(error: Error): void {
-        for (const pending of this.#pending.values()) pending.reject(error);
-        this.#pending.clear();
+    /** The worker died: fail its query, and let a fresh one take the queries waiting. */
+    #lost(slot: Slot, message: string): void {
+        if (!this.#slots.has(slot)) return;
+        slot.job?.reply.reject(new Error(message));
+        slot.job = null;
+        this.#remove(slot);
+        this.#pump();
+    }
+
+    /** Asks an idle worker to close its connection; it's removed once it has. */
+    #retire(slot: Slot): void {
+        if (slot.retiring) return;
+        slot.retiring = true;
+        if (slot.idleTimer) clearTimeout(slot.idleTimer);
+        slot.idleTimer = null;
+        slot.worker.postMessage('stop');
+    }
+
+    #remove(slot: Slot): void {
+        if (slot.idleTimer) clearTimeout(slot.idleTimer);
+        slot.worker.terminate();
+        this.#slots.delete(slot);
+        this.#checkDrained();
+    }
+
+    #checkDrained(): void {
+        if (this.#closed && this.#slots.size === 0 && this.#queue.length === 0) {
+            this.#drained?.resolve();
+        }
     }
 }
