@@ -13,6 +13,11 @@ import { openDatabase } from '../src/db/client.ts';
 import type { RawClick } from '../src/shared/types.ts';
 
 const NOW = 1_700_000_000_000;
+
+/** Lets pending promises (an update running on fake timers) run to the end. */
+async function settle() {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+}
 const CHROME =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
@@ -154,10 +159,6 @@ describe('VpnLists', () => {
             fetchText: url => Promise.resolve(url.includes('torproject') ? TOR : RELAY),
             now: () => NOW
         });
-        // Lets the update's promises run to the end.
-        const settle = async () => {
-            for (let i = 0; i < 20; i++) await Promise.resolve();
-        };
         let calls = 0;
         const error = console.error;
         console.error = () => {};
