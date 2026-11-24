@@ -57,8 +57,10 @@ const flag = z
     .optional()
     .transform(v => v === '1' || v === 'true');
 
-/** 1970 to 9999: time zone lookups go a day either side, and fail or go wrong near the
- * ends of what JavaScript dates can hold. */
+/**
+ * From 1970 to the start of 9999: time zone lookups go a day either side, and fail
+ * or go wrong near the ends of what JavaScript dates can hold.
+ */
 const time = z.coerce
     .number()
     .int()
