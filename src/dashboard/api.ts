@@ -57,8 +57,13 @@ const flag = z
     .optional()
     .transform(v => v === '1' || v === 'true');
 
-/** Times JavaScript dates can hold; time zone lookups fail outside them. */
-const time = z.coerce.number().int().min(-8.64e15).max(8.64e15);
+/** 1970 to 9999: time zone lookups go a day either side, and fail or go wrong near the
+ * ends of what JavaScript dates can hold. */
+const time = z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(Date.UTC(9999, 0, 1));
 
 const statsQuerySchema = z.object({
     from: time,

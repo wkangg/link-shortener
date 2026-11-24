@@ -194,11 +194,10 @@ describe('links API + redirects + analytics, end to end', () => {
         // A zone this server doesn't know falls back to the offset rather than failing the page.
         expect(await t.status(`/api/stats/timeseries?${range()}&zone=Etc/Unknown`)).toBe(200);
         expect(await t.status('/api/links?zone=Etc/Unknown')).toBe(200);
-        expect(
-            await t.status(
-                '/api/stats/timeseries?from=-1e16&to=-9999999996400000&zone=America/Toronto'
-            )
-        ).toBe(400);
+        // The earliest time allowed works with a zone; earlier ones are refused.
+        const zoned = 'zone=America/Toronto';
+        expect(await t.status(`/api/stats/timeseries?from=0&to=3600000&${zoned}`)).toBe(200);
+        expect(await t.status(`/api/stats/timeseries?from=-1&to=3600000&${zoned}`)).toBe(400);
     });
 
     test('auth and origin checks', async () => {
