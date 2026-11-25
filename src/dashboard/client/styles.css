@@ -1431,55 +1431,58 @@ button.tag {
     overflow-x: auto;
 }
 
-/* Fixed layout: columns take their widths from the header, not from every row's content,
-   so rows added later (ClickHistory renders a long page in two steps) never shift them,
-   and a long table lays out far faster. The shares match what automatic layout gave
-   typical rows; without the Link column the rest grow in proportion. Below the minimum
-   the table scrolls sideways. */
 .history-table {
     width: 100%;
-    min-width: 62rem;
-    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.85rem;
 }
 
-.history-table .col-time {
+/* The click history uses fixed layout: columns take their widths from the header, not
+   from every row's content, so rows added later (ClickHistory renders a long page in two
+   steps) never shift them, and a long table lays out far faster. The shares match what
+   automatic layout gave typical rows; without the Link column the rest grow in
+   proportion. Below the minimum the table scrolls sideways. */
+.click-table {
+    min-width: 62rem;
+    table-layout: fixed;
+}
+
+.click-table .col-time {
     width: 16%;
 }
 
-.history-table .col-link {
+.click-table .col-link {
     width: 7%;
 }
 
-.history-table .col-ip {
+.click-table .col-ip {
     width: 17%;
 }
 
-.history-table .col-location {
+.click-table .col-location {
     width: 15%;
 }
 
-.history-table .col-source {
+.click-table .col-source {
     width: 9%;
 }
 
-.history-table .col-device {
+.click-table .col-device {
     width: 18%;
 }
 
-.history-table .col-browser {
+.click-table .col-browser {
     width: 18%;
 }
 
 /* Holds the height of rows not yet rendered (ClickHistory); its height is set inline. */
-.history-table tr.history-pending > td {
+.click-table tr.history-pending > td {
     padding: 0;
     border-top: 0;
 }
 
 /* With fixed widths, long unbroken values (slugs, addresses, hostnames) wrap in place. */
-.history-table td {
+.click-table td {
     overflow-wrap: anywhere;
 }
 

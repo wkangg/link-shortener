@@ -649,7 +649,7 @@ export function ClickHistory({
             )}
             {shownClicks.length > 0 && (
                 <div className="history-scroll">
-                    <table className="history-table">
+                    <table className="history-table click-table">
                         <thead>
                             <tr>
                                 <th scope="col" className="col-time">
