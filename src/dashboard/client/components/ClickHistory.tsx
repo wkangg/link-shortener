@@ -535,11 +535,19 @@ export function ClickHistory({
     // bars, counts and chart easing to the same filter change. So while those move, only the
     // first rows show; the rest follow once they settle (keyed rows carry over, so only
     // the tail is added then). A background refresh shows everything at once: cutting the
-    // table short would blank the rows someone is reading and drop their focus.
+    // table short would blank the rows someone is reading and drop their focus. It counts
+    // as a refresh only if the view is the same: a filter change can abort a refresh still
+    // loading, and its rows would otherwise skip the short phase.
     const animating = useAnimating();
-    const [full, setFull] = useState({ clicks, refreshKey });
-    if (full.clicks !== clicks && (!animating || full.refreshKey !== refreshKey)) {
-        setFull({ clicks, refreshKey });
+    const view = new URLSearchParams(query);
+    // Both slide forward on every refresh.
+    view.delete('from');
+    view.delete('to');
+    const viewKey = String(view);
+    const [full, setFull] = useState({ clicks, refreshKey, viewKey });
+    const refreshed = full.refreshKey !== refreshKey && full.viewKey === viewKey;
+    if (full.clicks !== clicks && (!animating || refreshed)) {
+        setFull({ clicks, refreshKey, viewKey });
     }
     const head = useMemo(() => clicks.slice(0, FIRST_ROWS), [clicks]);
     const shownClicks = full.clicks === clicks ? clicks : head;
