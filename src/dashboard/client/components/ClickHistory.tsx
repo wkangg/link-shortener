@@ -550,7 +550,6 @@ export function ClickHistory({
     const view = new URLSearchParams(query);
     // The window slides forward on every refresh (and `tz` shifts across DST), so only its
     // length (the range picked) is part of the view.
-    const span = Number(view.get('to')) - Number(view.get('from'));
     view.set('span', String(span));
     view.delete('from');
     view.delete('to');
