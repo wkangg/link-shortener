@@ -643,12 +643,24 @@ export function ClickHistory({
                     <table className="history-table">
                         <thead>
                             <tr>
-                                <th scope="col">Time</th>
-                                {showLink && <th scope="col">Link</th>}
-                                <th scope="col">IP address</th>
+                                <th scope="col" className="col-time">
+                                    Time
+                                </th>
+                                {showLink && (
+                                    <th scope="col" className="col-link">
+                                        Link
+                                    </th>
+                                )}
+                                <th scope="col" className="col-ip">
+                                    IP address
+                                </th>
                                 <th scope="col">Location</th>
-                                <th scope="col">Source</th>
-                                <th scope="col">Device</th>
+                                <th scope="col" className="col-source">
+                                    Source
+                                </th>
+                                <th scope="col" className="col-device">
+                                    Device
+                                </th>
                                 <th scope="col">Browser</th>
                             </tr>
                         </thead>

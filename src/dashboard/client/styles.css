@@ -1431,10 +1431,41 @@ button.tag {
     overflow-x: auto;
 }
 
+/* Fixed layout: columns take their widths from the header, not from every row's content,
+   so rows added later (ClickHistory renders a long page in two steps) never shift them,
+   and a long table lays out far faster. Location and Browser share what's left. The
+   minimum keeps those readable; below it the table scrolls sideways. */
 .history-table {
     width: 100%;
+    min-width: 62rem;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.85rem;
+}
+
+.history-table .col-time {
+    width: 13rem;
+}
+
+.history-table .col-link {
+    width: 7rem;
+}
+
+.history-table .col-ip {
+    width: 15rem;
+}
+
+.history-table .col-source {
+    width: 7rem;
+}
+
+.history-table .col-device {
+    width: 14rem;
+}
+
+/* With fixed widths, long unbroken values (slugs, addresses, hostnames) wrap in place. */
+.history-table td {
+    overflow-wrap: anywhere;
 }
 
 .history-table th {
@@ -1468,26 +1499,6 @@ button.tag {
 .history-ago {
     font-size: 0.75rem;
     color: var(--muted);
-}
-
-/* Minimums keep short columns readable; together they stay well under the content width
-   so the table never needs a horizontal scrollbar on desktop. */
-.history-ua {
-    min-width: 9rem;
-    max-width: 20rem;
-}
-
-.history-device {
-    min-width: 12rem;
-    max-width: 20rem;
-}
-
-.history-location {
-    min-width: 9rem;
-}
-
-.history-source {
-    min-width: 6rem;
 }
 
 /* One item of a middot-separated list (see Dotted): kept whole when it fits on the line,
