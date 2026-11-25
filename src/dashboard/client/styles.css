@@ -1773,6 +1773,14 @@ button.tag {
     margin-left: 0;
 }
 
+/* The network mismatch pill sits after the ISP name: keep it whole, so it wraps to the
+   next line as one piece instead of splitting across two, and space it off the name. */
+.ip-cell .history-sub .badge {
+    display: inline-block;
+    margin-left: 0.4rem;
+    white-space: nowrap;
+}
+
 .ip-lookup {
     color: var(--muted);
     text-decoration: none;
