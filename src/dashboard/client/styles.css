@@ -1447,6 +1447,11 @@ button.tag {
     table-layout: fixed;
 }
 
+/* One column fewer on a single link's page, so it can get narrower before scrolling. */
+.click-table.no-link {
+    min-width: 57rem;
+}
+
 .click-table .col-time {
     width: 16%;
 }

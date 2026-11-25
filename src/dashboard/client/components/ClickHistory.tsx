@@ -674,7 +674,7 @@ export function ClickHistory({
             )}
             {shownClicks.length > 0 && (
                 <div className="history-scroll">
-                    <table className="history-table click-table">
+                    <table className={`history-table click-table${showLink ? '' : ' no-link'}`}>
                         <thead>
                             <tr>
                                 <th scope="col" className="col-time">
