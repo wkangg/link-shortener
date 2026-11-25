@@ -378,7 +378,7 @@ const HistoryRow = memo(({ c, isOpen, now, showLink, onToggle, onAddTerm }: Hist
                         />
                     )}
                 </td>
-                <td className="history-location">
+                <td>
                     {place(c) || (c.country ? countryLabel(c.country) : null) || (
                         <span className="muted">–</span>
                     )}
@@ -401,11 +401,11 @@ const HistoryRow = memo(({ c, isOpen, now, showLink, onToggle, onAddTerm }: Hist
                     )}
                     {c.hostname && <span className="history-sub">{c.hostname}</span>}
                 </td>
-                <td className="history-source">
+                <td>
                     {c.source}
                     {c.referrer && <span className="history-sub">{c.referrer}</span>}
                 </td>
-                <td className="history-device">
+                <td>
                     {c.screen ? (
                         <span
                             title={
@@ -447,7 +447,7 @@ const HistoryRow = memo(({ c, isOpen, now, showLink, onToggle, onAddTerm }: Hist
                         </span>
                     )}
                 </td>
-                <td className="history-ua">
+                <td>
                     {technology(c).some(Boolean) ? <Dotted items={technology(c)} /> : 'Unknown'}
                     {c.bot && (
                         <span className="badge">{c.botName ? `bot: ${c.botName}` : 'bot'}</span>
