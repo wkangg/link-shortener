@@ -1758,7 +1758,7 @@ button.tag {
 
 /* IP address with its external lookup link (and datacenter badge). */
 .ip-cell {
-    display: inline-flex;
+    display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     gap: 0.1rem 0.35rem;
@@ -1773,12 +1773,12 @@ button.tag {
     margin-left: 0;
 }
 
-/* The network mismatch pill sits after the ISP name: keep it whole, so it wraps to the
-   next line as one piece instead of splitting across two, and space it off the name. */
+/* The network mismatch pill after the ISP name: an inline-block, so it's kept whole when
+   it fits on the line and wrapped inside itself when it's wider than the column, never
+   split across two lines. The space before it in the markup gives the gap, and unlike a
+   margin it disappears when the pill wraps. */
 .ip-cell .history-sub .badge {
     display: inline-block;
-    margin-left: 0.4rem;
-    white-space: nowrap;
 }
 
 .ip-lookup {

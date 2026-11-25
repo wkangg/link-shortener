@@ -284,12 +284,15 @@ function IpCell({
                         {isp}
                     </button>
                     {asOrg && !sameNetwork(isp, asOrg) && (
-                        <span
-                            className="badge badge-warn"
-                            title={`AbuseIPDB says the ISP is ${isp}; Cloudflare says the network is ${asOrg}`}
-                        >
-                            network mismatch
-                        </span>
+                        <>
+                            {' '}
+                            <span
+                                className="badge badge-warn"
+                                title={`AbuseIPDB says the ISP is ${isp}; Cloudflare says the network is ${asOrg}`}
+                            >
+                                network mismatch
+                            </span>
+                        </>
                     )}
                 </span>
             )}
