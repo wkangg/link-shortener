@@ -331,14 +331,16 @@ export function ClickHistory({
     }, []);
 
     // Back to the first page whenever the range, filters, toggles or search change.
-    // The auto-refresh slides `from`/`to` forward, so only the range's length counts.
+    // The auto-refresh slides `from`/`to` forward (and `tz` across DST), so only the range's length counts.
     const windowless = new URLSearchParams(params);
     const span = Number(params.get('to')) - Number(params.get('from'));
-    windowless.set('from', String(span));
-    windowless.delete('to');
+    for (const key of ['from', 'to', 'tz']) windowless.delete(key);
+    windowless.set('span', String(span));
     const base = String(windowless);
     const [paging, setPaging] = useState({ base, page: 0 });
     const [size, setSize] = useState(savedSize);
+    // Forget the old page so returning to earlier filters starts on page 1 too.
+    if (paging.base !== base) setPaging({ base, page: 0 });
     const requested = paging.base === base ? paging.page : 0;
 
     const syntax = clickSyntax(params);
