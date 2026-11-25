@@ -540,7 +540,10 @@ export function ClickHistory({
     // loading, and its rows would otherwise skip the short phase.
     const animating = useAnimating();
     const view = new URLSearchParams(query);
-    // Both slide forward on every refresh.
+    // The window slides forward on every refresh, so only its length (the range picked)
+    // is part of the view.
+    const span = Number(view.get('to')) - Number(view.get('from'));
+    view.set('span', String(span));
     view.delete('from');
     view.delete('to');
     const viewKey = String(view);
