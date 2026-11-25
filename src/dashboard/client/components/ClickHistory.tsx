@@ -328,7 +328,7 @@ const HistoryRow = memo(({ c, isOpen, now, showLink, onToggle, onAddTerm }: Hist
     return (
         <>
             <tr className={isOpen ? 'history-open' : undefined}>
-                <td className="nowrap" title={new Date(c.ts).toISOString()}>
+                <td title={new Date(c.ts).toISOString()}>
                     {formatDateTime(c.ts)}
                     <div className="history-ago">{formatRelative(c.ts, now)}</div>
                     {c.partial && (
