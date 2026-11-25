@@ -540,6 +540,15 @@ export function ClickHistory({
     if (full !== clicks && !animating) setFull(clicks);
     const head = useMemo(() => clicks.slice(0, FIRST_ROWS), [clicks]);
     const shownClicks = full === clicks ? clicks : head;
+    // Space held for the rows still to come, from the average height of a full table, so
+    // the page (and its scrollbar) doesn't jump when they arrive.
+    const tbody = useRef<HTMLTableSectionElement>(null);
+    const [rowHeight, setRowHeight] = useState(0);
+    useLayoutEffect(() => {
+        if (full !== clicks || clicks.length === 0 || !tbody.current) return;
+        setRowHeight(tbody.current.offsetHeight / clicks.length);
+    }, [full, clicks]);
+    const pending = clicks.length - shownClicks.length;
     const total = data?.total ?? 0;
     const pages = Math.max(1, Math.ceil(total / size));
     const page = Math.min(requested, pages - 1);
@@ -668,7 +677,7 @@ export function ClickHistory({
                                 </th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody ref={tbody}>
                             {shownClicks.map(c => (
                                 <HistoryRow
                                     key={c.id}
@@ -680,6 +689,14 @@ export function ClickHistory({
                                     onAddTerm={addTerm}
                                 />
                             ))}
+                            {pending > 0 && rowHeight > 0 && (
+                                <tr className="history-pending" aria-hidden="true">
+                                    <td
+                                        colSpan={showLink ? 7 : 6}
+                                        style={{ height: pending * rowHeight }}
+                                    />
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

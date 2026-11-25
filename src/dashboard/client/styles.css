@@ -1472,6 +1472,12 @@ button.tag {
     width: 18%;
 }
 
+/* Holds the height of rows not yet rendered (ClickHistory); its height is set inline. */
+.history-table tr.history-pending > td {
+    padding: 0;
+    border-top: 0;
+}
+
 /* With fixed widths, long unbroken values (slugs, addresses, hostnames) wrap in place. */
 .history-table td {
     overflow-wrap: anywhere;
