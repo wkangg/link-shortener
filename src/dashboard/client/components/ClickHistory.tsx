@@ -547,7 +547,13 @@ export function ClickHistory({
     view.delete('from');
     view.delete('to');
     const viewKey = String(view);
-    const [full, setFull] = useState({ clicks, refreshKey, viewKey });
+    // Rows kept from an earlier visit (useApi `keep`) are refreshed like a background
+    // refresh, so the table doesn't drop to its first rows while the page animates in.
+    const [full, setFull] = useState<{
+        clicks: ClickHistoryRow[];
+        refreshKey: string | null;
+        viewKey: string;
+    }>(() => ({ clicks, refreshKey: data ? null : refreshKey, viewKey }));
     const refreshed = full.refreshKey !== refreshKey && full.viewKey === viewKey;
     if (full.clicks !== clicks && (!animating || refreshed)) {
         setFull({ clicks, refreshKey, viewKey });
