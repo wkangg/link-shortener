@@ -540,12 +540,13 @@ export function ClickHistory({
     // loading, and its rows would otherwise skip the short phase.
     const animating = useAnimating();
     const view = new URLSearchParams(query);
-    // The window slides forward on every refresh, so only its length (the range picked)
-    // is part of the view.
+    // The window slides forward on every refresh (and `tz` shifts across DST), so only its
+    // length (the range picked) is part of the view.
     const span = Number(view.get('to')) - Number(view.get('from'));
     view.set('span', String(span));
     view.delete('from');
     view.delete('to');
+    view.delete('tz');
     const viewKey = String(view);
     // Rows kept from an earlier visit (useApi `keep`) are refreshed like a background
     // refresh, so the table doesn't drop to its first rows while the page animates in.
