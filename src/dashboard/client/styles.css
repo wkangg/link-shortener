@@ -1433,8 +1433,9 @@ button.tag {
 
 /* Fixed layout: columns take their widths from the header, not from every row's content,
    so rows added later (ClickHistory renders a long page in two steps) never shift them,
-   and a long table lays out far faster. Location and Browser share what's left. The
-   minimum keeps those readable; below it the table scrolls sideways. */
+   and a long table lays out far faster. The shares match what automatic layout gave
+   typical rows; without the Link column the rest grow in proportion. Below the minimum
+   the table scrolls sideways. */
 .history-table {
     width: 100%;
     min-width: 62rem;
@@ -1444,23 +1445,31 @@ button.tag {
 }
 
 .history-table .col-time {
-    width: 13rem;
+    width: 16%;
 }
 
 .history-table .col-link {
-    width: 7rem;
+    width: 7%;
 }
 
 .history-table .col-ip {
-    width: 15rem;
+    width: 17%;
+}
+
+.history-table .col-location {
+    width: 15%;
 }
 
 .history-table .col-source {
-    width: 7rem;
+    width: 9%;
 }
 
 .history-table .col-device {
-    width: 14rem;
+    width: 18%;
+}
+
+.history-table .col-browser {
+    width: 18%;
 }
 
 /* With fixed widths, long unbroken values (slugs, addresses, hostnames) wrap in place. */

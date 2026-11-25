@@ -654,14 +654,18 @@ export function ClickHistory({
                                 <th scope="col" className="col-ip">
                                     IP address
                                 </th>
-                                <th scope="col">Location</th>
+                                <th scope="col" className="col-location">
+                                    Location
+                                </th>
                                 <th scope="col" className="col-source">
                                     Source
                                 </th>
                                 <th scope="col" className="col-device">
                                     Device
                                 </th>
-                                <th scope="col">Browser</th>
+                                <th scope="col" className="col-browser">
+                                    Browser
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
