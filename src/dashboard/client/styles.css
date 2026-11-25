@@ -1437,6 +1437,60 @@ button.tag {
     font-size: 0.85rem;
 }
 
+/* The click history uses fixed layout: columns take their widths from the header, not
+   from every row's content, so rows added later (ClickHistory renders a long page in two
+   steps) never shift them, and a long table lays out far faster. The shares match what
+   automatic layout gave typical rows; without the Link column the rest grow in
+   proportion. Below the minimum the table scrolls sideways. */
+.click-table {
+    min-width: 62rem;
+    table-layout: fixed;
+}
+
+/* One column fewer on a single link's page, so it can get narrower before scrolling. */
+.click-table.no-link {
+    min-width: 57rem;
+}
+
+.click-table .col-time {
+    width: 16%;
+}
+
+.click-table .col-link {
+    width: 7%;
+}
+
+.click-table .col-ip {
+    width: 17%;
+}
+
+.click-table .col-location {
+    width: 15%;
+}
+
+.click-table .col-source {
+    width: 9%;
+}
+
+.click-table .col-device {
+    width: 18%;
+}
+
+.click-table .col-browser {
+    width: 18%;
+}
+
+/* Holds the height of rows not yet rendered (ClickHistory); its height is set inline. */
+.click-table tr.history-pending > td {
+    padding: 0;
+    border-top: 0;
+}
+
+/* With fixed widths, long unbroken values (slugs, addresses, hostnames) wrap in place. */
+.click-table td {
+    overflow-wrap: anywhere;
+}
+
 .history-table th {
     text-align: left;
     font-weight: 500;
@@ -1468,26 +1522,6 @@ button.tag {
 .history-ago {
     font-size: 0.75rem;
     color: var(--muted);
-}
-
-/* Minimums keep short columns readable; together they stay well under the content width
-   so the table never needs a horizontal scrollbar on desktop. */
-.history-ua {
-    min-width: 9rem;
-    max-width: 20rem;
-}
-
-.history-device {
-    min-width: 12rem;
-    max-width: 20rem;
-}
-
-.history-location {
-    min-width: 9rem;
-}
-
-.history-source {
-    min-width: 6rem;
 }
 
 /* One item of a middot-separated list (see Dotted): kept whole when it fits on the line,

@@ -1,4 +1,13 @@
-import { Fragment, useEffect, useState } from 'react';
+import {
+    Fragment,
+    memo,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState
+} from 'react';
 
 import { isPrivateIp } from '../../../shared/ip.ts';
 import type { ClickHistoryRow } from '../../../shared/types.ts';
@@ -11,6 +20,7 @@ import {
     formatRelative,
     screenLabel
 } from '../format.ts';
+import { useAnimating } from '../motion.ts';
 import { useApi } from '../useApi.ts';
 import { ClickDetails, hasDetails, sameNetwork } from './ClickDetails.tsx';
 import { clickSyntax, exactTerm, SearchBox } from './SearchBox.tsx';
@@ -25,6 +35,9 @@ const PAGE_SIZES = [
     { value: ALL, label: 'All' }
 ] as const;
 const DEFAULT_SIZE = 50;
+const NO_CLICKS: ClickHistoryRow[] = [];
+/** Rows shown at once while the page animates; enough to fill the screen. */
+const FIRST_ROWS = 50;
 const SIZE_KEY = 'clickHistory.pageSize';
 
 /** Remembered per browser; storage can be unavailable (private windows, blocked storage). */
@@ -301,6 +314,168 @@ function IpCell({
     );
 }
 
+interface HistoryRowProps {
+    c: ClickHistoryRow;
+    isOpen: boolean;
+    now: number;
+    showLink: boolean;
+    onToggle: (id: number) => void;
+    onAddTerm: (term: string) => void;
+}
+
+/** One click and its details row. Memoized so a long table isn't rebuilt on every keystroke. */
+const HistoryRow = memo(({ c, isOpen, now, showLink, onToggle, onAddTerm }: HistoryRowProps) => {
+    return (
+        <>
+            <tr className={isOpen ? 'history-open' : undefined}>
+                <td title={new Date(c.ts).toISOString()}>
+                    {formatDateTime(c.ts)}
+                    <div className="history-ago">{formatRelative(c.ts, now)}</div>
+                    {c.partial && (
+                        <div className="history-tags">
+                            <span
+                                className="badge badge-warn"
+                                title="The device report was sent before every check finished, so some fields may be blank"
+                            >
+                                partial
+                            </span>
+                        </div>
+                    )}
+                </td>
+                {showLink && (
+                    <td className="mono">
+                        {c.slug === null ? (
+                            <span className="muted">deleted</span>
+                        ) : (
+                            <button
+                                type="button"
+                                className="cell-filter"
+                                title="Search for this link"
+                                onClick={() =>
+                                    onAddTerm(
+                                        exactTerm('link', c.slug === '' ? '/' : (c.slug ?? ''))
+                                    )
+                                }
+                            >
+                                {c.slug === '' ? '/' : c.slug}
+                            </button>
+                        )}
+                    </td>
+                )}
+                <td className="mono">
+                    {c.ip === null ? (
+                        <span className="muted">–</span>
+                    ) : (
+                        <IpCell
+                            ip={c.ip}
+                            isDatacenter={c.isDatacenter}
+                            vpn={c.vpn}
+                            scraper={c.scraper}
+                            abuseScore={c.abuseScore}
+                            isp={c.isp}
+                            asOrg={c.asOrg}
+                            onAddTerm={onAddTerm}
+                        />
+                    )}
+                </td>
+                <td>
+                    {place(c) || (c.country ? countryLabel(c.country) : null) || (
+                        <span className="muted">–</span>
+                    )}
+                    <span className="history-sub">
+                        <Dotted
+                            items={[
+                                place(c) && c.country ? countryLabel(c.country) : null,
+                                c.timezone,
+                                c.language
+                            ]}
+                        />
+                    </span>
+                    {coordinates(c) && (
+                        <span
+                            className="history-sub numeric"
+                            title="Approximate, from the IP address"
+                        >
+                            {coordinates(c)}
+                        </span>
+                    )}
+                    {c.hostname && <span className="history-sub">{c.hostname}</span>}
+                </td>
+                <td>
+                    {c.source}
+                    {c.referrer && <span className="history-sub">{c.referrer}</span>}
+                </td>
+                <td>
+                    {c.screen ? (
+                        <span
+                            title={
+                                c.orientation ? `${c.orientation.split('-')[0]} screen` : undefined
+                            }
+                        >
+                            {screenLabel(c.screen)}
+                        </span>
+                    ) : (
+                        <span className="muted">–</span>
+                    )}
+                    <span className="history-sub">
+                        <Dotted items={specs(c)} />
+                    </span>
+                    {hasDetails(c) && (
+                        <button
+                            type="button"
+                            className="details-toggle"
+                            aria-expanded={isOpen}
+                            onClick={() => onToggle(c.id)}
+                        >
+                            Details
+                        </button>
+                    )}
+                    {(c.incognito || c.adBlocker || c.fingerprint) && (
+                        <span className="history-tags">
+                            {c.incognito && <span className="badge">private</span>}
+                            {c.adBlocker && <span className="badge">ad blocker</span>}
+                            {c.fingerprint && (
+                                <button
+                                    type="button"
+                                    className="cell-filter mono"
+                                    title="Search for this device fingerprint"
+                                    onClick={() => onAddTerm(exactTerm('fp', c.fingerprint ?? ''))}
+                                >
+                                    ⚷ {c.fingerprint.slice(0, 10)}
+                                </button>
+                            )}
+                        </span>
+                    )}
+                </td>
+                <td>
+                    {technology(c).some(Boolean) ? <Dotted items={technology(c)} /> : 'Unknown'}
+                    {c.bot && (
+                        <span className="badge">{c.botName ? `bot: ${c.botName}` : 'bot'}</span>
+                    )}
+                    {c.browserVersion && (
+                        <span className="history-sub" title="Full version, from client hints">
+                            {c.browserVersion}
+                        </span>
+                    )}
+                    {c.userAgent && (
+                        <details className="history-raw">
+                            <summary>User agent</summary>
+                            <span className="mono">{c.userAgent}</span>
+                        </details>
+                    )}
+                </td>
+            </tr>
+            {isOpen && (
+                <tr className="history-details-row">
+                    <td colSpan={showLink ? 7 : 6}>
+                        <ClickDetails c={c} />
+                    </td>
+                </tr>
+            )}
+        </>
+    );
+});
+
 export function ClickHistory({
     params,
     refreshKey,
@@ -319,12 +494,21 @@ export function ClickHistory({
     const [now, setNow] = useState(Date.now);
     // Clicks whose details row is expanded.
     const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
-    const toggle = (id: number) =>
-        setOpen(prev => {
-            const next = new Set(prev);
-            if (!next.delete(id)) next.add(id);
-            return next;
-        });
+    const toggle = useCallback(
+        (id: number) =>
+            setOpen(prev => {
+                const next = new Set(prev);
+                if (!next.delete(id)) next.add(id);
+                return next;
+            }),
+        []
+    );
+    // onAddTerm changes with every keystroke; rows get a stable one so they stay memoized.
+    const addTermRef = useRef(onAddTerm);
+    useLayoutEffect(() => {
+        addTermRef.current = onAddTerm;
+    });
+    const addTerm = useCallback((term: string) => addTermRef.current(term), []);
     useEffect(() => {
         const id = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(id);
@@ -346,7 +530,51 @@ export function ClickHistory({
         // The page opens on page 1, so only page 1 is kept.
         keep && requested === 0 ? `${keep}|${size}` : undefined
     );
-    const clicks = data?.clicks ?? [];
+    const clicks = data?.clicks ?? NO_CLICKS;
+    // A long table takes the browser a while to build and lay out, which would freeze the
+    // bars, counts and chart easing to the same filter change. So while those move, only the
+    // first rows show; the rest follow once they settle (keyed rows carry over, so only
+    // the tail is added then). A background refresh shows everything at once: cutting the
+    // table short would blank the rows someone is reading and drop their focus. It counts
+    // as a refresh only if the view is the same: a filter change can abort a refresh still
+    // loading, and its rows would otherwise skip the short phase.
+    const animating = useAnimating();
+    const view = new URLSearchParams(query);
+    // The window slides forward on every refresh (and `tz` shifts across DST), so only its
+    // length (the range picked) is part of the view.
+    const span = Number(view.get('to')) - Number(view.get('from'));
+    view.set('span', String(span));
+    view.delete('from');
+    view.delete('to');
+    view.delete('tz');
+    const viewKey = String(view);
+    // Rows kept from an earlier visit (useApi `keep`) are refreshed like a background
+    // refresh, so the table doesn't drop to its first rows while the page animates in.
+    const [full, setFull] = useState<{
+        clicks: ClickHistoryRow[];
+        refreshKey: string | null;
+        viewKey: string;
+    }>(() => ({ clicks, refreshKey: data ? null : refreshKey, viewKey }));
+    const refreshed = full.refreshKey !== refreshKey && full.viewKey === viewKey;
+    if (full.clicks !== clicks && (!animating || refreshed)) {
+        setFull({ clicks, refreshKey, viewKey });
+    }
+    const head = useMemo(() => clicks.slice(0, FIRST_ROWS), [clicks]);
+    const shownClicks = full.clicks === clicks ? clicks : head;
+    // Space held for the rows still to come, from the average height of a full table, so
+    // the page (and its scrollbar) doesn't jump when they arrive. Open details don't count.
+    const tbody = useRef<HTMLTableSectionElement>(null);
+    const [rowHeight, setRowHeight] = useState(0);
+    useLayoutEffect(() => {
+        const el = tbody.current;
+        if (full.clicks !== clicks || clicks.length === 0 || !el) return;
+        let height = el.offsetHeight;
+        for (const row of el.querySelectorAll<HTMLElement>('.history-details-row')) {
+            height -= row.offsetHeight;
+        }
+        setRowHeight(height / clicks.length);
+    }, [full, clicks]);
+    const pending = clicks.length - shownClicks.length;
     const total = data?.total ?? 0;
     const pages = Math.max(1, Math.ceil(total / size));
     const page = Math.min(requested, pages - 1);
@@ -445,206 +673,56 @@ export function ClickHistory({
             {!error && data && total === 0 && (
                 <p className="panel-empty">{search ? 'No clicks match' : 'Nothing yet'}</p>
             )}
-            {clicks.length > 0 && (
+            {shownClicks.length > 0 && (
                 <div className="history-scroll">
-                    <table className="history-table">
+                    <table className={`history-table click-table${showLink ? '' : ' no-link'}`}>
                         <thead>
                             <tr>
-                                <th scope="col">Time</th>
-                                {showLink && <th scope="col">Link</th>}
-                                <th scope="col">IP address</th>
-                                <th scope="col">Location</th>
-                                <th scope="col">Source</th>
-                                <th scope="col">Device</th>
-                                <th scope="col">Browser</th>
+                                <th scope="col" className="col-time">
+                                    Time
+                                </th>
+                                {showLink && (
+                                    <th scope="col" className="col-link">
+                                        Link
+                                    </th>
+                                )}
+                                <th scope="col" className="col-ip">
+                                    IP address
+                                </th>
+                                <th scope="col" className="col-location">
+                                    Location
+                                </th>
+                                <th scope="col" className="col-source">
+                                    Source
+                                </th>
+                                <th scope="col" className="col-device">
+                                    Device
+                                </th>
+                                <th scope="col" className="col-browser">
+                                    Browser
+                                </th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {clicks.map(c => (
-                                <Fragment key={c.id}>
-                                    <tr className={open.has(c.id) ? 'history-open' : undefined}>
-                                        <td className="nowrap" title={new Date(c.ts).toISOString()}>
-                                            {formatDateTime(c.ts)}
-                                            <div className="history-ago">
-                                                {formatRelative(c.ts, now)}
-                                            </div>
-                                            {c.partial && (
-                                                <div className="history-tags">
-                                                    <span
-                                                        className="badge badge-warn"
-                                                        title="The device report was sent before every check finished, so some fields may be blank"
-                                                    >
-                                                        partial
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </td>
-                                        {showLink && (
-                                            <td className="mono">
-                                                {c.slug === null ? (
-                                                    <span className="muted">deleted</span>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="cell-filter"
-                                                        title="Search for this link"
-                                                        onClick={() =>
-                                                            onAddTerm(
-                                                                exactTerm(
-                                                                    'link',
-                                                                    c.slug === ''
-                                                                        ? '/'
-                                                                        : (c.slug ?? '')
-                                                                )
-                                                            )
-                                                        }
-                                                    >
-                                                        {c.slug === '' ? '/' : c.slug}
-                                                    </button>
-                                                )}
-                                            </td>
-                                        )}
-                                        <td className="mono">
-                                            {c.ip === null ? (
-                                                <span className="muted">–</span>
-                                            ) : (
-                                                <IpCell
-                                                    ip={c.ip}
-                                                    isDatacenter={c.isDatacenter}
-                                                    vpn={c.vpn}
-                                                    scraper={c.scraper}
-                                                    abuseScore={c.abuseScore}
-                                                    isp={c.isp}
-                                                    asOrg={c.asOrg}
-                                                    onAddTerm={onAddTerm}
-                                                />
-                                            )}
-                                        </td>
-                                        <td className="history-location">
-                                            {place(c) ||
-                                                (c.country ? countryLabel(c.country) : null) || (
-                                                    <span className="muted">–</span>
-                                                )}
-                                            <span className="history-sub">
-                                                <Dotted
-                                                    items={[
-                                                        place(c) && c.country
-                                                            ? countryLabel(c.country)
-                                                            : null,
-                                                        c.timezone,
-                                                        c.language
-                                                    ]}
-                                                />
-                                            </span>
-                                            {coordinates(c) && (
-                                                <span
-                                                    className="history-sub numeric"
-                                                    title="Approximate, from the IP address"
-                                                >
-                                                    {coordinates(c)}
-                                                </span>
-                                            )}
-                                            {c.hostname && (
-                                                <span className="history-sub">{c.hostname}</span>
-                                            )}
-                                        </td>
-                                        <td className="history-source">
-                                            {c.source}
-                                            {c.referrer && (
-                                                <span className="history-sub">{c.referrer}</span>
-                                            )}
-                                        </td>
-                                        <td className="history-device">
-                                            {c.screen ? (
-                                                <span
-                                                    title={
-                                                        c.orientation
-                                                            ? `${c.orientation.split('-')[0]} screen`
-                                                            : undefined
-                                                    }
-                                                >
-                                                    {screenLabel(c.screen)}
-                                                </span>
-                                            ) : (
-                                                <span className="muted">–</span>
-                                            )}
-                                            <span className="history-sub">
-                                                <Dotted items={specs(c)} />
-                                            </span>
-                                            {hasDetails(c) && (
-                                                <button
-                                                    type="button"
-                                                    className="details-toggle"
-                                                    aria-expanded={open.has(c.id)}
-                                                    onClick={() => toggle(c.id)}
-                                                >
-                                                    Details
-                                                </button>
-                                            )}
-                                            {(c.incognito || c.adBlocker || c.fingerprint) && (
-                                                <span className="history-tags">
-                                                    {c.incognito && (
-                                                        <span className="badge">private</span>
-                                                    )}
-                                                    {c.adBlocker && (
-                                                        <span className="badge">ad blocker</span>
-                                                    )}
-                                                    {c.fingerprint && (
-                                                        <button
-                                                            type="button"
-                                                            className="cell-filter mono"
-                                                            title="Search for this device fingerprint"
-                                                            onClick={() =>
-                                                                onAddTerm(
-                                                                    exactTerm(
-                                                                        'fp',
-                                                                        c.fingerprint ?? ''
-                                                                    )
-                                                                )
-                                                            }
-                                                        >
-                                                            ⚷ {c.fingerprint.slice(0, 10)}
-                                                        </button>
-                                                    )}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="history-ua">
-                                            {technology(c).some(Boolean) ? (
-                                                <Dotted items={technology(c)} />
-                                            ) : (
-                                                'Unknown'
-                                            )}
-                                            {c.bot && (
-                                                <span className="badge">
-                                                    {c.botName ? `bot: ${c.botName}` : 'bot'}
-                                                </span>
-                                            )}
-                                            {c.browserVersion && (
-                                                <span
-                                                    className="history-sub"
-                                                    title="Full version, from client hints"
-                                                >
-                                                    {c.browserVersion}
-                                                </span>
-                                            )}
-                                            {c.userAgent && (
-                                                <details className="history-raw">
-                                                    <summary>User agent</summary>
-                                                    <span className="mono">{c.userAgent}</span>
-                                                </details>
-                                            )}
-                                        </td>
-                                    </tr>
-                                    {open.has(c.id) && (
-                                        <tr className="history-details-row">
-                                            <td colSpan={showLink ? 7 : 6}>
-                                                <ClickDetails c={c} />
-                                            </td>
-                                        </tr>
-                                    )}
-                                </Fragment>
+                        <tbody ref={tbody}>
+                            {shownClicks.map(c => (
+                                <HistoryRow
+                                    key={c.id}
+                                    c={c}
+                                    isOpen={open.has(c.id)}
+                                    now={now}
+                                    showLink={showLink}
+                                    onToggle={toggle}
+                                    onAddTerm={addTerm}
+                                />
                             ))}
+                            {pending > 0 && rowHeight > 0 && (
+                                <tr className="history-pending" aria-hidden="true">
+                                    <td
+                                        colSpan={showLink ? 7 : 6}
+                                        style={{ height: pending * rowHeight }}
+                                    />
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
