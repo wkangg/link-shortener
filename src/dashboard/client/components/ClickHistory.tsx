@@ -1,4 +1,13 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+    Fragment,
+    memo,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState
+} from 'react';
 
 import { isPrivateIp } from '../../../shared/ip.ts';
 import type { ClickHistoryRow } from '../../../shared/types.ts';
@@ -11,6 +20,7 @@ import {
     formatRelative,
     screenLabel
 } from '../format.ts';
+import { useAnimating } from '../motion.ts';
 import { useApi } from '../useApi.ts';
 import { ClickDetails, hasDetails, sameNetwork } from './ClickDetails.tsx';
 import { clickSyntax, exactTerm, SearchBox } from './SearchBox.tsx';
@@ -25,6 +35,9 @@ const PAGE_SIZES = [
     { value: ALL, label: 'All' }
 ] as const;
 const DEFAULT_SIZE = 50;
+const NO_CLICKS: ClickHistoryRow[] = [];
+/** Rows shown at once while the page animates; enough to fill the screen. */
+const FIRST_ROWS = 50;
 const SIZE_KEY = 'clickHistory.pageSize';
 
 /** Remembered per browser; storage can be unavailable (private windows, blocked storage). */
@@ -517,7 +530,16 @@ export function ClickHistory({
         // The page opens on page 1, so only page 1 is kept.
         keep && requested === 0 ? `${keep}|${size}` : undefined
     );
-    const clicks = data?.clicks ?? [];
+    const clicks = data?.clicks ?? NO_CLICKS;
+    // A long table takes the browser a while to build and lay out, which would freeze the
+    // bars, counts and chart easing to the same filter change. So while those move, only the
+    // first rows show; the rest follow once they settle (keyed rows carry over, so only
+    // the tail is added then).
+    const animating = useAnimating();
+    const [full, setFull] = useState(clicks);
+    if (full !== clicks && !animating) setFull(clicks);
+    const head = useMemo(() => clicks.slice(0, FIRST_ROWS), [clicks]);
+    const shownClicks = full === clicks ? clicks : head;
     const total = data?.total ?? 0;
     const pages = Math.max(1, Math.ceil(total / size));
     const page = Math.min(requested, pages - 1);
@@ -616,7 +638,7 @@ export function ClickHistory({
             {!error && data && total === 0 && (
                 <p className="panel-empty">{search ? 'No clicks match' : 'Nothing yet'}</p>
             )}
-            {clicks.length > 0 && (
+            {shownClicks.length > 0 && (
                 <div className="history-scroll">
                     <table className="history-table">
                         <thead>
@@ -631,7 +653,7 @@ export function ClickHistory({
                             </tr>
                         </thead>
                         <tbody>
-                            {clicks.map(c => (
+                            {shownClicks.map(c => (
                                 <HistoryRow
                                     key={c.id}
                                     c={c}
