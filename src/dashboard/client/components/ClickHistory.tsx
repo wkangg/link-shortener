@@ -534,18 +534,21 @@ export function ClickHistory({
     // A long table takes the browser a while to build and lay out, which would freeze the
     // bars, counts and chart easing to the same filter change. So while those move, only the
     // first rows show; the rest follow once they settle (keyed rows carry over, so only
-    // the tail is added then).
+    // the tail is added then). A background refresh shows everything at once: cutting the
+    // table short would blank the rows someone is reading and drop their focus.
     const animating = useAnimating();
-    const [full, setFull] = useState(clicks);
-    if (full !== clicks && !animating) setFull(clicks);
+    const [full, setFull] = useState({ clicks, refreshKey });
+    if (full.clicks !== clicks && (!animating || full.refreshKey !== refreshKey)) {
+        setFull({ clicks, refreshKey });
+    }
     const head = useMemo(() => clicks.slice(0, FIRST_ROWS), [clicks]);
-    const shownClicks = full === clicks ? clicks : head;
+    const shownClicks = full.clicks === clicks ? clicks : head;
     // Space held for the rows still to come, from the average height of a full table, so
     // the page (and its scrollbar) doesn't jump when they arrive.
     const tbody = useRef<HTMLTableSectionElement>(null);
     const [rowHeight, setRowHeight] = useState(0);
     useLayoutEffect(() => {
-        if (full !== clicks || clicks.length === 0 || !tbody.current) return;
+        if (full.clicks !== clicks || clicks.length === 0 || !tbody.current) return;
         setRowHeight(tbody.current.offsetHeight / clicks.length);
     }, [full, clicks]);
     const pending = clicks.length - shownClicks.length;
