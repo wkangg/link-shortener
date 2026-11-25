@@ -544,12 +544,17 @@ export function ClickHistory({
     const head = useMemo(() => clicks.slice(0, FIRST_ROWS), [clicks]);
     const shownClicks = full.clicks === clicks ? clicks : head;
     // Space held for the rows still to come, from the average height of a full table, so
-    // the page (and its scrollbar) doesn't jump when they arrive.
+    // the page (and its scrollbar) doesn't jump when they arrive. Open details don't count.
     const tbody = useRef<HTMLTableSectionElement>(null);
     const [rowHeight, setRowHeight] = useState(0);
     useLayoutEffect(() => {
-        if (full.clicks !== clicks || clicks.length === 0 || !tbody.current) return;
-        setRowHeight(tbody.current.offsetHeight / clicks.length);
+        const el = tbody.current;
+        if (full.clicks !== clicks || clicks.length === 0 || !el) return;
+        let height = el.offsetHeight;
+        for (const row of el.querySelectorAll<HTMLElement>('.history-details-row')) {
+            height -= row.offsetHeight;
+        }
+        setRowHeight(height / clicks.length);
     }, [full, clicks]);
     const pending = clicks.length - shownClicks.length;
     const total = data?.total ?? 0;
