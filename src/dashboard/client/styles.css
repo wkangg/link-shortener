@@ -1631,12 +1631,9 @@ button.tag {
     content: '▼';
 }
 
-.history-table tr.history-open > td {
-    border-bottom-color: transparent;
-}
-
 .history-table tr.history-details-row > td {
     padding-top: 0;
+    border-top: 0;
 }
 
 /* Zero width with min-width 100% (like .history-sub): the panel fills the row but never

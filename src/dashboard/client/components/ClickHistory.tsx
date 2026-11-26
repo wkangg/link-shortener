@@ -327,7 +327,7 @@ interface HistoryRowProps {
 const HistoryRow = memo(({ c, isOpen, now, showLink, onToggle, onAddTerm }: HistoryRowProps) => {
     return (
         <>
-            <tr className={isOpen ? 'history-open' : undefined}>
+            <tr>
                 <td title={new Date(c.ts).toISOString()}>
                     {formatDateTime(c.ts)}
                     <div className="history-ago">{formatRelative(c.ts, now)}</div>
