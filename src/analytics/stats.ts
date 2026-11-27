@@ -298,7 +298,14 @@ export class Stats {
             dim,
             rows: rows.map((r): TopRow => ({
                 value: r.value === null ? null : String(r.value),
-                label: r.label ?? (r.value === null ? emptyLabel(dim) : String(r.value)),
+                // A bare `?key` stores an empty value, which would show as a blank row.
+                label:
+                    r.label ??
+                    (r.value === null
+                        ? emptyLabel(dim)
+                        : r.value === ''
+                          ? '(empty)'
+                          : String(r.value)),
                 clicks: r.clicks,
                 visitors: r.visitors
             }))

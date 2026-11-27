@@ -33,7 +33,7 @@ beforeAll(() => {
         0,
         'v1',
         'launch',
-        '{"ref":"ig"}'
+        '{"ref":"ig","e":""}'
     );
     insert.run(
         1,
@@ -178,9 +178,14 @@ describe('top', () => {
         ]);
         expect(stats.top(q(), 'param').rows.map(r => [r.value, r.clicks])).toEqual([
             ['ref', 2],
+            ['e', 1],
             ['v', 1]
         ]);
         expect(stats.top(q(), 'param:ref').rows.map(r => r.value)).toEqual(['ig', 'tw']);
+        // A bare `?e` keeps its empty value for filtering but gets a visible label.
+        expect(stats.top(q(), 'param:e').rows.map(r => [r.value, r.label])).toEqual([
+            ['', '(empty)']
+        ]);
     });
 
     test('unknown dimensions are rejected', () => {
@@ -198,6 +203,8 @@ describe('filters', () => {
         expect(stats.summary(q({ filters: ['qr:QR'] })).clicks).toBe(1);
         expect(stats.summary(q({ filters: ['param:ref=ig'] })).clicks).toBe(1);
         expect(stats.summary(q({ filters: ['param:v'] })).clicks).toBe(1);
+        expect(stats.summary(q({ filters: ['param:e='] })).clicks).toBe(1);
+        expect(stats.summary(q({ q: 'query.e:=""' })).clicks).toBe(1);
         expect(stats.summary(q({ filters: ['link:1'] })).clicks).toBe(4);
         expect(stats.top(q({ filters: ['os:iOS'] }), 'utm_campaign').rows[0]?.value).toBe('launch');
     });
@@ -215,7 +222,7 @@ describe('csv', () => {
         expect(lines[0]).toStartWith('time,slug,country');
         expect(lines).toHaveLength(5);
         expect(lines[1]).toStartWith(new Date(T0 + DAY + HOUR).toISOString());
-        expect(lines.some(l => l.includes('"{""ref"":""ig""}"'))).toBe(true);
+        expect(lines.some(l => l.includes('"{""ref"":""ig"",""e"":""""}"'))).toBe(true);
     });
 
     test('paged exports hold every click once, in the same order', () => {
